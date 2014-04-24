@@ -26,7 +26,7 @@ import org.apache.tajo.engine.planner.PlannerUtil;
 import org.apache.tajo.engine.planner.Target;
 import org.apache.tajo.util.TUtil;
 
-public class GroupbyNode extends UnaryNode implements Projectable, Cloneable {
+public class GroupbyNode extends LogicalNode implements Projectable, Cloneable {
 	/** Grouping key sets */
   @Expose private Column [] groupingColumns;
   /** Aggregation Functions */
@@ -90,9 +90,9 @@ public class GroupbyNode extends UnaryNode implements Projectable, Cloneable {
     return this.targets;
   }
   
-  public void setChild(LogicalNode subNode) {
-    super.setChild(subNode);
-  }
+//  public void setChild(LogicalNode subNode) {
+//    super.setChild(subNode);
+//  }
   
   public String toString() {
     StringBuilder sb = new StringBuilder("GroupBy (");

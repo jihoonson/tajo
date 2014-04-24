@@ -24,7 +24,7 @@ import org.apache.tajo.catalog.SortSpec;
 import org.apache.tajo.engine.planner.PlanString;
 import org.apache.tajo.util.TUtil;
 
-public final class SortNode extends UnaryNode implements Cloneable {
+public final class SortNode extends LogicalNode implements Cloneable {
 	@Expose private SortSpec [] sortKeys;
 
   public SortNode(int pid) {
@@ -75,20 +75,20 @@ public final class SortNode extends UnaryNode implements Cloneable {
     return planStr;
   }
 
-  public String toString() {
-    StringBuilder sb = new StringBuilder("Sort [key= ");
-    for (int i = 0; i < sortKeys.length; i++) {    
-      sb.append(sortKeys[i].getSortKey().getQualifiedName()).append(" ")
-          .append(sortKeys[i].isAscending() ? "asc" : "desc");
-      if(i < sortKeys.length - 1) {
-        sb.append(",");
-      }
-    }
-    sb.append("]");
-
-    sb.append("\n\"out schema: " + getOutSchema()
-        + "\n\"in schema: " + getInSchema());
-    return sb.toString()+"\n"
-        + getChild().toString();
-  }
+//  public String toString() {
+//    StringBuilder sb = new StringBuilder("Sort [key= ");
+//    for (int i = 0; i < sortKeys.length; i++) {
+//      sb.append(sortKeys[i].getSortKey().getQualifiedName()).append(" ")
+//          .append(sortKeys[i].isAscending() ? "asc" : "desc");
+//      if(i < sortKeys.length - 1) {
+//        sb.append(",");
+//      }
+//    }
+//    sb.append("]");
+//
+//    sb.append("\n\"out schema: " + getOutSchema()
+//        + "\n\"in schema: " + getInSchema());
+//    return sb.toString()+"\n"
+//        + getChild().toString();
+//  }
 }

@@ -30,7 +30,9 @@ import org.apache.tajo.engine.exception.NoSuchColumnException;
 import org.apache.tajo.engine.exception.VerifyException;
 import org.apache.tajo.engine.planner.graph.DirectedGraphCursor;
 import org.apache.tajo.engine.planner.graph.SimpleDirectedGraph;
+import org.apache.tajo.engine.planner.graph.SimpleTree;
 import org.apache.tajo.engine.planner.logical.LogicalNode;
+import org.apache.tajo.engine.planner.logical.LogicalNode.LogicalNodeEdge;
 import org.apache.tajo.engine.planner.logical.LogicalRootNode;
 import org.apache.tajo.engine.planner.logical.NodeType;
 import org.apache.tajo.engine.planner.logical.RelationNode;
@@ -570,6 +572,8 @@ public class LogicalPlan {
     private final String blockName;
     private LogicalNode rootNode;
     private NodeType rootType;
+    private SimpleTree<LogicalNode, LogicalNodeEdge> logicalNodeTree =
+        new SimpleTree<LogicalNode, LogicalNodeEdge>();
 
     // transient states
     private final Map<String, RelationNode> canonicalNameToRelationMap = TUtil.newHashMap();
@@ -613,8 +617,12 @@ public class LogicalPlan {
       this.rootNode = blockRoot;
       if (blockRoot instanceof LogicalRootNode) {
         LogicalRootNode rootNode = (LogicalRootNode) blockRoot;
-        rootType = rootNode.getChild().getType();
+        rootType = logicalNodeTree.getChild(rootNode, 0).getType();
       }
+    }
+
+    public SimpleTree<LogicalNode, LogicalNodeEdge> getLogicalNodeTree() {
+      return logicalNodeTree;
     }
 
     public <NODE extends LogicalNode> NODE getRoot() {

@@ -24,7 +24,7 @@ import org.apache.tajo.engine.planner.PlannerUtil;
 import org.apache.tajo.engine.planner.Target;
 import org.apache.tajo.util.TUtil;
 
-public class ProjectionNode extends UnaryNode implements Projectable {
+public class ProjectionNode extends LogicalNode implements Projectable {
   /**
    * the targets are always filled even if the query is 'select *'
    */
@@ -50,9 +50,9 @@ public class ProjectionNode extends UnaryNode implements Projectable {
     return this.targets;
   }
 	
-	public void setChild(LogicalNode subNode) {
-	  super.setChild(subNode);
-	}
+//	public void setChild(LogicalNode subNode) {
+//	  super.setChild(subNode);
+//	}
 	
 	public String toString() {
 	  StringBuilder sb = new StringBuilder("Projection (distinct=").append(distinct);

@@ -23,21 +23,21 @@ package org.apache.tajo.engine.planner.logical;
 
 import org.apache.tajo.engine.planner.PlanString;
 
-public class IntersectNode extends BinaryNode {
+public class IntersectNode extends LogicalNode {
   public IntersectNode(int pid) {
     super(pid, NodeType.INTERSECT);
   }
 
-  public void init(LogicalNode left, LogicalNode right) {
-    setLeftChild(left);
-    setRightChild(right);
-  }
+//  public void init(LogicalNode left, LogicalNode right) {
+//    setLeftChild(left);
+//    setRightChild(right);
+//  }
 
   @Override
   public PlanString getPlanString() {
     PlanString planStr = new PlanString(this);
-    planStr.appendTitle(" (L - " + ((TableSubQueryNode)getLeftChild()).getTableName());
-    planStr.appendTitle(", R - " + ((TableSubQueryNode)getRightChild()).getTableName());
+//    planStr.appendTitle(" (L - " + ((TableSubQueryNode)getLeftChild()).getTableName());
+//    planStr.appendTitle(", R - " + ((TableSubQueryNode)getRightChild()).getTableName());
     planStr.appendTitle(")");
     return planStr;
   }

@@ -117,12 +117,54 @@ public abstract class LogicalNode implements Cloneable, GsonObject {
     return CoreGsonHelper.toJson(this, LogicalNode.class);
   }
 
-	public abstract void preOrder(LogicalNodeVisitor visitor);
-  public abstract void postOrder(LogicalNodeVisitor visitor);
+//	public abstract void preOrder(LogicalNodeVisitor visitor);
+//  public abstract void postOrder(LogicalNodeVisitor visitor);
 
   public abstract PlanString getPlanString();
 
   public String toString() {
     return PlannerUtil.buildExplainString(this);
+  }
+
+  public static enum EdgeType {
+    ORDERED_LEFT,
+    ORDERED_RIGHT,
+    UNORDERED
+  }
+
+  public static class LogicalNodeEdge {
+    private int parentPid;
+    private int childPid;
+    private EdgeType edgeType;
+
+    public LogicalNodeEdge(int parentPid, int childPid, EdgeType edgeType) {
+      this.parentPid = parentPid;
+      this.childPid = childPid;
+      this.edgeType = edgeType;
+    }
+
+    public int getParentPid() {
+      return parentPid;
+    }
+
+    public void setParentPid(int parentPid) {
+      this.parentPid = parentPid;
+    }
+
+    public int getChildPid() {
+      return childPid;
+    }
+
+    public void setChildPid(int childPid) {
+      this.childPid = childPid;
+    }
+
+    public EdgeType getEdgeType() {
+      return edgeType;
+    }
+
+    public void setEdgeType(EdgeType edgeType) {
+      this.edgeType = edgeType;
+    }
   }
 }
