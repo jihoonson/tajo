@@ -572,8 +572,7 @@ public class LogicalPlan {
     private final String blockName;
     private LogicalNode rootNode;
     private NodeType rootType;
-    private SimpleTree<LogicalNode, LogicalNodeEdge> logicalNodeTree =
-        new SimpleTree<LogicalNode, LogicalNodeEdge>();
+    private LogicalNodeTree logicalNodeTree = new LogicalNodeTree();
 
     // transient states
     private final Map<String, RelationNode> canonicalNameToRelationMap = TUtil.newHashMap();
@@ -617,11 +616,11 @@ public class LogicalPlan {
       this.rootNode = blockRoot;
       if (blockRoot instanceof LogicalRootNode) {
         LogicalRootNode rootNode = (LogicalRootNode) blockRoot;
-        rootType = logicalNodeTree.getChild(rootNode, 0).getType();
+        rootType = logicalNodeTree.getChild(rootNode).getType();
       }
     }
 
-    public SimpleTree<LogicalNode, LogicalNodeEdge> getLogicalNodeTree() {
+    public LogicalNodeTree getLogicalNodeTree() {
       return logicalNodeTree;
     }
 

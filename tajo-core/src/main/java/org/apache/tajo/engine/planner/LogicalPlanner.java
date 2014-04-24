@@ -126,8 +126,7 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
     LogicalRootNode root = plan.createNode(LogicalRootNode.class);
     root.setInSchema(topMostNode.getOutSchema());
     root.setOutSchema(topMostNode.getOutSchema());
-    plan.getRootBlock().getLogicalNodeTree().addEdge(topMostNode, root,
-        new LogicalNodeEdge(root.getPID(), topMostNode.getPID(), EdgeType.UNORDERED));
+    plan.getRootBlock().getLogicalNodeTree().setChild(topMostNode, root);
     plan.getRootBlock().setRoot(root);
 
     return plan;
@@ -221,7 +220,7 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
     projectionNode = context.queryBlock.getNodeFromExpr(projection);
     projectionNode.setInSchema(child.getOutSchema());
     projectionNode.setTargets(targets);
-    projectionNode.setChild(child);
+    context.queryBlock.getLogicalNodeTree().setChild(child, projectionNode);
 
     if (projection.isDistinct() && block.hasNode(NodeType.GROUP_BY)) {
       throw new VerifyException("Cannot support grouping and distinct at the same time yet");
@@ -264,7 +263,7 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
 
     Schema outSchema = projectionNode.getOutSchema();
     GroupbyNode dupRemoval = context.plan.createNode(GroupbyNode.class);
-    dupRemoval.setChild(child);
+    context.queryBlock.getLogicalNodeTree().setChild(child, dupRemoval);
     dupRemoval.setInSchema(projectionNode.getInSchema());
     dupRemoval.setTargets(PlannerUtil.schemaToTargets(outSchema));
     dupRemoval.setGroupingColumns(outSchema.toArray());
@@ -272,7 +271,7 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
     block.registerNode(dupRemoval);
     postHook(context, stack, null, dupRemoval);
 
-    projectionNode.setChild(dupRemoval);
+    context.queryBlock.getLogicalNodeTree().setChild(dupRemoval, projectionNode);
     projectionNode.setInSchema(dupRemoval.getOutSchema());
   }
 
@@ -429,7 +428,7 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
     LogicalPlan plan = context.plan;
     QueryBlock block = context.queryBlock;
     GroupbyNode groupbyNode = context.plan.createNode(GroupbyNode.class);
-    groupbyNode.setChild(child);
+    block.getLogicalNodeTree().setChild(child, groupbyNode);
     groupbyNode.setInSchema(child.getOutSchema());
 
     groupbyNode.setGroupingColumns(new Column[] {});
@@ -505,7 +504,7 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
       }
     }
     LimitNode limitNode = block.getNodeFromExpr(limit);
-    limitNode.setChild(child);
+    block.getLogicalNodeTree().setChild(child, limitNode);
     limitNode.setInSchema(child.getOutSchema());
     limitNode.setOutSchema(child.getOutSchema());
 
@@ -544,7 +543,7 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
     ////////////////////////////////////////////////////////
 
     SortNode sortNode = block.getNodeFromExpr(sort);
-    sortNode.setChild(child);
+    block.getLogicalNodeTree().setChild(child, sortNode);
     sortNode.setInSchema(child.getOutSchema());
     sortNode.setOutSchema(child.getOutSchema());
 
@@ -587,7 +586,7 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
     ////////////////////////////////////////////////////////
 
     HavingNode having = new HavingNode(context.plan.newPID());
-    having.setChild(child);
+    block.getLogicalNodeTree().setChild(child, having);
     having.setInSchema(child.getOutSchema());
     having.setOutSchema(child.getOutSchema());
 
@@ -637,7 +636,7 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
     stack.pop();
     ////////////////////////////////////////////////////////
     GroupbyNode groupingNode = context.queryBlock.getNodeFromExpr(aggregation);
-    groupingNode.setChild(child);
+    context.queryBlock.getLogicalNodeTree().setChild(child, groupingNode);
     groupingNode.setInSchema(child.getOutSchema());
 
     // Set grouping sets
@@ -744,7 +743,7 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
     ////////////////////////////////////////////////////////
 
     SelectionNode selectionNode = context.queryBlock.getNodeFromExpr(selection);
-    selectionNode.setChild(child);
+    context.queryBlock.getLogicalNodeTree().setChild(child, selectionNode);
     selectionNode.setInSchema(child.getOutSchema());
     selectionNode.setOutSchema(child.getOutSchema());
 
@@ -787,8 +786,8 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
 
     JoinNode joinNode = context.queryBlock.getNodeFromExpr(join);
     joinNode.setJoinType(join.getJoinType());
-    joinNode.setLeftChild(left);
-    joinNode.setRightChild(right);
+    context.queryBlock.getLogicalNodeTree().setLeftChild(left, joinNode);
+    context.queryBlock.getLogicalNodeTree().setRightChild(right, joinNode);
 
     // Set A merged input schema
     Schema merged;
@@ -816,7 +815,7 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
 
     // Determine join conditions
     if (join.isNatural()) { // if natural join, it should have the equi-join conditions by common column names
-      EvalNode njCond = getNaturalJoinCondition(joinNode);
+      EvalNode njCond = getNaturalJoinCondition(context.queryBlock.getLogicalNodeTree(), joinNode);
       joinNode.setJoinQual(njCond);
     } else if (join.hasQual()) { // otherwise, the given join conditions are set
       joinNode.setJoinQual(joinCondition);
@@ -862,9 +861,9 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
     return joinSchema;
   }
 
-  private static EvalNode getNaturalJoinCondition(JoinNode joinNode) {
-    Schema leftSchema = joinNode.getLeftChild().getInSchema();
-    Schema rightSchema = joinNode.getRightChild().getInSchema();
+  private static EvalNode getNaturalJoinCondition(LogicalNodeTree tree, JoinNode joinNode) {
+    Schema leftSchema = tree.getLeftChild(joinNode).getInSchema();
+    Schema rightSchema = tree.getRightChild(joinNode).getInSchema();
     Schema commons = SchemaUtil.getNaturalJoinColumns(leftSchema, rightSchema);
 
     EvalNode njQual = null;
@@ -894,8 +893,10 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
 
     Schema merged = SchemaUtil.merge(left.getOutSchema(), right.getOutSchema());
     JoinNode join = plan.createNode(JoinNode.class);
-    join.init(JoinType.CROSS, left, right);
+    join.init(JoinType.CROSS);
     join.setInSchema(merged);
+    context.queryBlock.getLogicalNodeTree().setLeftChild(left, join);
+    context.queryBlock.getLogicalNodeTree().setRightChild(right, join);
 
     EvalNode evalNode;
     List<String> newlyEvaluatedExprs = TUtil.newList();
@@ -1192,9 +1193,11 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
     //
     // In this example, only col1 and col2 are used as target columns.
 
+    LogicalNodeTree tree = context.queryBlock.getLogicalNodeTree();
+
     if (expr.hasTargetColumns()) { // when a user specified target columns
 
-      if (expr.getTargetColumns().length > insertNode.getChild().getOutSchema().size()) {
+      if (expr.getTargetColumns().length > tree.getChild(insertNode).getOutSchema().size()) {
         throw new PlanningException("Target columns and projected columns are mismatched to each other");
       }
 
@@ -1211,20 +1214,20 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
       }
       insertNode.setTargetSchema(targetColumns);
       insertNode.setOutSchema(targetColumns);
-      buildProjectedInsert(insertNode);
+      buildProjectedInsert(tree, insertNode);
 
     } else { // when a user do not specified target columns
 
       // The output schema of select clause determines the target columns.
       Schema tableSchema = desc.getLogicalSchema();
-      Schema projectedSchema = insertNode.getChild().getOutSchema();
+      Schema projectedSchema = tree.getChild(insertNode).getOutSchema();
 
       Schema targetColumns = new Schema();
       for (int i = 0; i < projectedSchema.size(); i++) {
         targetColumns.addColumn(tableSchema.getColumn(i));
       }
       insertNode.setTargetSchema(targetColumns);
-      buildProjectedInsert(insertNode);
+      buildProjectedInsert(tree, insertNode);
     }
 
     if (desc.hasPartition()) {
@@ -1233,11 +1236,11 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
     return insertNode;
   }
 
-  private void buildProjectedInsert(InsertNode insertNode) {
+  private void buildProjectedInsert(LogicalNodeTree tree, InsertNode insertNode) {
     Schema tableSchema = insertNode.getTableSchema();
     Schema targetColumns = insertNode.getTargetSchema();
 
-    ProjectionNode projectionNode = insertNode.getChild();
+    ProjectionNode projectionNode = tree.getChild(insertNode);
 
     // Modifying projected columns by adding NULL constants
     // It is because that table appender does not support target columns to be written.
@@ -1266,7 +1269,7 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
   private InsertNode buildInsertIntoLocationPlan(PlanContext context, InsertNode insertNode, Insert expr) {
     // INSERT (OVERWRITE)? INTO LOCATION path (USING file_type (param_clause)?)? query_expression
 
-    Schema childSchema = insertNode.getChild().getOutSchema();
+    Schema childSchema = context.queryBlock.getLogicalNodeTree().getChild(insertNode).getOutSchema();
     insertNode.setInSchema(childSchema);
     insertNode.setOutSchema(childSchema);
     insertNode.setTableSchema(childSchema);
@@ -1346,7 +1349,7 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
       stack.add(expr);
       LogicalNode subQuery = visit(context, stack, expr.getSubQuery());
       stack.pop();
-      createTableNode.setChild(subQuery);
+      context.queryBlock.getLogicalNodeTree().setChild(subQuery, createTableNode);
       createTableNode.setInSchema(subQuery.getOutSchema());
 
       // If the table schema is defined

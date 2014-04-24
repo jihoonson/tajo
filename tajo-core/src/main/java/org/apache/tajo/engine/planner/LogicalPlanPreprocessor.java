@@ -297,8 +297,8 @@ class LogicalPlanPreprocessor extends BaseAlgebraVisitor<LogicalPlanPreprocessor
     ctx.currentBlock.registerExprWithNode(expr.getRight(), rightChild);
 
     UnionNode unionNode = new UnionNode(ctx.plan.newPID());
-    unionNode.setLeftChild(leftChild);
-    unionNode.setRightChild(rightChild);
+    ctx.currentBlock.getLogicalNodeTree().setLeftChild(leftChild, unionNode);
+    ctx.currentBlock.getLogicalNodeTree().setRightChild(rightChild, unionNode);
     unionNode.setInSchema(leftChild.getOutSchema());
     unionNode.setOutSchema(leftChild.getOutSchema());
 

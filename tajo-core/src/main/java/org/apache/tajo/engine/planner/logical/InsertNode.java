@@ -34,7 +34,6 @@ public class InsertNode extends StoreTableNode implements Cloneable {
   /** a output schema of select clause */
   @Expose private Schema projectedSchema;
   @Expose private Path path;
-  private LogicalNode subQuery;
 
   public InsertNode(int pid) {
     super(pid, NodeType.INSERT);
@@ -60,11 +59,11 @@ public class InsertNode extends StoreTableNode implements Cloneable {
     this.path = path;
   }
 
-  public void setSubQuery(LogicalNode subQuery) {
-    this.subQuery = subQuery;
-    this.setInSchema(subQuery.getOutSchema());
-    this.setOutSchema(subQuery.getOutSchema());
-  }
+//  public void setSubQuery(LogicalNode subQuery) {
+//    this.subQuery = subQuery;
+//    this.setInSchema(subQuery.getOutSchema());
+//    this.setOutSchema(subQuery.getOutSchema());
+//  }
 
   public boolean isOverwrite() {
     return overwrite;

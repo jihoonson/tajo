@@ -31,7 +31,6 @@ public class CreateTableNode extends StoreTableNode implements Cloneable {
   @Expose private Path path;
   @Expose private boolean external;
   @Expose private boolean ifNotExists;
-  private LogicalNode subQuery;
 
   public CreateTableNode(int pid) {
     super(pid, NodeType.CREATE_TABLE);
@@ -75,9 +74,9 @@ public class CreateTableNode extends StoreTableNode implements Cloneable {
     this.external = external;
   }
 
-  public boolean hasSubQuery() {
-    return subQuery != null;
-  }
+//  public boolean hasSubQuery() {
+//    return subQuery != null;
+//  }
 
   public void setIfNotExists(boolean ifNotExists) {
     this.ifNotExists = ifNotExists;

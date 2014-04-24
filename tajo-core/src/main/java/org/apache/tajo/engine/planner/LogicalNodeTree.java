@@ -31,84 +31,121 @@ import java.util.Map;
 public class LogicalNodeTree extends SimpleTree<Integer, LogicalNodeEdge> {
   private Map<Integer, LogicalNode> nodeMap = TUtil.newHashMap();
 
-  public void add(LogicalNode child, LogicalNode parent) {
+  public void addChild(LogicalNode child, LogicalNode parent) {
     nodeMap.put(child.getPID(), child);
     nodeMap.put(parent.getPID(), parent);
     this.addEdge(child.getPID(), parent.getPID(),
         new LogicalNodeEdge(child.getPID(), parent.getPID(), EdgeType.UNORDERED));
   }
 
-  public void addLeftChild(LogicalNode child, LogicalNode parent) {
+  public void setChild(LogicalNode child, LogicalNode parent) {
+    Integer childPid = getChild(parent.getPID(), 0);
+    if (childPid != null) {
+      removeEdge(childPid, parent.getPID());
+      nodeMap.remove(childPid);
+    }
+    addChild(child, parent);
+  }
+
+  public void setLeftChild(LogicalNode child, LogicalNode parent) {
+    Integer leftChildPid = getLeftChildPid(parent.getPID());
+    if (leftChildPid != null) {
+      removeEdge(leftChildPid, parent.getPID());
+      nodeMap.remove(leftChildPid);
+    }
+
     nodeMap.put(child.getPID(), child);
     nodeMap.put(parent.getPID(), parent);
     this.addEdge(child.getPID(), parent.getPID(),
         new LogicalNodeEdge(child.getPID(), parent.getPID(), EdgeType.ORDERED_LEFT));
   }
 
-  public void addRightChild(LogicalNode child, LogicalNode parent) {
+  public void setRightChild(LogicalNode child, LogicalNode parent) {
+    Integer rightChildPid = getRightChildPid(parent.getPID());
+    if (rightChildPid != null) {
+      removeEdge(rightChildPid, parent.getPID());
+      nodeMap.remove(rightChildPid);
+    }
+
     nodeMap.put(child.getPID(), child);
     nodeMap.put(parent.getPID(), parent);
     this.addEdge(child.getPID(), parent.getPID(),
         new LogicalNodeEdge(child.getPID(), parent.getPID(), EdgeType.ORDERED_RIGHT));
   }
 
-  public LogicalNode getParent(LogicalNode child) {
+  public <NODE extends LogicalNode> NODE getParent(LogicalNode child) {
     Integer parentPid = this.getParent(child.getPID());
     if (parentPid != null) {
-      return nodeMap.get(parentPid);
+      return (NODE) nodeMap.get(parentPid);
     }
     return null;
   }
 
-  public LogicalNode getChild(LogicalNode parent) {
+  public <NODE extends LogicalNode> NODE getChild(LogicalNode parent) {
     List<LogicalNodeEdge> edges = this.getIncomingEdges(parent.getPID());
     if (edges != null) {
       Preconditions.checkState(edges.size() == 1);
       Preconditions.checkState(edges.get(0).getEdgeType() == EdgeType.UNORDERED);
-      return nodeMap.get(edges.get(0).getChildPid());
+      return (NODE) nodeMap.get(edges.get(0).getChildPid());
     }
     return null;
   }
 
-  public LogicalNode getLeftChild(LogicalNode parent) {
-    List<LogicalNodeEdge> edges = this.getIncomingEdges(parent.getPID());
+  public <NODE extends LogicalNode> NODE getLeftChild(LogicalNode parent) {
+    Integer leftChildPid = getLeftChildPid(parent.getPID());
+    if (leftChildPid != null) {
+      return (NODE) nodeMap.get(leftChildPid);
+    }
+    return null;
+  }
+
+  private Integer getLeftChildPid(Integer parentPid) {
+    List<LogicalNodeEdge> edges = this.getIncomingEdges(parentPid);
     if (edges != null) {
       Preconditions.checkState(edges.size() == 2);
       if (edges.get(0).getEdgeType() == EdgeType.ORDERED_LEFT) {
-        return nodeMap.get(edges.get(0).getChildPid());
+        return edges.get(0).getChildPid();
       } else if (edges.get(1).getEdgeType() == EdgeType.ORDERED_LEFT) {
-        return nodeMap.get(edges.get(1).getChildPid());
+        return edges.get(1).getChildPid();
       }
     }
     return null;
   }
 
-  public LogicalNode getRightChild(LogicalNode parent) {
-    List<LogicalNodeEdge> edges = this.getIncomingEdges(parent.getPID());
+  public <NODE extends LogicalNode> NODE getRightChild(LogicalNode parent) {
+    Integer rightChildPid = getRightChildPid(parent.getPID());
+    if (rightChildPid != null) {
+      return (NODE) nodeMap.get(rightChildPid);
+    }
+    return null;
+  }
+
+  private Integer getRightChildPid(Integer parentPid) {
+    List<LogicalNodeEdge> edges = this.getIncomingEdges(parentPid);
     if (edges != null) {
       Preconditions.checkState(edges.size() == 2);
       if (edges.get(0).getEdgeType() == EdgeType.ORDERED_RIGHT) {
-        return nodeMap.get(edges.get(0).getChildPid());
+        return edges.get(0).getChildPid();
       } else if (edges.get(1).getEdgeType() == EdgeType.ORDERED_RIGHT) {
-        return nodeMap.get(edges.get(1).getChildPid());
+        return edges.get(1).getChildPid();
       }
     }
     return null;
   }
 
-  public LogicalNode getChild(LogicalNode parent, int i) {
+  public <NODE extends LogicalNode> NODE getChild(LogicalNode parent, int i) {
     Integer childPid = this.getChild(parent.getPID(), i);
     if (childPid != null) {
-      return nodeMap.get(childPid);
+      return (NODE) nodeMap.get(childPid);
     }
     return null;
   }
 
-  public List<LogicalNode> getChilds(LogicalNode parent) {
+  public <NODE extends LogicalNode> List<NODE> getChilds(LogicalNode parent) {
     List<Integer> childPids = this.getChilds(parent.getPID());
-    List<LogicalNode> childNodes = TUtil.newList();
-    for (int i = 0; i < childPids.size(); i++) {
-      childNodes.add(nodeMap.get(childPids.get(i)));
+    List<NODE> childNodes = TUtil.newList();
+    for (Integer childPid : childPids) {
+      childNodes.add((NODE) nodeMap.get(childPid));
     }
     return childNodes;
   }
