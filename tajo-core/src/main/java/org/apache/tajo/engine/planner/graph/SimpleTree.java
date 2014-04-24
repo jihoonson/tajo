@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -16,22 +16,32 @@
  * limitations under the License.
  */
 
-/**
- * 
- */
-package org.apache.tajo.engine.planner.logical;
+package org.apache.tajo.engine.planner.graph;
 
-import org.apache.tajo.engine.planner.PlanString;
+import com.google.common.base.Preconditions;
+import org.apache.tajo.exception.UnsupportedException;
 
-public class UnionNode extends LogicalNode {
+import java.util.List;
 
-  public UnionNode(int pid) {
-    super(pid, NodeType.UNION);
+public class SimpleTree<V,E> extends SimpleDirectedGraph<V,E> {
+
+  @Override
+  public void addEdge(V tail, V head, E edge) {
+    Preconditions.checkState(getParentCount(tail) == 0);
+    super.addEdge(tail, head, edge);
+  }
+
+  public V getParent(V v) {
+    return getParent(v, 0);
   }
 
   @Override
-  public PlanString getPlanString() {
-    PlanString planStr = new PlanString(this);
-    return planStr;
+  public V getParent(V block, int idx) {
+    throw new UnsupportedException("Cannot support getParent(V v, int idx) in SimpleTree");
+  }
+
+  @Override
+  public List<V> getParents(V block) {
+    throw new UnsupportedException("Cannot support getParents(V v) in SimpleTree");
   }
 }

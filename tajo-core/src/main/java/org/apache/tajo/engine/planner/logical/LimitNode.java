@@ -21,7 +21,7 @@ package org.apache.tajo.engine.planner.logical;
 import com.google.gson.annotations.Expose;
 import org.apache.tajo.engine.planner.PlanString;
 
-public final class LimitNode extends UnaryNode implements Cloneable {
+public final class LimitNode extends LogicalNode implements Cloneable {
 	@Expose private long fetchFirstNum;
 
   public LimitNode(int pid) {

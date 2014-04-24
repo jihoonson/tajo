@@ -63,15 +63,15 @@ public abstract class BinaryNode extends LogicalNode implements Cloneable, GsonO
 	  return binNode;
 	}
 	
-	public void preOrder(LogicalNodeVisitor visitor) {
-	  visitor.visit(this);
-	  leftChild.postOrder(visitor);
-    rightChild.postOrder(visitor);
-  }
+//	public void preOrder(LogicalNodeVisitor visitor) {
+//	  visitor.visit(this);
+//	  leftChild.postOrder(visitor);
+//    rightChild.postOrder(visitor);
+//  }
 	
-	public void postOrder(LogicalNodeVisitor visitor) {
-    leftChild.postOrder(visitor);
-    rightChild.postOrder(visitor);
-    visitor.visit(this);
-  }
+//	public void postOrder(LogicalNodeVisitor visitor) {
+//    leftChild.postOrder(visitor);
+//    rightChild.postOrder(visitor);
+//    visitor.visit(this);
+//  }
 }

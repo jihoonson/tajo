@@ -20,14 +20,14 @@ package org.apache.tajo.engine.planner.logical;
 
 import org.apache.tajo.engine.planner.PlanString;
 
-public class LogicalRootNode extends UnaryNode implements Cloneable {
+public class LogicalRootNode extends LogicalNode implements Cloneable {
   public LogicalRootNode(int pid) {
     super(pid, NodeType.ROOT);
   }
   
-  public String toString() {
-    return "Logical Plan Root\n\n" + getChild().toString();
-  }
+//  public String toString() {
+//    return "Logical Plan Root\n\n" + getChild().toString();
+//  }
   
   @Override
   public Object clone() throws CloneNotSupportedException {

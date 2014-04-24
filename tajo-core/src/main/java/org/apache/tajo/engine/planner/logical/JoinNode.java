@@ -32,7 +32,7 @@ import org.apache.tajo.util.TUtil;
 import java.util.ArrayList;
 import java.util.List;
 
-public class JoinNode extends BinaryNode implements Projectable, Cloneable {
+public class JoinNode extends LogicalNode implements Projectable, Cloneable {
   @Expose private JoinType joinType;
   @Expose private EvalNode joinQual;
   @Expose private Target[] targets;
@@ -44,11 +44,15 @@ public class JoinNode extends BinaryNode implements Projectable, Cloneable {
     super(pid, NodeType.JOIN);
   }
 
-  public void init(JoinType joinType, LogicalNode left, LogicalNode right) {
+  public void init(JoinType joinType) {
     this.joinType = joinType;
-    setLeftChild(left);
-    setRightChild(right);
   }
+
+//  public void init(JoinType joinType, LogicalNode left, LogicalNode right) {
+//    this.joinType = joinType;
+//    setLeftChild(left);
+//    setRightChild(right);
+//  }
 
   public boolean isCandidateBroadcast() {
     return candidateBroadcast;
@@ -134,7 +138,8 @@ public class JoinNode extends BinaryNode implements Projectable, Cloneable {
       boolean eq = this.joinType.equals(other.joinType);
       eq &= TUtil.checkEquals(this.targets, other.targets);
       eq &= TUtil.checkEquals(joinQual, other.joinQual);
-      return eq && leftChild.equals(other.leftChild) && rightChild.equals(other.rightChild);
+      return eq;
+//      return eq && leftChild.equals(other.leftChild) && rightChild.equals(other.rightChild);
     } else {
       return false;
     }

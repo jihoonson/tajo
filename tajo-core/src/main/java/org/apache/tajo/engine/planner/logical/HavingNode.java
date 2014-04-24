@@ -22,7 +22,7 @@ import com.google.gson.annotations.Expose;
 import org.apache.tajo.engine.eval.EvalNode;
 import org.apache.tajo.engine.planner.PlanString;
 
-public class HavingNode extends UnaryNode implements Cloneable {
+public class HavingNode extends LogicalNode implements Cloneable {
 	@Expose private EvalNode qual;
 
   public HavingNode(int pid) {

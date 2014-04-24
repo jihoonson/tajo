@@ -31,7 +31,7 @@ import static org.apache.tajo.catalog.proto.CatalogProtos.StoreType;
  * <code>PersistentStoreNode</code> an expression for a persistent data store step.
  * This includes some basic information for materializing data.
  */
-public abstract class PersistentStoreNode extends UnaryNode implements Cloneable {
+public abstract class PersistentStoreNode extends LogicalNode implements Cloneable {
   @Expose protected StoreType storageType = StoreType.CSV;
   @Expose protected Options options;
 

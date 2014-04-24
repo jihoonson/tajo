@@ -31,6 +31,7 @@ public class CreateTableNode extends StoreTableNode implements Cloneable {
   @Expose private Path path;
   @Expose private boolean external;
   @Expose private boolean ifNotExists;
+  private LogicalNode subQuery;
 
   public CreateTableNode(int pid) {
     super(pid, NodeType.CREATE_TABLE);
@@ -75,7 +76,7 @@ public class CreateTableNode extends StoreTableNode implements Cloneable {
   }
 
   public boolean hasSubQuery() {
-    return child != null;
+    return subQuery != null;
   }
 
   public void setIfNotExists(boolean ifNotExists) {
@@ -127,19 +128,19 @@ public class CreateTableNode extends StoreTableNode implements Cloneable {
         ", ifNotExists=" + ifNotExists +")";
   }
 
-  @Override
-  public void preOrder(LogicalNodeVisitor visitor) {
-    if (hasSubQuery()) {
-      child.preOrder(visitor);
-    }
-    visitor.visit(this);
-  }
+//  @Override
+//  public void preOrder(LogicalNodeVisitor visitor) {
+//    if (hasSubQuery()) {
+//      subQuery.preOrder(visitor);
+//    }
+//    visitor.visit(this);
+//  }
 
-  @Override
-  public void postOrder(LogicalNodeVisitor visitor) {
-    visitor.visit(this);
-    if (hasSubQuery()) {
-      child.preOrder(visitor);
-    }
-  }
+//  @Override
+//  public void postOrder(LogicalNodeVisitor visitor) {
+//    visitor.visit(this);
+//    if (hasSubQuery()) {
+//      child.preOrder(visitor);
+//    }
+//  }
 }

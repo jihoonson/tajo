@@ -39,6 +39,8 @@ import org.apache.tajo.engine.eval.*;
 import org.apache.tajo.engine.exception.VerifyException;
 import org.apache.tajo.engine.planner.LogicalPlan.QueryBlock;
 import org.apache.tajo.engine.planner.logical.*;
+import org.apache.tajo.engine.planner.logical.LogicalNode.EdgeType;
+import org.apache.tajo.engine.planner.logical.LogicalNode.LogicalNodeEdge;
 import org.apache.tajo.engine.planner.rewrite.ProjectionPushDownRule;
 import org.apache.tajo.engine.utils.SchemaUtil;
 import org.apache.tajo.master.session.Session;
@@ -123,8 +125,9 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
     // Add Root Node
     LogicalRootNode root = plan.createNode(LogicalRootNode.class);
     root.setInSchema(topMostNode.getOutSchema());
-    root.setChild(topMostNode);
     root.setOutSchema(topMostNode.getOutSchema());
+    plan.getRootBlock().getLogicalNodeTree().addEdge(topMostNode, root,
+        new LogicalNodeEdge(root.getPID(), topMostNode.getPID(), EdgeType.UNORDERED));
     plan.getRootBlock().setRoot(root);
 
     return plan;

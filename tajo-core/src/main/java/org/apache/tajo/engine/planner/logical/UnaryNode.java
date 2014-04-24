@@ -57,13 +57,13 @@ public abstract class UnaryNode extends LogicalNode implements Cloneable {
 	  return unary;
 	}
 	
-	public void preOrder(LogicalNodeVisitor visitor) {
-	  visitor.visit(this);
-	  child.preOrder(visitor);
-  }
-	
-	public void postOrder(LogicalNodeVisitor visitor) {
-	  child.postOrder(visitor);
-	  visitor.visit(this);
-	}
+//	public void preOrder(LogicalNodeVisitor visitor) {
+//	  visitor.visit(this);
+//	  child.preOrder(visitor);
+//  }
+//
+//	public void postOrder(LogicalNodeVisitor visitor) {
+//	  child.postOrder(visitor);
+//	  visitor.visit(this);
+//	}
 }
