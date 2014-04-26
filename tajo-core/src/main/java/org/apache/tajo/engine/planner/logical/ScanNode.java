@@ -194,14 +194,14 @@ public class ScanNode extends RelationNode implements Projectable, Cloneable {
 	  return scanNode;
 	}
 	
-  @Override
-  public void preOrder(LogicalNodeVisitor visitor) {
-    visitor.visit(this);
-  }
-	
-	public void postOrder(LogicalNodeVisitor visitor) {        
-    visitor.visit(this);
-  }
+//  @Override
+//  public void preOrder(LogicalNodeVisitor visitor) {
+//    visitor.visit(this);
+//  }
+//
+//	public void postOrder(LogicalNodeVisitor visitor) {
+//    visitor.visit(this);
+//  }
 
   @Override
   public PlanString getPlanString() {

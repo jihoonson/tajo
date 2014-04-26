@@ -66,15 +66,15 @@ public class EvalExprNode extends LogicalNode implements Projectable {
     }
   }
   
-  @Override
-  public void preOrder(LogicalNodeVisitor visitor) {
-    // nothing
-  }
-
-  @Override
-  public void postOrder(LogicalNodeVisitor visitor) {
-    // nothing
-  }
+//  @Override
+//  public void preOrder(LogicalNodeVisitor visitor) {
+//    // nothing
+//  }
+//
+//  @Override
+//  public void postOrder(LogicalNodeVisitor visitor) {
+//    // nothing
+//  }
 
   @Override
   public PlanString getPlanString() {

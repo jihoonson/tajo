@@ -81,6 +81,10 @@ public class LogicalNodeTree extends SimpleTree<Integer, LogicalNodeEdge> {
     return null;
   }
 
+  public boolean hasChild(LogicalNode parent) {
+    return getChildCount(parent.getPID()) > 0;
+  }
+
   public <NODE extends LogicalNode> NODE getChild(LogicalNode parent) {
     List<LogicalNodeEdge> edges = this.getIncomingEdges(parent.getPID());
     if (edges != null) {

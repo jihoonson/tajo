@@ -91,13 +91,13 @@ public class AlterTablespaceNode extends LogicalNode implements Cloneable {
     return "AlterTablespace (space=" + tablespaceName + ")";
   }
 
-  @Override
-  public void preOrder(LogicalNodeVisitor visitor) {
-    visitor.visit(this);
-  }
-
-  @Override
-  public void postOrder(LogicalNodeVisitor visitor) {
-    visitor.visit(this);
-  }
+//  @Override
+//  public void preOrder(LogicalNodeVisitor visitor) {
+//    visitor.visit(this);
+//  }
+//
+//  @Override
+//  public void postOrder(LogicalNodeVisitor visitor) {
+//    visitor.visit(this);
+//  }
 }

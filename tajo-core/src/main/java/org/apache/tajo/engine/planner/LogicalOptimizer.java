@@ -164,8 +164,8 @@ public class LogicalOptimizer {
       if (joinNode.hasJoinQual()) {
         joinGraphContext.joinGraph.addJoin(plan, block, joinNode);
       } else {
-        LogicalNode leftChild = joinNode.getLeftChild();
-        LogicalNode rightChild = joinNode.getRightChild();
+        LogicalNode leftChild = block.getLogicalNodeTree().getLeftChild(joinNode);
+        LogicalNode rightChild = block.getLogicalNodeTree().getRightChild(joinNode);
         if (leftChild instanceof RelationNode) {
           RelationNode rel = (RelationNode) leftChild;
           joinGraphContext.relationsForProduct.add(rel.getCanonicalName());
@@ -201,9 +201,9 @@ public class LogicalOptimizer {
         throws PlanningException {
       stack.push(joinNode);
       sb.append("(");
-      visit(sb, plan, block, joinNode.getLeftChild(), stack);
+      visit(sb, plan, block, block.getLogicalNodeTree().getLeftChild(joinNode), stack);
       sb.append(" ").append(getJoinNotation(joinNode.getJoinType())).append(" ");
-      visit(sb, plan, block, joinNode.getRightChild(), stack);
+      visit(sb, plan, block, block.getLogicalNodeTree().getRightChild(joinNode), stack);
       sb.append(")");
       stack.pop();
       return joinNode;
@@ -266,12 +266,14 @@ public class LogicalOptimizer {
         filterFactor = Math.pow(GreedyHeuristicJoinOrderAlgorithm.DEFAULT_SELECTION_FACTOR, quals.length);
       }
 
-      if (joinNode.getLeftChild() instanceof RelationNode) {
-        joinGraphContext.accumulatedCost = getCost(joinNode.getLeftChild()) * getCost(joinNode.getRightChild())
+      if (block.getLogicalNodeTree().getLeftChild(joinNode) instanceof RelationNode) {
+        joinGraphContext.accumulatedCost = getCost(block.getLogicalNodeTree().getLeftChild(joinNode))
+            * getCost(block.getLogicalNodeTree().getRightChild(joinNode))
             * filterFactor;
       } else {
         joinGraphContext.accumulatedCost = joinGraphContext.accumulatedCost +
-            (joinGraphContext.accumulatedCost * getCost(joinNode.getRightChild()) * filterFactor);
+            (joinGraphContext.accumulatedCost * getCost(block.getLogicalNodeTree().getRightChild(joinNode))
+                * filterFactor);
       }
 
       return joinNode;

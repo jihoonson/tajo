@@ -122,13 +122,13 @@ public class AlterTableNode extends LogicalNode {
     return "AlterTable (table=" + tableName + ")";
   }
 
-  @Override
-  public void preOrder(LogicalNodeVisitor visitor) {
-    visitor.visit(this);
-  }
-
-  @Override
-  public void postOrder(LogicalNodeVisitor visitor) {
-    visitor.visit(this);
-  }
+//  @Override
+//  public void preOrder(LogicalNodeVisitor visitor) {
+//    visitor.visit(this);
+//  }
+//
+//  @Override
+//  public void postOrder(LogicalNodeVisitor visitor) {
+//    visitor.visit(this);
+//  }
 }

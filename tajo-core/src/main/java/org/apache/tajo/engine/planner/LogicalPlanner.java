@@ -1138,7 +1138,8 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
 
     InsertNode insertNode = context.queryBlock.getNodeFromExpr(expr);
     insertNode.setOverwrite(expr.isOverwrite());
-    insertNode.setSubQuery(subQuery);
+    context.queryBlock.getLogicalNodeTree().setChild(subQuery, insertNode);
+//    insertNode.setSubQuery(subQuery);
 
     if (expr.hasTableName()) { // INSERT (OVERWRITE) INTO TABLE ...
       return buildInsertIntoTablePlan(context, insertNode, expr);
