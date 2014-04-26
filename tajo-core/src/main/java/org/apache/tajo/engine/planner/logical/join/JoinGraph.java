@@ -86,7 +86,8 @@ public class JoinGraph extends SimpleUndirectedGraph<String, JoinEdge> {
         String leftExprRelName = relations[0];
         String rightExprRelName = relations[1];
 
-        Collection<String> leftLineage = PlannerUtil.getRelationLineageWithinQueryBlock(plan, joinNode.getLeftChild());
+//        Collection<String> leftLineage = PlannerUtil.getRelationLineageWithinQueryBlock(plan, joinNode.getLeftChild());
+        Collection<String> leftLineage = PlannerUtil.getRelationLineageWithinQueryBlock(plan, plan.getLeftChild(joinNode));
 
         boolean isLeftExprForLeftTable = leftLineage.contains(leftExprRelName);
         JoinEdge edge;

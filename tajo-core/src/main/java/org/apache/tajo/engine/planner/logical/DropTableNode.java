@@ -83,13 +83,13 @@ public class DropTableNode extends LogicalNode implements Cloneable {
     return "DROP TABLE " + (ifExists ? "IF EXISTS " : "") + tableName + (purge ? " PURGE" : "");
   }
 
-  @Override
-  public void preOrder(LogicalNodeVisitor visitor) {
-    visitor.visit(this);
-  }
-
-  @Override
-  public void postOrder(LogicalNodeVisitor visitor) {
-    visitor.visit(this);
-  }
+//  @Override
+//  public void preOrder(LogicalNodeVisitor visitor) {
+//    visitor.visit(this);
+//  }
+//
+//  @Override
+//  public void postOrder(LogicalNodeVisitor visitor) {
+//    visitor.visit(this);
+//  }
 }

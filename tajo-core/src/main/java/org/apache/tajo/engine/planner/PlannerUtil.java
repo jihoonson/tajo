@@ -39,10 +39,11 @@ import java.util.*;
 
 public class PlannerUtil {
 
-  public static boolean checkIfDDLPlan(LogicalNode node) {
+  public static boolean checkIfDDLPlan(LogicalPlan plan, LogicalNode node) {
     LogicalNode baseNode = node;
     if (node instanceof LogicalRootNode) {
-      baseNode = ((LogicalRootNode) node).getChild();
+//      baseNode = ((LogicalRootNode) node).getChild();
+      baseNode = plan.getChild(node);
     }
 
     NodeType type = baseNode.getType();
@@ -50,7 +51,8 @@ public class PlannerUtil {
     return
         type == NodeType.CREATE_DATABASE ||
             type == NodeType.DROP_DATABASE ||
-            (type == NodeType.CREATE_TABLE && !((CreateTableNode) baseNode).hasSubQuery()) ||
+//            (type == NodeType.CREATE_TABLE && !((CreateTableNode) baseNode).hasSubQuery()) ||
+            (type == NodeType.CREATE_TABLE && plan.getChild(baseNode) == null) ||
             baseNode.getType() == NodeType.DROP_TABLE ||
             baseNode.getType() == NodeType.ALTER_TABLESPACE ||
             baseNode.getType() == NodeType.ALTER_TABLE;
@@ -68,8 +70,10 @@ public class PlannerUtil {
 
     // one block, without where clause, no group-by, no-sort, no-join
     boolean isOneQueryBlock = plan.getQueryBlocks().size() == 1;
-    boolean simpleOperator = rootNode.getChild().getType() == NodeType.LIMIT
-        || rootNode.getChild().getType() == NodeType.SCAN;
+//    boolean simpleOperator = rootNode.getChild().getType() == NodeType.LIMIT
+//        || rootNode.getChild().getType() == NodeType.SCAN;
+    boolean simpleOperator = plan.getChild(rootNode).getType() == NodeType.LIMIT
+        || plan.getChild(rootNode).getType() == NodeType.SCAN;
     boolean noOrderBy = !plan.getRootBlock().hasNode(NodeType.SORT);
     boolean noGroupBy = !plan.getRootBlock().hasNode(NodeType.GROUP_BY);
     boolean noWhere = !plan.getRootBlock().hasNode(NodeType.SELECTION);
@@ -95,7 +99,7 @@ public class PlannerUtil {
       }
     }
 
-    return !checkIfDDLPlan(rootNode) &&
+    return !checkIfDDLPlan(plan, rootNode) &&
         (simpleOperator && noComplexComputation  && isOneQueryBlock && noOrderBy && noGroupBy && noWhere && noJoin && singleRelation);
   }
 
@@ -112,7 +116,7 @@ public class PlannerUtil {
     boolean isOneQueryBlock = plan.getQueryBlocks().size() == 1;
     boolean noRelation = !plan.getRootBlock().hasAlgebraicExpr(OpType.Relation);
 
-    return !checkIfDDLPlan(node) && noRelation && isOneQueryBlock;
+    return !checkIfDDLPlan(plan, node) && noRelation && isOneQueryBlock;
   }
 
   /**

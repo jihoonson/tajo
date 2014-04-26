@@ -153,4 +153,46 @@ public class LogicalNodeTree extends SimpleTree<Integer, LogicalNodeEdge> {
     }
     return childNodes;
   }
+
+  private boolean isAvailableEdgeType(LogicalNode parent, EdgeType edgeType) {
+    switch (parent.getType()) {
+      case ROOT:
+      case PROJECTION:
+      case LIMIT:
+      case SORT:
+      case HAVING:
+      case GROUP_BY:
+      case SELECTION:
+        return edgeType == EdgeType.UNORDERED;
+      case EXPRS:
+      case SCAN:
+      case PARTITIONS_SCAN:
+      case BST_INDEX_SCAN:
+        return false;
+      case JOIN:
+      case UNION:
+      case EXCEPT:
+      case INTERSECT:
+        return edgeType == EdgeType.ORDERED_LEFT || edgeType == EdgeType.ORDERED_RIGHT;
+      case TABLE_SUBQUERY:
+        break;
+      case STORE:
+        break;
+      case INSERT:
+        break;
+      case CREATE_DATABASE:
+        break;
+      case DROP_DATABASE:
+        break;
+      case CREATE_TABLE:
+        break;
+      case DROP_TABLE:
+        break;
+      case ALTER_TABLESPACE:
+        break;
+      case ALTER_TABLE:
+        break;
+    }
+    return false;
+  }
 }

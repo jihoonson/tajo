@@ -30,9 +30,7 @@ import org.apache.tajo.engine.exception.NoSuchColumnException;
 import org.apache.tajo.engine.exception.VerifyException;
 import org.apache.tajo.engine.planner.graph.DirectedGraphCursor;
 import org.apache.tajo.engine.planner.graph.SimpleDirectedGraph;
-import org.apache.tajo.engine.planner.graph.SimpleTree;
 import org.apache.tajo.engine.planner.logical.LogicalNode;
-import org.apache.tajo.engine.planner.logical.LogicalNode.LogicalNodeEdge;
 import org.apache.tajo.engine.planner.logical.LogicalRootNode;
 import org.apache.tajo.engine.planner.logical.NodeType;
 import org.apache.tajo.engine.planner.logical.RelationNode;
@@ -63,6 +61,7 @@ public class LogicalPlan {
   private Map<Integer, QueryBlock> queryBlockByPID = new HashMap<Integer, QueryBlock>();
   private Map<String, String> exprToBlockNameMap = TUtil.newHashMap();
   private SimpleDirectedGraph<String, BlockEdge> queryBlockGraph = new SimpleDirectedGraph<String, BlockEdge>();
+  private LogicalNodeTree logicalNodeTree = new LogicalNodeTree();
 
   /** planning and optimization log */
   private List<String> planingHistory = Lists.newArrayList();
@@ -194,6 +193,47 @@ public class LogicalPlan {
       prefix = expr.getType().name();
     }
     return prefix;
+  }
+
+  public LogicalNodeTree getLogicalNodeTree() {
+    return logicalNodeTree;
+  }
+
+  public void setChild(LogicalNode child, LogicalNode parent) {
+    logicalNodeTree.setChild(child, parent);
+  }
+
+  public void setChild(LogicalNode left, LogicalNode right, LogicalNode parent) {
+    logicalNodeTree.setLeftChild(left, parent);
+    logicalNodeTree.setRightChild(right, parent);
+  }
+
+  public void setLeftChild(LogicalNode child, LogicalNode parent) {
+    logicalNodeTree.setLeftChild(child, parent);
+  }
+
+  public void setRightChild(LogicalNode child, LogicalNode parent) {
+    logicalNodeTree.setRightChild(child, parent);
+  }
+
+  public <NODE extends LogicalNode> NODE getParent(LogicalNode child) {
+    return logicalNodeTree.getParent(child);
+  }
+
+  public int getChildCount(LogicalNode parent) {
+    return logicalNodeTree.getChildCount(parent.getPID());
+  }
+
+  public <NODE extends LogicalNode> NODE getChild(LogicalNode parent) {
+    return logicalNodeTree.getChild(parent);
+  }
+
+  public <NODE extends LogicalNode> NODE getLeftChild(LogicalNode parent) {
+    return logicalNodeTree.getLeftChild(parent);
+  }
+
+  public <NODE extends LogicalNode> NODE getRightChild(LogicalNode parent) {
+    return logicalNodeTree.getRightChild(parent);
   }
 
   public QueryBlock getRootBlock() {
@@ -572,7 +612,6 @@ public class LogicalPlan {
     private final String blockName;
     private LogicalNode rootNode;
     private NodeType rootType;
-    private LogicalNodeTree logicalNodeTree = new LogicalNodeTree();
 
     // transient states
     private final Map<String, RelationNode> canonicalNameToRelationMap = TUtil.newHashMap();
@@ -618,10 +657,6 @@ public class LogicalPlan {
         LogicalRootNode rootNode = (LogicalRootNode) blockRoot;
         rootType = logicalNodeTree.getChild(rootNode).getType();
       }
-    }
-
-    public LogicalNodeTree getLogicalNodeTree() {
-      return logicalNodeTree;
     }
 
     public <NODE extends LogicalNode> NODE getRoot() {

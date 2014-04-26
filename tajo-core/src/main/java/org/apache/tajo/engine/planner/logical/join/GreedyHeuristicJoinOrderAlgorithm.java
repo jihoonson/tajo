@@ -70,7 +70,7 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
     JoinNode joinTree = (JoinNode) remainRelations.iterator().next();
     // all generated nodes should be registered to corresponding blocks
     block.registerNode(joinTree);
-    return new FoundJoinOrder(joinTree, getCost(joinTree));
+    return new FoundJoinOrder(joinTree, getCost(plan, joinTree));
   }
 
   private static JoinNode createJoinNode(LogicalPlan plan, JoinEdge joinEdge) {
@@ -83,18 +83,26 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
       // if only one operator is relation
       if ((left instanceof RelationNode) && !(right instanceof RelationNode)) {
         // for left deep
-        joinNode.init(joinEdge.getJoinType(), right, left);
+//        joinNode.init(joinEdge.getJoinType(), right, left);
+        joinNode.init(joinEdge.getJoinType());
+        plan.setChild(right, left, joinNode);
       } else {
         // if both operators are relation or if both are relations
         // we don't need to concern the left-right position.
-        joinNode.init(joinEdge.getJoinType(), left, right);
+//        joinNode.init(joinEdge.getJoinType(), left, right);
+        joinNode.init(joinEdge.getJoinType());
+        plan.setChild(left, right, joinNode);
       }
     } else {
-      joinNode.init(joinEdge.getJoinType(), left, right);
+//      joinNode.init(joinEdge.getJoinType(), left, right);
+      joinNode.init(joinEdge.getJoinType());
+      plan.setChild(left, right, joinNode);
     }
 
-    Schema mergedSchema = SchemaUtil.merge(joinNode.getLeftChild().getOutSchema(),
-        joinNode.getRightChild().getOutSchema());
+//    Schema mergedSchema = SchemaUtil.merge(joinNode.getLeftChild().getOutSchema(),
+//        joinNode.getRightChild().getOutSchema());
+    Schema mergedSchema = SchemaUtil.merge(plan.getLeftChild(joinNode).getOutSchema(),
+        plan.getRightChild(joinNode).getOutSchema());
     joinNode.setInSchema(mergedSchema);
     joinNode.setOutSchema(mergedSchema);
     if (joinEdge.hasJoinQual()) {
@@ -131,7 +139,7 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
         if (foundJoin == null) {
           continue;
         }
-        double cost = getCost(foundJoin);
+        double cost = getCost(plan, foundJoin);
 
         if (cost < minCost) {
           minCost = cost;
@@ -195,26 +203,27 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
    * @param joinEdge
    * @return
    */
-  public static double getCost(JoinEdge joinEdge) {
+  public static double getCost(LogicalPlan plan, JoinEdge joinEdge) {
     double filterFactor = 1;
     if (joinEdge.hasJoinQual()) {
       // TODO - should consider join type
       // TODO - should statistic information obtained from query history
       filterFactor = filterFactor * Math.pow(DEFAULT_SELECTION_FACTOR, joinEdge.getJoinQual().length);
-      return getCost(joinEdge.getLeftRelation()) * getCost(joinEdge.getRightRelation()) * filterFactor;
+      return getCost(plan, joinEdge.getLeftRelation()) * getCost(plan, joinEdge.getRightRelation()) * filterFactor;
     } else {
       // make cost bigger if cross join
-      return Math.pow(getCost(joinEdge.getLeftRelation()) * getCost(joinEdge.getRightRelation()), 2);
+      return Math.pow(getCost(plan, joinEdge.getLeftRelation()) * getCost(plan, joinEdge.getRightRelation()), 2);
     }
   }
 
   // TODO - costs of other operator operators (e.g., group-by and sort) should be computed in proper manners.
-  public static double getCost(LogicalNode node) {
+  public static double getCost(LogicalPlan plan, LogicalNode node) {
     switch (node.getType()) {
 
     case PROJECTION:
       ProjectionNode projectionNode = (ProjectionNode) node;
-      return getCost(projectionNode.getChild());
+//      return getCost(projectionNode.getChild());
+      return getCost(plan, plan.getChild(projectionNode));
 
     case JOIN:
       JoinNode joinNode = (JoinNode) node;
@@ -222,19 +231,22 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
       if (joinNode.hasJoinQual()) {
         filterFactor = Math.pow(DEFAULT_SELECTION_FACTOR,
             AlgebraicUtil.toConjunctiveNormalFormArray(joinNode.getJoinQual()).length);
-        return getCost(joinNode.getLeftChild()) * getCost(joinNode.getRightChild()) * filterFactor;
+//        return getCost(joinNode.getLeftChild()) * getCost(joinNode.getRightChild()) * filterFactor;
+        return getCost(plan, plan.getLeftChild(joinNode)) * getCost(plan, plan.getRightChild(joinNode)) * filterFactor;
       } else {
-        return Math.pow(getCost(joinNode.getLeftChild()) * getCost(joinNode.getRightChild()), 2);
+//        return Math.pow(getCost(joinNode.getLeftChild()) * getCost(joinNode.getRightChild()), 2);
+        return Math.pow(getCost(plan, plan.getLeftChild(joinNode)) * getCost(plan, plan.getRightChild(joinNode)), 2);
       }
 
     case SELECTION:
       SelectionNode selectionNode = (SelectionNode) node;
-      return getCost(selectionNode.getChild()) *
+//      return getCost(selectionNode.getChild()) *
+      return getCost(plan, plan.getChild(selectionNode)) *
           Math.pow(DEFAULT_SELECTION_FACTOR, AlgebraicUtil.toConjunctiveNormalFormArray(selectionNode.getQual()).length);
 
     case TABLE_SUBQUERY:
       TableSubQueryNode subQueryNode = (TableSubQueryNode) node;
-      return getCost(subQueryNode.getSubQuery());
+      return getCost(plan, subQueryNode.getSubQuery());
 
     case SCAN:
       ScanNode scanNode = (ScanNode) node;
@@ -247,7 +259,8 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
 
     case UNION:
       UnionNode unionNode = (UnionNode) node;
-      return getCost(unionNode.getLeftChild()) + getCost(unionNode.getRightChild());
+//      return getCost(unionNode.getLeftChild()) + getCost(unionNode.getRightChild());
+      return getCost(plan, plan.getLeftChild(unionNode)) + getCost(plan, plan.getRightChild(unionNode));
 
     case EXCEPT:
     case INTERSECT:
@@ -256,7 +269,8 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
     default:
       // all binary operators (join, union, except, and intersect) are handled in the above cases.
       // So, we need to handle only unary nodes in default.
-      return getCost(((UnaryNode) node).getChild());
+//      return getCost(((UnaryNode) node).getChild());
+      return getCost(plan, plan.getChild(node));
     }
   }
 }

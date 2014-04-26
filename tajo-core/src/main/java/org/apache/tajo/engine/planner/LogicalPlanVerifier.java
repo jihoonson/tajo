@@ -116,7 +116,7 @@ public class LogicalPlanVerifier extends BasicLogicalPlanVisitor<LogicalPlanVeri
   @Override
   public LogicalNode visitFilter(Context context, LogicalPlan plan, LogicalPlan.QueryBlock block,
                                  SelectionNode node, Stack<LogicalNode> stack) throws PlanningException {
-    visit(context, plan, block, block.getLogicalNodeTree().getChild(node), stack);
+    visit(context, plan, block, plan.getChild(node), stack);
     ExprsVerifier.verify(context.state, node, node.getQual());
     return node;
   }
@@ -124,8 +124,8 @@ public class LogicalPlanVerifier extends BasicLogicalPlanVisitor<LogicalPlanVeri
   @Override
   public LogicalNode visitJoin(Context context, LogicalPlan plan, LogicalPlan.QueryBlock block, JoinNode node,
                                Stack<LogicalNode> stack) throws PlanningException {
-    visit(context, plan, block, block.getLogicalNodeTree().getLeftChild(node), stack);
-    visit(context, plan, block, block.getLogicalNodeTree().getRightChild(node), stack);
+    visit(context, plan, block, plan.getLeftChild(node), stack);
+    visit(context, plan, block, plan.getRightChild(node), stack);
 
     if (node.hasJoinQual()) {
       ExprsVerifier.verify(context.state, node, node.getJoinQual());
@@ -136,11 +136,11 @@ public class LogicalPlanVerifier extends BasicLogicalPlanVisitor<LogicalPlanVeri
     return node;
   }
 
-  private void verifySetStatement(VerificationState state, LogicalPlan.QueryBlock block, LogicalNode setNode) {
+  private void verifySetStatement(VerificationState state, LogicalPlan plan, LogicalNode setNode) {
     Preconditions.checkArgument(setNode.getType() == NodeType.UNION || setNode.getType() == NodeType.INTERSECT ||
       setNode.getType() == NodeType.EXCEPT);
-    Schema left = block.getLogicalNodeTree().getLeftChild(setNode).getOutSchema();
-    Schema right = block.getLogicalNodeTree().getRightChild(setNode).getOutSchema();
+    Schema left = plan.getLeftChild(setNode).getOutSchema();
+    Schema right = plan.getRightChild(setNode).getOutSchema();
     NodeType type = setNode.getType();
 
     if (left.size() != right.size()) {
@@ -163,7 +163,7 @@ public class LogicalPlanVerifier extends BasicLogicalPlanVisitor<LogicalPlanVeri
   public LogicalNode visitUnion(Context context, LogicalPlan plan, LogicalPlan.QueryBlock block,
                                 UnionNode node, Stack<LogicalNode> stack) throws PlanningException {
     super.visitUnion(context, plan, block, node, stack);
-    verifySetStatement(context.state, block, node);
+    verifySetStatement(context.state, plan, node);
     return node;
   }
 
@@ -171,7 +171,7 @@ public class LogicalPlanVerifier extends BasicLogicalPlanVisitor<LogicalPlanVeri
   public LogicalNode visitExcept(Context context, LogicalPlan plan, LogicalPlan.QueryBlock block,
                                  ExceptNode node, Stack<LogicalNode> stack) throws PlanningException {
     super.visitExcept(context, plan, block, node, stack);
-    verifySetStatement(context.state, block, node);
+    verifySetStatement(context.state, plan, node);
     return node;
   }
 
@@ -179,7 +179,7 @@ public class LogicalPlanVerifier extends BasicLogicalPlanVisitor<LogicalPlanVeri
   public LogicalNode visitIntersect(Context context, LogicalPlan plan, LogicalPlan.QueryBlock block,
                                     IntersectNode node, Stack<LogicalNode> stack) throws PlanningException {
     super.visitIntersect(context, plan, block, node, stack);
-    verifySetStatement(context.state, block, node);
+    verifySetStatement(context.state, plan, node);
     return node;
   }
 
