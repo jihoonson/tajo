@@ -32,6 +32,7 @@ import org.apache.tajo.QueryIdFactory;
 import org.apache.tajo.QueryUnitAttemptId;
 import org.apache.tajo.QueryUnitId;
 import org.apache.tajo.catalog.statistics.TableStats;
+import org.apache.tajo.engine.planner.LogicalNodeTree;
 import org.apache.tajo.engine.planner.logical.*;
 import org.apache.tajo.master.FragmentPair;
 import org.apache.tajo.master.TaskState;
@@ -59,7 +60,7 @@ public class QueryUnit implements EventHandler<TaskEvent> {
 	private QueryUnitId taskId;
   private EventHandler eventHandler;
 	private StoreTableNode store = null;
-	private LogicalNode plan = null;
+	private LogicalNodeTree plan = null;
 	private List<ScanNode> scan;
 	
 	private Map<String, Set<FragmentProto>> fragMap;
@@ -200,25 +201,23 @@ public class QueryUnit implements EventHandler<TaskEvent> {
     }
   }
 
-	public void setLogicalPlan(LogicalNode plan) {
+//	public void setLogicalPlan(LogicalNode plan) {
+  public void setLogicalPlan(LogicalNodeTree plan) {
 	  this.plan = plan;
 
-	  LogicalNode node = plan;
+	  LogicalNode node = plan.getRoot();
 	  ArrayList<LogicalNode> s = new ArrayList<LogicalNode>();
 	  s.add(node);
 	  while (!s.isEmpty()) {
 	    node = s.remove(s.size()-1);
-	    if (node instanceof UnaryNode) {
-	      UnaryNode unary = (UnaryNode) node;
-	      s.add(s.size(), unary.getChild());
-	    } else if (node instanceof BinaryNode) {
-	      BinaryNode binary = (BinaryNode) node;
-	      s.add(s.size(), binary.getLeftChild());
-	      s.add(s.size(), binary.getRightChild());
-	    } else if (node instanceof ScanNode) {
-	      scan.add((ScanNode)node);
-	    } else if (node instanceof TableSubQueryNode) {
+      if (node.getType() == NodeType.SCAN) {
+        scan.add((ScanNode) node);
+      } else if (node.getType() == NodeType.TABLE_SUBQUERY) {
         s.add(((TableSubQueryNode) node).getSubQuery());
+      } else {
+        for (LogicalNode child : plan.getChilds(node)) {
+          s.add(s.size(), child);
+        }
       }
 	  }
 	}
@@ -293,7 +292,7 @@ public class QueryUnit implements EventHandler<TaskEvent> {
     return fragmentProtos;
   }
 	
-	public LogicalNode getLogicalPlan() {
+	public LogicalNodeTree getLogicalPlan() {
 	  return this.plan;
 	}
 	
@@ -323,7 +322,7 @@ public class QueryUnit implements EventHandler<TaskEvent> {
 	
 	@Override
 	public String toString() {
-		String str = new String(plan.getType() + " \n");
+		String str = new String(plan.getRoot().getType() + " \n");
 		for (Entry<String, Set<FragmentProto>> e : fragMap.entrySet()) {
 		  str += e.getKey() + " : ";
       for (FragmentProto fragment : e.getValue()) {

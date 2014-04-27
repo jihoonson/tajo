@@ -19,17 +19,22 @@
 package org.apache.tajo.engine.planner;
 
 import com.google.common.base.Preconditions;
+import com.google.gson.annotations.Expose;
+import org.apache.tajo.engine.json.CoreGsonHelper;
 import org.apache.tajo.engine.planner.graph.SimpleTree;
 import org.apache.tajo.engine.planner.logical.LogicalNode;
 import org.apache.tajo.engine.planner.logical.LogicalNode.EdgeType;
 import org.apache.tajo.engine.planner.logical.LogicalNode.LogicalNodeEdge;
+import org.apache.tajo.engine.planner.logical.LogicalNodeVisitor;
+import org.apache.tajo.json.GsonObject;
 import org.apache.tajo.util.TUtil;
 
 import java.util.List;
 import java.util.Map;
 
-public class LogicalNodeTree extends SimpleTree<Integer, LogicalNodeEdge> {
-  private Map<Integer, LogicalNode> nodeMap = TUtil.newHashMap();
+public class LogicalNodeTree extends SimpleTree<Integer, LogicalNodeEdge> implements GsonObject {
+  @Expose private Map<Integer, LogicalNode> nodeMap = TUtil.newHashMap();
+  @Expose private LogicalNode root;
 
   public void addChild(LogicalNode child, LogicalNode parent) {
     nodeMap.put(child.getPID(), child);
@@ -154,6 +159,13 @@ public class LogicalNodeTree extends SimpleTree<Integer, LogicalNodeEdge> {
     return childNodes;
   }
 
+  public <NODE extends LogicalNode> List<NODE> getChildsInOrder(LogicalNode parent) {
+    List<NODE> childNodes = TUtil.newList();
+    childNodes.add(this.<NODE>getLeftChild(parent));
+    childNodes.add(this.<NODE>getRightChild(parent));
+    return childNodes;
+  }
+
   private boolean isAvailableEdgeType(LogicalNode parent, EdgeType edgeType) {
     switch (parent.getType()) {
       case ROOT:
@@ -194,5 +206,32 @@ public class LogicalNodeTree extends SimpleTree<Integer, LogicalNodeEdge> {
         break;
     }
     return false;
+  }
+
+  public void preOrder(LogicalNodeVisitor visitor, LogicalNode current) {
+    visitor.visit(current);
+    for (LogicalNode child : getChildsInOrder(current)) {
+      preOrder(visitor, child);
+    }
+  }
+
+  public void postOrder(LogicalNodeVisitor visitor, LogicalNode current) {
+    for (LogicalNode child : getChildsInOrder(current)) {
+      preOrder(visitor, child);
+    }
+	  visitor.visit(current);
+  }
+
+  @Override
+  public String toJson() {
+    return CoreGsonHelper.toJson(this, LogicalNodeTree.class);
+  }
+
+  public LogicalNode getRoot() {
+    return root;
+  }
+
+  public void setRoot(LogicalNode root) {
+    this.root = root;
   }
 }

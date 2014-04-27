@@ -15,22 +15,24 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.tajo.engine.json;
 
-/**
- * 
- */
-package org.apache.tajo.engine.planner;
+import com.google.gson.*;
+import org.apache.tajo.engine.planner.LogicalNodeTree;
+import org.apache.tajo.json.GsonSerDerAdapter;
 
-import org.apache.tajo.worker.TaskAttemptContext;
-import org.apache.tajo.engine.planner.logical.LogicalNode;
-import org.apache.tajo.engine.planner.physical.PhysicalExec;
-import org.apache.tajo.exception.InternalException;
+import java.lang.reflect.Type;
 
-/**
- * This class generates a physical execution plan.
- */
-public interface PhysicalPlanner {
-  public PhysicalExec createPlan(TaskAttemptContext context,
-                                 LogicalNodeTree logicalPlan)
-      throws InternalException;
+public class LogicalNodeTreeAdapter implements GsonSerDerAdapter<LogicalNodeTree> {
+
+  @Override
+  public LogicalNodeTree deserialize(JsonElement json, Type typeOfT, JsonDeserializationContext context)
+      throws JsonParseException {
+    return context.deserialize(json, LogicalNodeTree.class);
+  }
+
+  @Override
+  public JsonElement serialize(LogicalNodeTree src, Type typeOfSrc, JsonSerializationContext context) {
+    return context.serialize(src);
+  }
 }

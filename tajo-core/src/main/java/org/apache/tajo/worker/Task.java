@@ -39,6 +39,7 @@ import org.apache.tajo.catalog.proto.CatalogProtos;
 import org.apache.tajo.catalog.statistics.TableStats;
 import org.apache.tajo.conf.TajoConf;
 import org.apache.tajo.engine.json.CoreGsonHelper;
+import org.apache.tajo.engine.planner.LogicalNodeTree;
 import org.apache.tajo.engine.planner.PlannerUtil;
 import org.apache.tajo.engine.planner.logical.LogicalNode;
 import org.apache.tajo.engine.planner.logical.NodeType;
@@ -83,7 +84,7 @@ public class Task {
   private final QueryUnitRequest request;
   private TaskAttemptContext context;
   private List<Fetcher> fetcherRunners;
-  private LogicalNode plan;
+  private LogicalNodeTree plan;
   private final Map<String, TableDesc> descs = Maps.newHashMap();
   private PhysicalExec executor;
   private boolean interQuery;
@@ -156,8 +157,8 @@ public class Task {
     this.reporter = new Reporter(taskId, masterProxy);
     this.reporter.startCommunicationThread();
 
-    plan = CoreGsonHelper.fromJson(request.getSerializedData(), LogicalNode.class);
-    LogicalNode [] scanNode = PlannerUtil.findAllNodes(plan, NodeType.SCAN);
+    plan = CoreGsonHelper.fromJson(request.getSerializedData(), LogicalNodeTree.class);
+    LogicalNode [] scanNode = PlannerUtil.findAllNodes(plan, plan.getRoot(), NodeType.SCAN);
     for (LogicalNode node : scanNode) {
       ScanNode scan = (ScanNode)node;
       descs.put(scan.getCanonicalName(), scan.getTableDesc());
@@ -169,7 +170,7 @@ public class Task {
       this.shuffleType = context.getDataChannel().getShuffleType();
 
       if (shuffleType == ShuffleType.RANGE_SHUFFLE) {
-        SortNode sortNode = PlannerUtil.findTopNode(plan, NodeType.SORT);
+        SortNode sortNode = PlannerUtil.findTopNode(plan, plan.getRoot(), NodeType.SORT);
         this.finalSchema = PlannerUtil.sortSpecsToSchema(sortNode.getSortKeys());
         this.sortComp = new TupleComparator(finalSchema, sortNode.getSortKeys());
       }

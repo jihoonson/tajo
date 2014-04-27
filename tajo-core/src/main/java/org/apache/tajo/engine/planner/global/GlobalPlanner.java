@@ -168,7 +168,7 @@ public class GlobalPlanner {
     channel.setStoreType(storeType);
     if (join.getJoinType() != JoinType.CROSS) {
       Column [][] joinColumns = PlannerUtil.joinJoinKeyForEachTable(join.getJoinQual(),
-          leftBlock.getPlan().getOutSchema(), rightBlock.getPlan().getOutSchema());
+          leftBlock.getPlan().getRoot().getOutSchema(), rightBlock.getPlan().getRoot().getOutSchema());
       if (leftTable) {
         channel.setShuffleKeys(joinColumns[0]);
       } else {
@@ -181,40 +181,47 @@ public class GlobalPlanner {
   /**
    * It calculates the total volume of all descendent relation nodes.
    */
-  public static long computeDescendentVolume(LogicalNode node) throws PlanningException {
+  public static long computeDescendentVolume(LogicalNodeTree tree, LogicalNode node) throws PlanningException {
 
     if (node instanceof RelationNode) {
       switch (node.getType()) {
-      case SCAN:
-      case PARTITIONS_SCAN:
-        ScanNode scanNode = (ScanNode) node;
-        if (scanNode.getTableDesc().getStats() == null) {
-          // TODO - this case means that data is not located in HDFS. So, we need additional
-          // broadcast method.
-          return Long.MAX_VALUE;
-        } else {
-          return scanNode.getTableDesc().getStats().getNumBytes();
-        }
-      case TABLE_SUBQUERY:
-        return computeDescendentVolume(((TableSubQueryNode) node).getSubQuery());
-      default:
-        throw new IllegalArgumentException("Not RelationNode");
+        case SCAN:
+        case PARTITIONS_SCAN:
+          ScanNode scanNode = (ScanNode) node;
+          if (scanNode.getTableDesc().getStats() == null) {
+            // TODO - this case means that data is not located in HDFS. So, we need additional
+            // broadcast method.
+            return Long.MAX_VALUE;
+          } else {
+            return scanNode.getTableDesc().getStats().getNumBytes();
+          }
+        case TABLE_SUBQUERY:
+          return computeDescendentVolume(tree, ((TableSubQueryNode) node).getSubQuery());
+        default:
+          throw new IllegalArgumentException("Not RelationNode");
       }
-    } else if (node instanceof UnaryNode) {
-      return computeDescendentVolume(((UnaryNode) node).getChild());
-    } else if (node instanceof BinaryNode) {
-      BinaryNode binaryNode = (BinaryNode) node;
-      return computeDescendentVolume(binaryNode.getLeftChild()) + computeDescendentVolume(binaryNode.getRightChild());
+    } else {
+      int volumeSum = 0;
+      for (LogicalNode child : tree.getChilds(node)) {
+        volumeSum += computeDescendentVolume(tree, child);
+      }
+      return volumeSum;
     }
+//    } else if (node instanceof UnaryNode) {
+//      return computeDescendentVolume(((UnaryNode) node).getChild());
+//    } else if (node instanceof BinaryNode) {
+//      BinaryNode binaryNode = (BinaryNode) node;
+//      return computeDescendentVolume(binaryNode.getLeftChild()) + computeDescendentVolume(binaryNode.getRightChild());
+//    }
 
-    throw new PlanningException("Invalid State");
+//    throw new PlanningException("Invalid State");
   }
 
   private static boolean checkIfCanBeOneOfBroadcastJoin(LogicalNode node) {
     return node.getType() == NodeType.SCAN || node.getType() == NodeType.PARTITIONS_SCAN;
   }
 
-  private ExecutionBlock buildJoinPlan(GlobalPlanContext context, JoinNode joinNode,
+  private ExecutionBlock buildJoinPlan(GlobalPlanContext context, LogicalNodeTree tree, JoinNode joinNode,
                                         ExecutionBlock leftBlock, ExecutionBlock rightBlock)
       throws PlanningException {
     MasterPlan masterPlan = context.plan;

@@ -571,7 +571,8 @@ public class SubQuery implements EventHandler<SubQueryEvent> {
     CatalogProtos.StoreType storeType = CatalogProtos.StoreType.CSV; // default setting
 
     // if store plan (i.e., CREATE or INSERT OVERWRITE)
-    StoreTableNode storeTableNode = PlannerUtil.findTopNode(getBlock().getPlan(), NodeType.STORE);
+    StoreTableNode storeTableNode = PlannerUtil.findTopNode(masterPlan.getLogicalPlan().getLogicalNodeTree(),
+        getBlock().getPlan().getRoot(), NodeType.STORE);
     if (storeTableNode != null) {
       storeType = storeTableNode.getStorageType();
     }
@@ -709,7 +710,8 @@ public class SubQuery implements EventHandler<SubQueryEvent> {
 
       GroupbyNode grpNode = null;
       if (parent != null) {
-        grpNode = PlannerUtil.findMostBottomNode(parent.getPlan(), NodeType.GROUP_BY);
+        grpNode = PlannerUtil.findMostBottomNode(masterPlan.getLogicalPlan().getLogicalNodeTree(),
+            parent.getPlan().getRoot(), NodeType.GROUP_BY);
       }
 
       // Is this subquery the first step of join?

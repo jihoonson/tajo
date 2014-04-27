@@ -89,7 +89,7 @@ public class LogicalOptimizer {
       FoundJoinOrder order = joinOrderAlgorithm.findBestOrder(plan, block,
           joinGraphContext.joinGraph, joinGraphContext.relationsForProduct);
       JoinNode newJoinNode = order.getOrderedJoin();
-      JoinNode old = PlannerUtil.findTopNode(block.getRoot(), NodeType.JOIN);
+      JoinNode old = PlannerUtil.findTopNode(plan.getLogicalNodeTree(), block.getRoot(), NodeType.JOIN);
 
       JoinTargetCollector collector = new JoinTargetCollector();
       Set<Target> targets = new LinkedHashSet<Target>();

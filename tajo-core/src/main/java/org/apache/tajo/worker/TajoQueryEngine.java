@@ -19,6 +19,7 @@
 package org.apache.tajo.worker;
 
 import org.apache.tajo.conf.TajoConf;
+import org.apache.tajo.engine.planner.LogicalNodeTree;
 import org.apache.tajo.engine.planner.PhysicalPlanner;
 import org.apache.tajo.engine.planner.PhysicalPlannerImpl;
 import org.apache.tajo.engine.planner.logical.LogicalNode;
@@ -39,7 +40,7 @@ public class TajoQueryEngine {
     this.phyPlanner = new PhysicalPlannerImpl(conf, storageManager);
   }
   
-  public PhysicalExec createPlan(TaskAttemptContext ctx, LogicalNode plan)
+  public PhysicalExec createPlan(TaskAttemptContext ctx, LogicalNodeTree plan)
       throws InternalException {
     return phyPlanner.createPlan(ctx, plan);
   }
