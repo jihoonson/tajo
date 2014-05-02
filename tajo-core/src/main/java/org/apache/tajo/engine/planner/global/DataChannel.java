@@ -52,7 +52,7 @@ public class DataChannel {
 
   public DataChannel(ExecutionBlock src, ExecutionBlock target, ShuffleType shuffleType, int numOutput) {
     this(src.getId(), target.getId(), shuffleType, numOutput);
-    setSchema(src.getPlan().getOutSchema());
+    setSchema(src.getPlan().getRoot().getOutSchema());
   }
 
   public DataChannel(ExecutionBlockId srcId, ExecutionBlockId targetId, ShuffleType shuffleType, int numOutputs) {

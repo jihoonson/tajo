@@ -19,17 +19,21 @@
 package org.apache.tajo.engine.planner;
 
 import com.google.common.base.Preconditions;
+import com.google.gson.annotations.Expose;
+import org.apache.tajo.engine.json.CoreGsonHelper;
 import org.apache.tajo.engine.planner.graph.SimpleTree;
 import org.apache.tajo.engine.planner.logical.LogicalNode;
 import org.apache.tajo.engine.planner.logical.LogicalNode.EdgeType;
 import org.apache.tajo.engine.planner.logical.LogicalNode.LogicalNodeEdge;
+import org.apache.tajo.engine.planner.logical.LogicalNodeVisitor;
+import org.apache.tajo.json.GsonObject;
 import org.apache.tajo.util.TUtil;
 
 import java.util.List;
 import java.util.Map;
 
-public class LogicalNodeTree extends SimpleTree<Integer, LogicalNodeEdge> {
-  private Map<Integer, LogicalNode> nodeMap = TUtil.newHashMap();
+public class LogicalNodeTree extends SimpleTree<Integer, LogicalNodeEdge> implements GsonObject {
+  @Expose private Map<Integer, LogicalNode> nodeMap = TUtil.newHashMap();
 
   public void addChild(LogicalNode child, LogicalNode parent) {
     nodeMap.put(child.getPID(), child);
@@ -79,6 +83,10 @@ public class LogicalNodeTree extends SimpleTree<Integer, LogicalNodeEdge> {
       return (NODE) nodeMap.get(parentPid);
     }
     return null;
+  }
+
+  public boolean hasChild(LogicalNode parent) {
+    return getChildCount(parent.getPID()) > 0;
   }
 
   public <NODE extends LogicalNode> NODE getChild(LogicalNode parent) {
@@ -148,5 +156,73 @@ public class LogicalNodeTree extends SimpleTree<Integer, LogicalNodeEdge> {
       childNodes.add((NODE) nodeMap.get(childPid));
     }
     return childNodes;
+  }
+
+  public <NODE extends LogicalNode> List<NODE> getChildsInOrder(LogicalNode parent) {
+    List<NODE> childNodes = TUtil.newList();
+    childNodes.add(this.<NODE>getLeftChild(parent));
+    childNodes.add(this.<NODE>getRightChild(parent));
+    return childNodes;
+  }
+
+  private boolean isAvailableEdgeType(LogicalNode parent, EdgeType edgeType) {
+    switch (parent.getType()) {
+      case ROOT:
+      case PROJECTION:
+      case LIMIT:
+      case SORT:
+      case HAVING:
+      case GROUP_BY:
+      case SELECTION:
+        return edgeType == EdgeType.UNORDERED;
+      case EXPRS:
+      case SCAN:
+      case PARTITIONS_SCAN:
+      case BST_INDEX_SCAN:
+        return false;
+      case JOIN:
+      case UNION:
+      case EXCEPT:
+      case INTERSECT:
+        return edgeType == EdgeType.ORDERED_LEFT || edgeType == EdgeType.ORDERED_RIGHT;
+      case TABLE_SUBQUERY:
+        break;
+      case STORE:
+        break;
+      case INSERT:
+        break;
+      case CREATE_DATABASE:
+        break;
+      case DROP_DATABASE:
+        break;
+      case CREATE_TABLE:
+        break;
+      case DROP_TABLE:
+        break;
+      case ALTER_TABLESPACE:
+        break;
+      case ALTER_TABLE:
+        break;
+    }
+    return false;
+  }
+
+  public void preOrder(LogicalNodeVisitor visitor, LogicalNode current) {
+    visitor.visit(current);
+    for (LogicalNode child : getChildsInOrder(current)) {
+      preOrder(visitor, child);
+    }
+  }
+
+  public void postOrder(LogicalNodeVisitor visitor, LogicalNode current) {
+    for (LogicalNode child : getChildsInOrder(current)) {
+      preOrder(visitor, child);
+    }
+	  visitor.visit(current);
+  }
+
+  @Override
+  public String toJson() {
+    return CoreGsonHelper.toJson(this, LogicalNodeTree.class);
   }
 }

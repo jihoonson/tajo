@@ -39,10 +39,11 @@ import java.util.*;
 
 public class PlannerUtil {
 
-  public static boolean checkIfDDLPlan(LogicalNode node) {
+  public static boolean checkIfDDLPlan(LogicalPlan plan, LogicalNode node) {
     LogicalNode baseNode = node;
     if (node instanceof LogicalRootNode) {
-      baseNode = ((LogicalRootNode) node).getChild();
+//      baseNode = ((LogicalRootNode) node).getChild();
+      baseNode = plan.getChild(node);
     }
 
     NodeType type = baseNode.getType();
@@ -50,7 +51,8 @@ public class PlannerUtil {
     return
         type == NodeType.CREATE_DATABASE ||
             type == NodeType.DROP_DATABASE ||
-            (type == NodeType.CREATE_TABLE && !((CreateTableNode) baseNode).hasSubQuery()) ||
+//            (type == NodeType.CREATE_TABLE && !((CreateTableNode) baseNode).hasSubQuery()) ||
+            (type == NodeType.CREATE_TABLE && plan.getChild(baseNode) == null) ||
             baseNode.getType() == NodeType.DROP_TABLE ||
             baseNode.getType() == NodeType.ALTER_TABLESPACE ||
             baseNode.getType() == NodeType.ALTER_TABLE;
@@ -68,14 +70,16 @@ public class PlannerUtil {
 
     // one block, without where clause, no group-by, no-sort, no-join
     boolean isOneQueryBlock = plan.getQueryBlocks().size() == 1;
-    boolean simpleOperator = rootNode.getChild().getType() == NodeType.LIMIT
-        || rootNode.getChild().getType() == NodeType.SCAN;
+//    boolean simpleOperator = rootNode.getChild().getType() == NodeType.LIMIT
+//        || rootNode.getChild().getType() == NodeType.SCAN;
+    boolean simpleOperator = plan.getChild(rootNode).getType() == NodeType.LIMIT
+        || plan.getChild(rootNode).getType() == NodeType.SCAN;
     boolean noOrderBy = !plan.getRootBlock().hasNode(NodeType.SORT);
     boolean noGroupBy = !plan.getRootBlock().hasNode(NodeType.GROUP_BY);
     boolean noWhere = !plan.getRootBlock().hasNode(NodeType.SELECTION);
     boolean noJoin = !plan.getRootBlock().hasNode(NodeType.JOIN);
     boolean singleRelation = plan.getRootBlock().hasNode(NodeType.SCAN)
-        && PlannerUtil.getRelationLineage(plan.getRootBlock().getRoot()).length == 1;
+        && PlannerUtil.getRelationLineage(plan.getLogicalNodeTree(), plan.getRootBlock().getRoot()).length == 1;
 
     boolean noComplexComputation = false;
     if (singleRelation) {
@@ -95,7 +99,7 @@ public class PlannerUtil {
       }
     }
 
-    return !checkIfDDLPlan(rootNode) &&
+    return !checkIfDDLPlan(plan, rootNode) &&
         (simpleOperator && noComplexComputation  && isOneQueryBlock && noOrderBy && noGroupBy && noWhere && noJoin && singleRelation);
   }
 
@@ -112,7 +116,7 @@ public class PlannerUtil {
     boolean isOneQueryBlock = plan.getQueryBlocks().size() == 1;
     boolean noRelation = !plan.getRootBlock().hasAlgebraicExpr(OpType.Relation);
 
-    return !checkIfDDLPlan(node) && noRelation && isOneQueryBlock;
+    return !checkIfDDLPlan(plan, node) && noRelation && isOneQueryBlock;
   }
 
   /**
@@ -121,8 +125,8 @@ public class PlannerUtil {
    * @param from The LogicalNode to start visiting LogicalNodes.
    * @return an array of all descendant RelationNode of LogicalNode.
    */
-  public static String[] getRelationLineage(LogicalNode from) {
-    LogicalNode[] scans = findAllNodes(from, NodeType.SCAN, NodeType.PARTITIONS_SCAN);
+  public static String[] getRelationLineage(LogicalNodeTree tree, LogicalNode from) {
+    LogicalNode[] scans = findAllNodes(tree, from, NodeType.SCAN, NodeType.PARTITIONS_SCAN);
     String[] tableNames = new String[scans.length];
     ScanNode scan;
     for (int i = 0; i < scans.length; i++) {
@@ -301,8 +305,8 @@ public class PlannerUtil {
     }
   }
 
-  public static void replaceNode(LogicalNode plan, LogicalNode newNode, NodeType type) {
-    LogicalNode parent = findTopParentNode(plan, type);
+  public static void replaceNode(LogicalNodeTree tree, LogicalNode plan, LogicalNode newNode, NodeType type) {
+    LogicalNode parent = findTopParentNode(tree, plan, type);
     Preconditions.checkArgument(parent instanceof UnaryNode);
     Preconditions.checkArgument(!(newNode instanceof BinaryNode));
     UnaryNode parentNode = (UnaryNode) parent;
@@ -320,12 +324,13 @@ public class PlannerUtil {
    * @param type to find
    * @return a found logical node
    */
-  public static <T extends LogicalNode> T findTopNode(LogicalNode node, NodeType type) {
+  public static <T extends LogicalNode> T findTopNode(LogicalNodeTree tree, LogicalNode node, NodeType type) {
     Preconditions.checkNotNull(node);
     Preconditions.checkNotNull(type);
 
     LogicalNodeFinder finder = new LogicalNodeFinder(type);
-    node.preOrder(finder);
+//    node.preOrder(finder);
+    tree.preOrder(finder, node);
 
     if (finder.getFoundNodes().size() == 0) {
       return null;
@@ -340,12 +345,13 @@ public class PlannerUtil {
    * @param type to find
    * @return a found logical node
    */
-  public static <T extends LogicalNode> T findMostBottomNode(LogicalNode node, NodeType type) {
+  public static <T extends LogicalNode> T findMostBottomNode(LogicalNodeTree tree, LogicalNode node, NodeType type) {
     Preconditions.checkNotNull(node);
     Preconditions.checkNotNull(type);
 
     LogicalNodeFinder finder = new LogicalNodeFinder(type);
-    node.preOrder(finder);
+//    node.preOrder(finder);
+    tree.preOrder(finder, node);
 
     if (finder.getFoundNodes().size() == 0) {
       return null;
@@ -360,12 +366,13 @@ public class PlannerUtil {
    * @param type to find
    * @return a found logical node
    */
-  public static LogicalNode[] findAllNodes(LogicalNode node, NodeType... type) {
+  public static LogicalNode[] findAllNodes(LogicalNodeTree tree, LogicalNode node, NodeType... type) {
     Preconditions.checkNotNull(node);
     Preconditions.checkNotNull(type);
 
     LogicalNodeFinder finder = new LogicalNodeFinder(type);
-    node.postOrder(finder);
+//    node.postOrder(finder);
+    tree.postOrder(finder, node);
 
     if (finder.getFoundNodes().size() == 0) {
       return new LogicalNode[]{};
@@ -381,12 +388,13 @@ public class PlannerUtil {
    * @param type to find
    * @return the parent node of a found logical node
    */
-  public static <T extends LogicalNode> T findTopParentNode(LogicalNode node, NodeType type) {
+  public static <T extends LogicalNode> T findTopParentNode(LogicalNodeTree tree, LogicalNode node, NodeType type) {
     Preconditions.checkNotNull(node);
     Preconditions.checkNotNull(type);
 
     ParentNodeFinder finder = new ParentNodeFinder(type);
-    node.postOrder(finder);
+//    node.postOrder(finder);
+    tree.postOrder(finder, node);
 
     if (finder.getFoundNodes().size() == 0) {
       return null;

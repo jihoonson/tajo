@@ -107,14 +107,14 @@ public class PartitionedTableScanNode extends ScanNode {
     return unionScan;
 	}
 	
-  @Override
-  public void preOrder(LogicalNodeVisitor visitor) {
-    visitor.visit(this);
-  }
-	
-	public void postOrder(LogicalNodeVisitor visitor) {        
-    visitor.visit(this);
-  }
+//  @Override
+//  public void preOrder(LogicalNodeVisitor visitor) {
+//    visitor.visit(this);
+//  }
+//
+//	public void postOrder(LogicalNodeVisitor visitor) {
+//    visitor.visit(this);
+//  }
 
   @Override
   public PlanString getPlanString() {

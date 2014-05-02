@@ -63,14 +63,16 @@ public class FilterPushDownRule extends BasicLogicalPlanVisitor<Set<EvalNode>, L
     cnf.addAll(Sets.newHashSet(AlgebraicUtil.toConjunctiveNormalFormArray(selNode.getQual())));
 
     stack.push(selNode);
-    visit(cnf, plan, block, selNode.getChild(), stack);
+//    visit(cnf, plan, block, selNode.getChild(), stack);
+    visit(cnf, plan, block, plan.getChild(selNode), stack);
     stack.pop();
 
     if(cnf.size() == 0) { // remove the selection operator if there is no search condition after selection push.
       LogicalNode node = stack.peek();
       if (node instanceof UnaryNode) {
         UnaryNode unary = (UnaryNode) node;
-        unary.setChild(selNode.getChild());
+//        unary.setChild(selNode.getChild());
+        unary.setChild(plan.getChild(selNode));
       } else {
         throw new InvalidQueryException("Unexpected Logical Query Plan");
       }
@@ -101,8 +103,10 @@ public class FilterPushDownRule extends BasicLogicalPlanVisitor<Set<EvalNode>, L
   @Override
   public LogicalNode visitJoin(Set<EvalNode> cnf, LogicalPlan plan, LogicalPlan.QueryBlock block, JoinNode joinNode,
                                Stack<LogicalNode> stack) throws PlanningException {
-    LogicalNode left = joinNode.getRightChild();
-    LogicalNode right = joinNode.getLeftChild();
+//    LogicalNode left = joinNode.getRightChild();
+//    LogicalNode right = joinNode.getLeftChild();
+    LogicalNode left = plan.getRightChild(joinNode);
+    LogicalNode right = plan.getLeftChild(joinNode);
 
     // here we should stop selection pushdown on the null supplying side(s) of an outer join
     // get the two operands of the join operation as well as the join type
@@ -117,10 +121,13 @@ public class FilterPushDownRule extends BasicLogicalPlanVisitor<Set<EvalNode>, L
         String leftTableName = ((FieldEval) binaryEval.getLeftExpr()).getQualifier();
         String rightTableName = ((FieldEval) binaryEval.getRightExpr()).getQualifier();
         List<String> nullSuppliers = Lists.newArrayList();
+//        Set<String> leftTableSet = Sets.newHashSet(PlannerUtil.getRelationLineageWithinQueryBlock(plan,
+//            joinNode.getLeftChild()));
         Set<String> leftTableSet = Sets.newHashSet(PlannerUtil.getRelationLineageWithinQueryBlock(plan,
-            joinNode.getLeftChild()));
+            plan.getLeftChild(joinNode)));
         Set<String> rightTableSet = Sets.newHashSet(PlannerUtil.getRelationLineageWithinQueryBlock(plan,
-            joinNode.getRightChild()));
+//            joinNode.getRightChild()));
+            plan.getRightChild(joinNode)));
 
         // some verification
         if (joinType == JoinType.FULL_OUTER) {
@@ -136,13 +143,15 @@ public class FilterPushDownRule extends BasicLogicalPlanVisitor<Set<EvalNode>, L
           }
 
         } else if (joinType == JoinType.LEFT_OUTER) {
-          nullSuppliers.add(((RelationNode)joinNode.getRightChild()).getCanonicalName());
+//          nullSuppliers.add(((RelationNode)joinNode.getRightChild()).getCanonicalName());
+          nullSuppliers.add(((RelationNode)plan.getRightChild(joinNode)).getCanonicalName());
           //verify that this null supplier is indeed in the right sub-tree
           if (!rightTableSet.contains(nullSuppliers.get(0))) {
             throw new InvalidQueryException("Incorrect Logical Query Plan with regard to outer join");
           }
         } else if (joinType == JoinType.RIGHT_OUTER) {
-          if (((RelationNode)joinNode.getRightChild()).getCanonicalName().equals(rightTableName)) {
+//          if (((RelationNode)joinNode.getRightChild()).getCanonicalName().equals(rightTableName)) {
+          if (((RelationNode)plan.getRightChild(joinNode)).getCanonicalName().equals(rightTableName)) {
             nullSuppliers.add(leftTableName);
           } else {
             nullSuppliers.add(rightTableName);

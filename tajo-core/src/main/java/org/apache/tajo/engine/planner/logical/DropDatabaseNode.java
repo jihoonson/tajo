@@ -73,13 +73,13 @@ public class DropDatabaseNode extends LogicalNode implements Cloneable {
     return "DROP DATABASE " + (ifExists ? "IF EXISTS ":"") + databaseName;
   }
 
-  @Override
-  public void preOrder(LogicalNodeVisitor visitor) {
-    visitor.visit(this);
-  }
-
-  @Override
-  public void postOrder(LogicalNodeVisitor visitor) {
-    visitor.visit(this);
-  }
+//  @Override
+//  public void preOrder(LogicalNodeVisitor visitor) {
+//    visitor.visit(this);
+//  }
+//
+//  @Override
+//  public void postOrder(LogicalNodeVisitor visitor) {
+//    visitor.visit(this);
+//  }
 }

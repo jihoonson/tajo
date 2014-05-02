@@ -173,9 +173,9 @@ public class GlobalEngine extends AbstractService {
     responseBuilder.setIsForwarded(false);
     responseBuilder.setUserName(context.getConf().getVar(TajoConf.ConfVars.USERNAME));
 
-    if (PlannerUtil.checkIfDDLPlan(rootNode)) {
+    if (PlannerUtil.checkIfDDLPlan(plan, rootNode)) {
       context.getSystemMetrics().counter("Query", "numDDLQuery").inc();
-      updateQuery(session, rootNode.getChild());
+      updateQuery(session, plan.getChild(rootNode));
       responseBuilder.setQueryId(QueryIdFactory.NULL_QUERY_ID.getProto());
       responseBuilder.setResultCode(ClientProtos.ResultCode.OK);
 
@@ -282,10 +282,11 @@ public class GlobalEngine extends AbstractService {
       LogicalPlan plan = createLogicalPlan(session, expr);
       LogicalRootNode rootNode = plan.getRootBlock().getRoot();
 
-      if (!PlannerUtil.checkIfDDLPlan(rootNode)) {
+      if (!PlannerUtil.checkIfDDLPlan(plan, rootNode)) {
         throw new SQLException("This is not update query:\n" + sql);
       } else {
-        updateQuery(session, rootNode.getChild());
+//        updateQuery(session, rootNode.getChild());
+        updateQuery(session, plan.getChild(rootNode));
         return QueryIdFactory.NULL_QUERY_ID;
       }
     } catch (Exception e) {
@@ -683,13 +684,15 @@ public class GlobalEngine extends AbstractService {
     @Override
     public boolean isEligible(QueryContext queryContext, LogicalPlan plan) {
       LogicalRootNode rootNode = plan.getRootBlock().getRoot();
-      return rootNode.getChild().getType() == NodeType.CREATE_TABLE;
+//      return rootNode.getChild().getType() == NodeType.CREATE_TABLE;
+      return plan.getChild(rootNode).getType() == NodeType.CREATE_TABLE;
     }
 
     @Override
     public void hook(QueryContext queryContext, LogicalPlan plan) throws Exception {
       LogicalRootNode rootNode = plan.getRootBlock().getRoot();
-      CreateTableNode createTableNode = rootNode.getChild();
+//      CreateTableNode createTableNode = rootNode.getChild();
+      CreateTableNode createTableNode = plan.getChild(rootNode);
       String [] splitted  = CatalogUtil.splitFQTableName(createTableNode.getTableName());
       String databaseName = splitted[0];
       String tableName = splitted[1];

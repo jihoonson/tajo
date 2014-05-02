@@ -15,6 +15,7 @@
 package org.apache.tajo.engine.planner.global;
 
 import org.apache.tajo.ExecutionBlockId;
+import org.apache.tajo.engine.planner.LogicalNodeTree;
 import org.apache.tajo.engine.planner.enforce.Enforcer;
 import org.apache.tajo.engine.planner.logical.*;
 
@@ -29,7 +30,8 @@ import java.util.*;
  */
 public class ExecutionBlock {
   private ExecutionBlockId executionBlockId;
-  private LogicalNode plan = null;
+  private LogicalNodeTree plan = null;
+  private LogicalNode root = null;
   private StoreTableNode store = null;
   private List<ScanNode> scanlist = new ArrayList<ScanNode>();
   private Enforcer enforcer = new Enforcer();
@@ -47,44 +49,40 @@ public class ExecutionBlock {
     return executionBlockId;
   }
 
-  public void setPlan(LogicalNode plan) {
+  public void setPlan(LogicalNodeTree plan, LogicalNode root) {
     hasJoinPlan = false;
     hasUnionPlan = false;
     this.scanlist.clear();
     this.plan = plan;
+    this.root = root;
 
     if (plan == null) {
       return;
     }
 
-    LogicalNode node = plan;
+    LogicalNode node = this.root;
     ArrayList<LogicalNode> s = new ArrayList<LogicalNode>();
     s.add(node);
     while (!s.isEmpty()) {
       node = s.remove(s.size()-1);
-      if (node instanceof UnaryNode) {
-        UnaryNode unary = (UnaryNode) node;
-        s.add(s.size(), unary.getChild());
-      } else if (node instanceof BinaryNode) {
-        BinaryNode binary = (BinaryNode) node;
-        if (binary.getType() == NodeType.JOIN) {
-          hasJoinPlan = true;
-        } else if (binary.getType() == NodeType.UNION) {
-          hasUnionPlan = true;
+      if (node.getType() == NodeType.SCAN) {
+        scanlist.add((ScanNode) node);
+      } else if (node.getType() == NodeType.JOIN) {
+        hasJoinPlan = true;
+      } else if (node.getType() == NodeType.UNION) {
+        hasUnionPlan = true;
+      } else if (node.getType() == NodeType.TABLE_SUBQUERY) {
+        s.add(((TableSubQueryNode) node).getSubQuery());
+      } else {
+        for (LogicalNode child : plan.getChilds(node)) {
+          s.add(s.size(), child);
         }
-        s.add(s.size(), binary.getLeftChild());
-        s.add(s.size(), binary.getRightChild());
-      } else if (node instanceof ScanNode) {
-        scanlist.add((ScanNode)node);
-      } else if (node instanceof TableSubQueryNode) {
-        TableSubQueryNode subQuery = (TableSubQueryNode) node;
-        s.add(s.size(), subQuery.getSubQuery());
       }
     }
   }
 
 
-  public LogicalNode getPlan() {
+  public LogicalNodeTree getPlan() {
     return plan;
   }
 
@@ -123,5 +121,9 @@ public class ExecutionBlock {
 
   public String toString() {
     return executionBlockId.toString();
+  }
+
+  public LogicalNode getRoot() {
+    return root;
   }
 }

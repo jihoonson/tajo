@@ -75,13 +75,13 @@ public class CreateDatabaseNode extends LogicalNode implements Cloneable {
         + CatalogUtil.denormalizeIdentifier(databaseName);
   }
 
-  @Override
-  public void preOrder(LogicalNodeVisitor visitor) {
-    visitor.visit(this);
-  }
-
-  @Override
-  public void postOrder(LogicalNodeVisitor visitor) {
-    visitor.visit(this);
-  }
+//  @Override
+//  public void preOrder(LogicalNodeVisitor visitor) {
+//    visitor.visit(this);
+//  }
+//
+//  @Override
+//  public void postOrder(LogicalNodeVisitor visitor) {
+//    visitor.visit(this);
+//  }
 }

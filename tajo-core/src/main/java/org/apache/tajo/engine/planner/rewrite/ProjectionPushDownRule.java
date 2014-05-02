@@ -54,7 +54,7 @@ public class ProjectionPushDownRule extends
   public boolean isEligible(LogicalPlan plan) {
     LogicalNode toBeOptimized = plan.getRootBlock().getRoot();
 
-    if (PlannerUtil.checkIfDDLPlan(toBeOptimized) || !plan.getRootBlock().hasTableExpression()) {
+    if (PlannerUtil.checkIfDDLPlan(plan, toBeOptimized) || !plan.getRootBlock().hasTableExpression()) {
       LOG.info("This query skips the logical optimization step.");
       return false;
     }
@@ -428,7 +428,8 @@ public class ProjectionPushDownRule extends
         switch (parentNode.getType()) {
         case ROOT:
           LogicalRootNode rootNode = (LogicalRootNode) parentNode;
-          rootNode.setChild(child);
+//          rootNode.setChild(child);
+          plan.setChild(child, rootNode);
           rootNode.setInSchema(child.getOutSchema());
           rootNode.setOutSchema(child.getOutSchema());
           break;
@@ -438,16 +439,19 @@ public class ProjectionPushDownRule extends
           break;
         case STORE:
           StoreTableNode storeTableNode = (StoreTableNode) parentNode;
-          storeTableNode.setChild(child);
+//          storeTableNode.setChild(child);
+          plan.setChild(child, storeTableNode);
           storeTableNode.setInSchema(child.getOutSchema());
           break;
         case INSERT:
           InsertNode insertNode = (InsertNode) parentNode;
-          insertNode.setSubQuery(child);
+//          insertNode.setSubQuery(child);
+          plan.setChild(child, insertNode);
           break;
         case CREATE_TABLE:
           CreateTableNode createTableNode = (CreateTableNode) parentNode;
-          createTableNode.setChild(child);
+//          createTableNode.setChild(child);
+          plan.setChild(child, createTableNode);
           createTableNode.setInSchema(child.getOutSchema());
           break;
         default:
@@ -703,8 +707,10 @@ public class ProjectionPushDownRule extends
     }
 
     stack.push(node);
-    LogicalNode left = visit(newContext, plan, block, node.getLeftChild(), stack);
-    LogicalNode right = visit(newContext, plan, block, node.getRightChild(), stack);
+//    LogicalNode left = visit(newContext, plan, block, node.getLeftChild(), stack);
+//    LogicalNode right = visit(newContext, plan, block, node.getRightChild(), stack);
+    LogicalNode left = visit(newContext, plan, block, plan.getLeftChild(node), stack);
+    LogicalNode right = visit(newContext, plan, block, plan.getRightChild(node), stack);
     stack.pop();
 
     Schema merged = SchemaUtil.merge(left.getOutSchema(), right.getOutSchema());
@@ -836,8 +842,10 @@ public class ProjectionPushDownRule extends
   public LogicalNode visitUnion(Context context, LogicalPlan plan, LogicalPlan.QueryBlock block, UnionNode node,
                            Stack<LogicalNode> stack) throws PlanningException {
 
-    LogicalPlan.QueryBlock leftBlock = plan.getBlock(node.getLeftChild());
-    LogicalPlan.QueryBlock rightBlock = plan.getBlock(node.getRightChild());
+//    LogicalPlan.QueryBlock leftBlock = plan.getBlock(node.getLeftChild());
+//    LogicalPlan.QueryBlock rightBlock = plan.getBlock(node.getRightChild());
+    LogicalPlan.QueryBlock leftBlock = plan.getBlock(plan.getLeftChild(node));
+    LogicalPlan.QueryBlock rightBlock = plan.getBlock(plan.getRightChild(node));
 
     Context leftContext = new Context(plan, PlannerUtil.toQualifiedFieldNames(context.requiredSet,
         leftBlock.getName()));
@@ -959,7 +967,8 @@ public class ProjectionPushDownRule extends
   public LogicalNode visitInsert(Context context, LogicalPlan plan, LogicalPlan.QueryBlock block, InsertNode node,
                             Stack<LogicalNode> stack) throws PlanningException {
     stack.push(node);
-    visit(context, plan, block, node.getChild(), stack);
+//    visit(context, plan, block, node.getChild(), stack);
+    visit(context, plan, block, plan.getChild(node), stack);
     stack.pop();
     return node;
   }

@@ -163,17 +163,17 @@ public class TableSubQueryNode extends RelationNode implements Projectable {
     return newTableSubQueryNode;
   }
 
-  @Override
-  public void preOrder(LogicalNodeVisitor visitor) {
-    visitor.visit(this);
-    subQuery.preOrder(visitor);
-  }
-
-  @Override
-  public void postOrder(LogicalNodeVisitor visitor) {
-    subQuery.preOrder(visitor);
-    visitor.visit(this);
-  }
+//  @Override
+//  public void preOrder(LogicalNodeVisitor visitor) {
+//    visitor.visit(this);
+//    subQuery.preOrder(visitor);
+//  }
+//
+//  @Override
+//  public void postOrder(LogicalNodeVisitor visitor) {
+//    subQuery.preOrder(visitor);
+//    visitor.visit(this);
+//  }
 
   public String toString() {
     return "Inline view (name=" + tableName + ")";

@@ -75,7 +75,8 @@ public class ExplainLogicalPlanVisitor extends BasicLogicalPlanVisitor<ExplainLo
   @Override
   public LogicalNode visitRoot(Context context, LogicalPlan plan, LogicalPlan.QueryBlock block, LogicalRootNode node, Stack<LogicalNode> stack)
       throws PlanningException {
-    return visit(context, plan, block, node.getChild(), stack);
+//    return visit(context, plan, block, node.getChild(), stack);
+    return visit(context, plan, block, plan.getChild(node), stack);
   }
 
   @Override
@@ -109,22 +110,25 @@ public class ExplainLogicalPlanVisitor extends BasicLogicalPlanVisitor<ExplainLo
   }
 
   private LogicalNode visitUnaryNode(Context context, LogicalPlan plan, LogicalPlan.QueryBlock block,
-                                     UnaryNode node, Stack<LogicalNode> stack) throws PlanningException {
+                                     LogicalNode node, Stack<LogicalNode> stack) throws PlanningException {
     context.depth++;
     stack.push(node);
-    visit(context, plan, block, node.getChild(), stack);
+//    visit(context, plan, block, node.getChild(), stack);
+    visit(context, plan, block, plan.getChild(node), stack);
     context.depth--;
     context.add(context.depth, node.getPlanString());
     return node;
   }
 
-  private LogicalNode visitBinaryNode(Context context, LogicalPlan plan, LogicalPlan.QueryBlock block, BinaryNode node,
+  private LogicalNode visitBinaryNode(Context context, LogicalPlan plan, LogicalPlan.QueryBlock block, LogicalNode node,
                                       Stack<LogicalNode> stack)
       throws PlanningException {
     context.depth++;
     stack.push(node);
-    visit(context, plan, block, node.getLeftChild(), stack);
-    visit(context, plan, block, node.getRightChild(), stack);
+//    visit(context, plan, block, node.getLeftChild(), stack);
+//    visit(context, plan, block, node.getRightChild(), stack);
+    visit(context, plan, block, plan.getLeftChild(node), stack);
+    visit(context, plan, block, plan.getRightChild(node), stack);
     stack.pop();
     context.depth--;
     context.add(context.depth, node.getPlanString());

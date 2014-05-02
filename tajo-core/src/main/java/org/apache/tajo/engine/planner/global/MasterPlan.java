@@ -260,7 +260,7 @@ public class MasterPlan {
         }
       }
 
-      sb.append("\n").append(PlannerUtil.buildExplainString(block.getPlan()));
+      sb.append("\n").append(PlannerUtil.buildExplainString(block.getPlan().getRoot()));
     }
 
     return sb.toString();
