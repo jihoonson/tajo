@@ -20,7 +20,7 @@ package org.apache.tajo.datum;
 
 import com.google.common.base.Objects;
 import org.apache.tajo.common.TajoDataTypes;
-import org.apache.tajo.datum.exception.InvalidOperationException;
+import org.apache.tajo.exception.InvalidOperationException;
 import org.joda.time.DateTime;
 import org.joda.time.LocalDate;
 import org.joda.time.LocalTime;
@@ -30,10 +30,10 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class IntervalDatum extends Datum {
-  static final long MINUTE_MILLIS = 60 * 1000;
-  static final long HOUR_MILLIS = 60 * MINUTE_MILLIS;
-  static final long DAY_MILLIS = 24 * HOUR_MILLIS;
-  static final long MONTH_MILLIS = 30 * DAY_MILLIS;
+  public static final long MINUTE_MILLIS = 60 * 1000;
+  public static final long HOUR_MILLIS = 60 * MINUTE_MILLIS;
+  public static final long DAY_MILLIS = 24 * HOUR_MILLIS;
+  public static final long MONTH_MILLIS = 30 * DAY_MILLIS;
 
   static enum DATE_UNIT {
     CENTURY, DECADE, YEAR, MONTH, DAY, HOUR, MINUTE, SECOND, MICROSEC, MILLISEC, TIMEZONE,
