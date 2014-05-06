@@ -1040,8 +1040,8 @@ public class GlobalPlanner {
       // Don't separate execution block. Having is pushed to the second grouping execution block.
       ExecutionBlock childBlock = context.execBlockMap.remove(child.getPID());
 //      node.setChild(childBlock.getPlan());
-      plan.setChild(childBlock.getPlan(), node);
-      childBlock.setPlan(node);
+      plan.setChild(childBlock.getRoot(), node);
+      childBlock.setPlan(childBlock.getPlan(), node);
       context.execBlockMap.put(node.getPID(), childBlock);
 
       return node;
@@ -1054,9 +1054,9 @@ public class GlobalPlanner {
 
       ExecutionBlock childBlock = context.execBlockMap.remove(child.getPID());
       ExecutionBlock newExecBlock = buildGroupBy(context, childBlock, node);
-      context.execBlockMap.put(newExecBlock.getPlan().getPID(), newExecBlock);
+      context.execBlockMap.put(newExecBlock.getRoot().getPID(), newExecBlock);
 
-      return newExecBlock.getPlan();
+      return newExecBlock.getRoot();
     }
 
     @Override
@@ -1066,9 +1066,9 @@ public class GlobalPlanner {
 
       ExecutionBlock execBlock = context.execBlockMap.remove(child.getPID());
 //      node.setChild(execBlock.getPlan());
-      plan.setChild(execBlock.getPlan(), node);
-      node.setInSchema(execBlock.getPlan().getOutSchema());
-      execBlock.setPlan(node);
+      plan.setChild(execBlock.getRoot(), node);
+      node.setInSchema(execBlock.getRoot().getOutSchema());
+      execBlock.setPlan(execBlock.getPlan(), node);
       context.execBlockMap.put(node.getPID(), execBlock);
 
       return node;
@@ -1085,7 +1085,8 @@ public class GlobalPlanner {
       ExecutionBlock leftChildBlock = context.execBlockMap.get(leftChild.getPID());
       ExecutionBlock rightChildBlock = context.execBlockMap.get(rightChild.getPID());
 
-      ExecutionBlock newExecBlock = buildJoinPlan(context, node, leftChildBlock, rightChildBlock);
+      ExecutionBlock newExecBlock = buildJoinPlan(context, plan.getLogicalNodeTree(), node, leftChildBlock,
+          rightChildBlock);
       context.execBlockMap.put(node.getPID(), newExecBlock);
 
       return node;
@@ -1146,7 +1147,7 @@ public class GlobalPlanner {
 
     private LogicalNode handleUnaryNode(GlobalPlanContext context, LogicalNode child, LogicalNode node) {
       ExecutionBlock execBlock = context.execBlockMap.remove(child.getPID());
-      execBlock.setPlan(node);
+      execBlock.setPlan(context.plan.getLogicalPlan().getLogicalNodeTree(), node);
       context.execBlockMap.put(node.getPID(), execBlock);
 
       return node;
@@ -1178,11 +1179,11 @@ public class GlobalPlanner {
       if (child.getType() == NodeType.UNION) {
         for (ExecutionBlock childBlock : context.plan.getChilds(currentBlock.getId())) {
           TableSubQueryNode copy = PlannerUtil.clone(plan, node);
-          copy.setSubQuery(childBlock.getPlan());
-          childBlock.setPlan(copy);
+          copy.setSubQuery(childBlock.getRoot());
+          childBlock.setPlan(childBlock.getPlan(), copy);
         }
       } else {
-        currentBlock.setPlan(node);
+        currentBlock.setPlan(currentBlock.getPlan(), node);
       }
       context.execBlockMap.put(node.getPID(), currentBlock);
       return node;
@@ -1192,7 +1193,7 @@ public class GlobalPlanner {
     public LogicalNode visitScan(GlobalPlanContext context, LogicalPlan plan, LogicalPlan.QueryBlock queryBlock,
                                  ScanNode node, Stack<LogicalNode> stack) throws PlanningException {
       ExecutionBlock newExecBlock = context.plan.newExecutionBlock();
-      newExecBlock.setPlan(node);
+      newExecBlock.setPlan(context.plan.getLogicalPlan().getLogicalNodeTree(), node);
       context.execBlockMap.put(node.getPID(), newExecBlock);
       return node;
     }
@@ -1202,7 +1203,7 @@ public class GlobalPlanner {
                                                  LogicalPlan.QueryBlock block, PartitionedTableScanNode node,
                                                  Stack<LogicalNode> stack)throws PlanningException {
       ExecutionBlock newExecBlock = context.plan.newExecutionBlock();
-      newExecBlock.setPlan(node);
+      newExecBlock.setPlan(context.plan.getLogicalPlan().getLogicalNodeTree(), node);
       context.execBlockMap.put(node.getPID(), newExecBlock);
       return node;
     }

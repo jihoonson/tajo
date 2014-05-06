@@ -23,6 +23,7 @@ import com.google.gson.annotations.Expose;
 import org.apache.tajo.engine.json.CoreGsonHelper;
 import org.apache.tajo.engine.planner.graph.SimpleTree;
 import org.apache.tajo.engine.planner.logical.LogicalNode;
+import org.apache.tajo.engine.planner.logical.LogicalNode.ArityClass;
 import org.apache.tajo.engine.planner.logical.LogicalNode.EdgeType;
 import org.apache.tajo.engine.planner.logical.LogicalNode.LogicalNodeEdge;
 import org.apache.tajo.engine.planner.logical.LogicalNodeVisitor;
@@ -224,5 +225,13 @@ public class LogicalNodeTree extends SimpleTree<Integer, LogicalNodeEdge> implem
   @Override
   public String toJson() {
     return CoreGsonHelper.toJson(this, LogicalNodeTree.class);
+  }
+
+  public static ArityClass getArityClass(LogicalNodeTree plan, LogicalNode node) {
+    int childCount = plan.getChildCount(node.getPID());
+    if (childCount == 1) return ArityClass.UNARY;
+    else if (childCount == 2) return ArityClass.BINARY;
+    else if (childCount == 3) return ArityClass.NARY;
+    else return ArityClass.NULLARY;
   }
 }

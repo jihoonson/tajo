@@ -37,7 +37,8 @@ public interface QueryUnitRequest extends ProtoObject<TajoWorkerProtocol.QueryUn
 	public List<CatalogProtos.FragmentProto> getFragments();
 	public String getOutputTableId();
 	public boolean isClusteredOutput();
-	public String getSerializedData();
+	public String getSerializedPlan();
+  public String getSerializedRoot();
 	public boolean isInterQuery();
 	public void setInterQuery();
 	public void addFetch(String name, FetchImpl fetch);

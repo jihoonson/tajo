@@ -76,20 +76,20 @@ public class PhysicalPlannerImpl implements PhysicalPlanner {
     this.INNER_JOIN_INMEMORY_HASH_THRESHOLD = conf.getLongVar(ConfVars.EXECUTOR_INNER_JOIN_INMEMORY_HASH_THRESHOLD);
   }
 
-  public PhysicalExec createPlan(final TaskAttemptContext context, final LogicalNodeTree logicalPlan)
-      throws InternalException {
+  public PhysicalExec createPlan(final TaskAttemptContext context, final LogicalNodeTree logicalPlan,
+                                 final LogicalNode root) throws InternalException {
 
     PhysicalExec execPlan;
 
     try {
-      execPlan = createPlanRecursive(context, logicalPlan, logicalPlan.getRoot(), new Stack<LogicalNode>());
+      execPlan = createPlanRecursive(context, logicalPlan, root, new Stack<LogicalNode>());
       if (execPlan instanceof StoreTableExec
           || execPlan instanceof RangeShuffleFileWriteExec
           || execPlan instanceof HashShuffleFileWriteExec
           || execPlan instanceof ColPartitionStoreExec) {
         return execPlan;
       } else if (context.getDataChannel() != null) {
-        return buildOutputOperator(context, logicalPlan, execPlan);
+        return buildOutputOperator(context, logicalPlan, root, execPlan);
       } else {
         return execPlan;
       }
@@ -98,16 +98,15 @@ public class PhysicalPlannerImpl implements PhysicalPlanner {
     }
   }
 
-  private PhysicalExec buildOutputOperator(TaskAttemptContext context, LogicalNodeTree plan,
+  private PhysicalExec buildOutputOperator(TaskAttemptContext context, LogicalNodeTree plan, LogicalNode root,
                                            PhysicalExec execPlan) throws IOException {
     DataChannel channel = context.getDataChannel();
     ShuffleFileWriteNode shuffleFileWriteNode = LogicalPlan.createNodeWithoutPID(ShuffleFileWriteNode.class);
     shuffleFileWriteNode.setStorageType(context.getDataChannel().getStoreType());
-    shuffleFileWriteNode.setInSchema(plan.getRoot().getOutSchema());
-    shuffleFileWriteNode.setOutSchema(plan.getRoot().getOutSchema());
+    shuffleFileWriteNode.setInSchema(root.getOutSchema());
+    shuffleFileWriteNode.setOutSchema(root.getOutSchema());
     shuffleFileWriteNode.setShuffle(channel.getShuffleType(), channel.getShuffleKeys(), channel.getShuffleOutputNum());
-    plan.setChild(plan.getRoot(), shuffleFileWriteNode);
-    plan.setRoot(shuffleFileWriteNode);
+    plan.setChild(root, shuffleFileWriteNode);
 //    shuffleFileWriteNode.setChild(plan);
 
     PhysicalExec outExecPlan = createShuffleFileWritePlan(context, shuffleFileWriteNode, execPlan);

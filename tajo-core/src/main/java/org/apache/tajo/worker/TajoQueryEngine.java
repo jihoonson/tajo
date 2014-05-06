@@ -40,9 +40,9 @@ public class TajoQueryEngine {
     this.phyPlanner = new PhysicalPlannerImpl(conf, storageManager);
   }
   
-  public PhysicalExec createPlan(TaskAttemptContext ctx, LogicalNodeTree plan)
+  public PhysicalExec createPlan(TaskAttemptContext ctx, LogicalNodeTree plan, LogicalNode root)
       throws InternalException {
-    return phyPlanner.createPlan(ctx, plan);
+    return phyPlanner.createPlan(ctx, plan, root);
   }
   
   public void stop() throws IOException {

@@ -126,6 +126,13 @@ public abstract class LogicalNode implements Cloneable, GsonObject {
     return PlannerUtil.buildExplainString(this);
   }
 
+  public static enum ArityClass {
+    UNARY,
+    BINARY,
+    NARY,
+    NULLARY
+  }
+
   public static enum EdgeType {
     ORDERED_LEFT,
     ORDERED_RIGHT,

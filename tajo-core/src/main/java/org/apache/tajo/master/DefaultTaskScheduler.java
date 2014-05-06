@@ -119,7 +119,8 @@ public class DefaultTaskScheduler extends AbstractTaskScheduler {
     builder.setId(NULL_ATTEMPT_ID.getProto());
     builder.setShouldDie(true);
     builder.setOutputTable("");
-    builder.setSerializedData("");
+    builder.setSerializedPlan("");
+    builder.setSerializedRoot("");
     builder.setClusteredOutput(false);
     stopTaskRunnerReq = builder.build();
   }
@@ -810,6 +811,7 @@ public class DefaultTaskScheduler extends AbstractTaskScheduler {
               "",
               false,
               task.getLogicalPlan().toJson(),
+              task.getRoot().toJson(),
               context.getMasterContext().getQueryContext(),
               subQuery.getDataChannel(), subQuery.getBlock().getEnforcer());
           if (checkIfInterQuery(subQuery.getMasterPlan(), subQuery.getBlock())) {
@@ -867,6 +869,7 @@ public class DefaultTaskScheduler extends AbstractTaskScheduler {
               "",
               false,
               task.getLogicalPlan().toJson(),
+              task.getRoot().toJson(),
               context.getMasterContext().getQueryContext(),
               subQuery.getDataChannel(),
               subQuery.getBlock().getEnforcer());

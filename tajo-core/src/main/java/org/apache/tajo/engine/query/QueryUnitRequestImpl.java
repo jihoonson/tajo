@@ -38,7 +38,8 @@ public class QueryUnitRequestImpl implements QueryUnitRequest {
   private String outputTable;
 	private boolean isUpdated;
 	private boolean clusteredOutput;
-	private String serializedData;     // logical node
+	private String serializedPlan;     // logical node
+  private String serializedRoot;
 	private Boolean interQuery;
 	private List<FetchImpl> fetches;
   private Boolean shouldDie;
@@ -57,10 +58,11 @@ public class QueryUnitRequestImpl implements QueryUnitRequest {
 	}
 	
 	public QueryUnitRequestImpl(QueryUnitAttemptId id, List<FragmentProto> fragments,
-			String outputTable, boolean clusteredOutput,
-			String serializedData, QueryContext queryContext, DataChannel channel, Enforcer enforcer) {
+			String outputTable, boolean clusteredOutput, String serializedPlan, String serializedRoot,
+      QueryContext queryContext, DataChannel channel, Enforcer enforcer) {
 		this();
-		this.set(id, fragments, outputTable, clusteredOutput, serializedData, queryContext, channel, enforcer);
+		this.set(id, fragments, outputTable, clusteredOutput, serializedPlan, serializedRoot, queryContext, channel,
+        enforcer);
 	}
 	
 	public QueryUnitRequestImpl(QueryUnitRequestProto proto) {
@@ -71,13 +73,14 @@ public class QueryUnitRequestImpl implements QueryUnitRequest {
 	}
 	
 	public void set(QueryUnitAttemptId id, List<FragmentProto> fragments,
-			String outputTable, boolean clusteredOutput,
-			String serializedData, QueryContext queryContext, DataChannel dataChannel, Enforcer enforcer) {
+			String outputTable, boolean clusteredOutput, String serializedPlan, String serializedRoot,
+      QueryContext queryContext, DataChannel dataChannel, Enforcer enforcer) {
 		this.id = id;
 		this.fragments = fragments;
 		this.outputTable = outputTable;
 		this.clusteredOutput = clusteredOutput;
-		this.serializedData = serializedData;
+		this.serializedPlan = serializedPlan;
+    this.serializedRoot = serializedRoot;
 		this.isUpdated = true;
     this.queryContext = queryContext;
     this.queryContext = queryContext;
@@ -149,17 +152,30 @@ public class QueryUnitRequestImpl implements QueryUnitRequest {
 	}
 
 	@Override
-	public String getSerializedData() {
+	public String getSerializedPlan() {
 		QueryUnitRequestProtoOrBuilder p = viaProto ? proto : builder;
-		if (this.serializedData != null) {
-			return this.serializedData;
+		if (this.serializedPlan != null) {
+			return this.serializedPlan;
 		}
-		if (!p.hasSerializedData()) {
+		if (!p.hasSerializedPlan()) {
 			return null;
 		}
-		this.serializedData = p.getSerializedData();
-		return this.serializedData;
+		this.serializedPlan = p.getSerializedPlan();
+		return this.serializedPlan;
 	}
+
+  @Override
+  public String getSerializedRoot() {
+    QueryUnitRequestProtoOrBuilder p = viaProto ? proto : builder;
+    if (this.serializedRoot != null) {
+      return this.serializedRoot;
+    }
+    if (!p.hasSerializedRoot()) {
+      return null;
+    }
+    this.serializedRoot = p.getSerializedRoot();
+    return this.serializedRoot;
+  }
 	
 	public boolean isInterQuery() {
 	  QueryUnitRequestProtoOrBuilder p = viaProto ? proto : builder;
@@ -291,9 +307,12 @@ public class QueryUnitRequestImpl implements QueryUnitRequest {
 		if (this.isUpdated) {
 			builder.setClusteredOutput(this.clusteredOutput);
 		}
-		if (this.serializedData != null) {
-			builder.setSerializedData(this.serializedData);
+		if (this.serializedPlan != null) {
+			builder.setSerializedPlan(this.serializedPlan);
 		}
+    if (this.serializedRoot != null) {
+      builder.setSerializedRoot(this.serializedRoot);
+    }
 		if (this.interQuery != null) {
 		  builder.setInterQuery(this.interQuery);
 		}

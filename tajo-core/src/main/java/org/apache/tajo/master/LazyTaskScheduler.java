@@ -134,7 +134,8 @@ public class LazyTaskScheduler extends AbstractTaskScheduler {
     builder.setId(NULL_ATTEMPT_ID.getProto());
     builder.setShouldDie(true);
     builder.setOutputTable("");
-    builder.setSerializedData("");
+    builder.setSerializedPlan("");
+    builder.setSerializedRoot("");
     builder.setClusteredOutput(false);
     stopTaskRunnerReq = builder.build();
   }
@@ -477,6 +478,7 @@ public class LazyTaskScheduler extends AbstractTaskScheduler {
         "",
         false,
         taskAttempt.getQueryUnit().getLogicalPlan().toJson(),
+        taskAttempt.getQueryUnit().getRoot().toJson(),
         context.getMasterContext().getQueryContext(),
         subQuery.getDataChannel(), subQuery.getBlock().getEnforcer());
     if (checkIfInterQuery(subQuery.getMasterPlan(), subQuery.getBlock())) {

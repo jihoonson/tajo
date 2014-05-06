@@ -572,7 +572,7 @@ public class SubQuery implements EventHandler<SubQueryEvent> {
 
     // if store plan (i.e., CREATE or INSERT OVERWRITE)
     StoreTableNode storeTableNode = PlannerUtil.findTopNode(masterPlan.getLogicalPlan().getLogicalNodeTree(),
-        getBlock().getPlan().getRoot(), NodeType.STORE);
+        getBlock().getRoot(), NodeType.STORE);
     if (storeTableNode != null) {
       storeType = storeTableNode.getStorageType();
     }
@@ -711,7 +711,7 @@ public class SubQuery implements EventHandler<SubQueryEvent> {
       GroupbyNode grpNode = null;
       if (parent != null) {
         grpNode = PlannerUtil.findMostBottomNode(masterPlan.getLogicalPlan().getLogicalNodeTree(),
-            parent.getPlan().getRoot(), NodeType.GROUP_BY);
+            parent.getRoot(), NodeType.GROUP_BY);
       }
 
       // Is this subquery the first step of join?
@@ -960,7 +960,7 @@ public class SubQuery implements EventHandler<SubQueryEvent> {
         queryUnitContext,
         QueryIdFactory.newQueryUnitId(schedulerContext.getBlockId(), taskId),
         schedulerContext.isLeafQuery(), subQuery.eventHandler);
-    unit.setLogicalPlan(execBlock.getPlan());
+    unit.setLogicalPlan(execBlock.getPlan(), execBlock.getRoot());
     subQuery.addTask(unit);
     return unit;
   }

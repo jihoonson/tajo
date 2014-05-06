@@ -62,6 +62,7 @@ public class QueryUnit implements EventHandler<TaskEvent> {
   private EventHandler eventHandler;
 	private StoreTableNode store = null;
 	private LogicalNodeTree plan = null;
+  private LogicalNode root = null;
 	private List<ScanNode> scan;
 	
 	private Map<String, Set<FragmentProto>> fragMap;
@@ -203,10 +204,11 @@ public class QueryUnit implements EventHandler<TaskEvent> {
   }
 
 //	public void setLogicalPlan(LogicalNode plan) {
-  public void setLogicalPlan(LogicalNodeTree plan) {
+  public void setLogicalPlan(LogicalNodeTree plan, LogicalNode root) {
 	  this.plan = plan;
+    this.root = root;
 
-	  LogicalNode node = plan.getRoot();
+	  LogicalNode node = root;
 	  ArrayList<LogicalNode> s = new ArrayList<LogicalNode>();
 	  s.add(node);
 	  while (!s.isEmpty()) {
@@ -324,7 +326,7 @@ public class QueryUnit implements EventHandler<TaskEvent> {
 	@Override
 	public String toString() {
     StringBuilder builder = new StringBuilder();
-    builder.append(plan.getRoot().getType() + " \n");
+    builder.append(root.getType() + " \n");
 		for (Entry<String, Set<FragmentProto>> e : fragMap.entrySet()) {
 		  builder.append(e.getKey()).append(" : ");
       for (FragmentProto fragment : e.getValue()) {
@@ -342,6 +344,10 @@ public class QueryUnit implements EventHandler<TaskEvent> {
 		
 		return builder.toString();
 	}
+
+  public LogicalNode getRoot() {
+    return this.root;
+  }
 	
 	public void setStats(TableStats stats) {
 	  this.stats = stats;

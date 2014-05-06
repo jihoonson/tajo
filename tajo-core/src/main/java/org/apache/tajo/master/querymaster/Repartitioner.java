@@ -98,7 +98,7 @@ public class Repartitioner {
       } else {
         tablePath = tableDesc.getPath();
         try {
-          stats[i] = GlobalPlanner.computeDescendentVolume(scans[i]);
+          stats[i] = GlobalPlanner.computeDescendentVolume(execBlock.getPlan(), scans[i]);
         } catch (PlanningException e) {
           throw new IOException(e);
         }
@@ -117,8 +117,7 @@ public class Repartitioner {
 
     // If one of inner join tables has no input data,
     // it should return zero rows.
-    JoinNode joinNode = PlannerUtil.findMostBottomNode(masterPlan.getLogicalPlan().getLogicalNodeTree(),
-        execBlock.getPlan(), NodeType.JOIN);
+    JoinNode joinNode = PlannerUtil.findMostBottomNode(execBlock.getPlan(), execBlock.getRoot(), NodeType.JOIN);
     if (joinNode != null) {
       if ( (joinNode.getJoinType().equals(JoinType.INNER))) {
         for (int i = 0; i < stats.length; i++) {
@@ -356,8 +355,7 @@ public class Repartitioner {
     tablePath = subQuery.getContext().getStorageManager().getTablePath(scan.getTableName());
 
     ExecutionBlock sampleChildBlock = masterPlan.getChild(subQuery.getId(), 0);
-    SortNode sortNode = PlannerUtil.findTopNode(masterPlan.getLogicalPlan().getLogicalNodeTree(),
-        sampleChildBlock.getPlan(), NodeType.SORT);
+    SortNode sortNode = PlannerUtil.findTopNode(sampleChildBlock.getPlan(), sampleChildBlock.getRoot(), NodeType.SORT);
     SortSpec [] sortSpecs = sortNode.getSortKeys();
     Schema sortSchema = new Schema(channel.getShuffleKeys());
 
@@ -498,8 +496,8 @@ public class Repartitioner {
       }
     }
 
-    GroupbyNode groupby = PlannerUtil.findMostBottomNode(masterPlan.getLogicalPlan().getLogicalNodeTree(),
-        subQuery.getBlock().getPlan(), NodeType.GROUP_BY);
+    GroupbyNode groupby = PlannerUtil.findMostBottomNode(subQuery.getBlock().getPlan(), subQuery.getBlock().getRoot(),
+        NodeType.GROUP_BY);
     // get a proper number of tasks
     int determinedTaskNum = Math.min(maxNum, finalFetches.size());
     LOG.info(subQuery.getId() + ", ScheduleHashShuffledFetches - Max num=" + maxNum + ", finalFetchURI=" + finalFetches.size());
@@ -619,19 +617,19 @@ public class Repartitioner {
     keys = channel.getShuffleKeys();
     if (!masterPlan.isRoot(subQuery.getBlock()) ) {
       ExecutionBlock parentBlock = masterPlan.getParent(subQuery.getBlock());
-      if (parentBlock.getPlan().getType() == NodeType.JOIN) {
+      if (parentBlock.getRoot().getType() == NodeType.JOIN) {
         channel.setShuffleOutputNum(desiredNum);
       }
     }
 
     // set the partition number for group by and sort
     if (channel.getShuffleType() == HASH_SHUFFLE) {
-      if (execBlock.getPlan().getType() == NodeType.GROUP_BY) {
+      if (execBlock.getRoot().getType() == NodeType.GROUP_BY) {
         keys = channel.getShuffleKeys();
       }
     } else if (channel.getShuffleType() == RANGE_SHUFFLE) {
-      if (execBlock.getPlan().getType() == NodeType.SORT) {
-        SortNode sort = (SortNode) execBlock.getPlan();
+      if (execBlock.getRoot().getType() == NodeType.SORT) {
+        SortNode sort = (SortNode) execBlock.getRoot();
         keys = new Column[sort.getSortKeys().length];
         for (int i = 0; i < keys.length; i++) {
           keys[i] = sort.getSortKeys()[i].getSortKey();

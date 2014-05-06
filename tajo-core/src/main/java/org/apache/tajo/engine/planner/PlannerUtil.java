@@ -29,9 +29,10 @@ import org.apache.tajo.catalog.SortSpec;
 import org.apache.tajo.catalog.proto.CatalogProtos;
 import org.apache.tajo.common.TajoDataTypes.DataType;
 import org.apache.tajo.engine.eval.*;
-import org.apache.tajo.engine.exception.InvalidQueryException;
 import org.apache.tajo.engine.planner.logical.*;
+import org.apache.tajo.engine.planner.logical.LogicalNode.ArityClass;
 import org.apache.tajo.engine.utils.SchemaUtil;
+import org.apache.tajo.exception.UnsupportedException;
 import org.apache.tajo.storage.TupleComparator;
 import org.apache.tajo.util.TUtil;
 
@@ -172,42 +173,42 @@ public class PlannerUtil {
     }
   }
 
-  /**
-   * Delete the logical node from a plan.
-   *
-   * @param parent      this node must be a parent node of one node to be removed.
-   * @param tobeRemoved this node must be a child node of the parent.
-   */
-  public static LogicalNode deleteNode(LogicalNode parent, LogicalNode tobeRemoved) {
-    Preconditions.checkArgument(tobeRemoved instanceof UnaryNode,
-        "ERROR: the logical node to be removed must be unary node.");
-
-    UnaryNode child = (UnaryNode) tobeRemoved;
-    LogicalNode grandChild = child.getChild();
-    if (parent instanceof UnaryNode) {
-      UnaryNode unaryParent = (UnaryNode) parent;
-
-      Preconditions.checkArgument(unaryParent.getChild() == child,
-          "ERROR: both logical node must be parent and child nodes");
-      unaryParent.setChild(grandChild);
-
-    } else if (parent instanceof BinaryNode) {
-      BinaryNode binaryParent = (BinaryNode) parent;
-      if (binaryParent.getLeftChild().deepEquals(child)) {
-        binaryParent.setLeftChild(grandChild);
-      } else if (binaryParent.getRightChild().deepEquals(child)) {
-        binaryParent.setRightChild(grandChild);
-      } else {
-        throw new IllegalStateException("ERROR: both logical node must be parent and child nodes");
-      }
-    } else {
-      throw new InvalidQueryException("Unexpected logical plan: " + parent);
-    }
-    return child;
-  }
+//  /**
+//   * Delete the logical node from a plan.
+//   *
+//   * @param parent      this node must be a parent node of one node to be removed.
+//   * @param tobeRemoved this node must be a child node of the parent.
+//   */
+//  public static LogicalNode deleteNode(LogicalNode parent, LogicalNode tobeRemoved) {
+//    Preconditions.checkArgument(tobeRemoved instanceof UnaryNode,
+//        "ERROR: the logical node to be removed must be unary node.");
+//
+//    UnaryNode child = (UnaryNode) tobeRemoved;
+//    LogicalNode grandChild = child.getChild();
+//    if (parent instanceof UnaryNode) {
+//      UnaryNode unaryParent = (UnaryNode) parent;
+//
+//      Preconditions.checkArgument(unaryParent.getChild() == child,
+//          "ERROR: both logical node must be parent and child nodes");
+//      unaryParent.setChild(grandChild);
+//
+//    } else if (parent instanceof BinaryNode) {
+//      BinaryNode binaryParent = (BinaryNode) parent;
+//      if (binaryParent.getLeftChild().deepEquals(child)) {
+//        binaryParent.setLeftChild(grandChild);
+//      } else if (binaryParent.getRightChild().deepEquals(child)) {
+//        binaryParent.setRightChild(grandChild);
+//      } else {
+//        throw new IllegalStateException("ERROR: both logical node must be parent and child nodes");
+//      }
+//    } else {
+//      throw new InvalidQueryException("Unexpected logical plan: " + parent);
+//    }
+//    return child;
+//  }
 
   public static void replaceNode(LogicalPlan plan, LogicalNode startNode, LogicalNode oldNode, LogicalNode newNode) {
-    LogicalNodeReplaceVisitor replacer = new LogicalNodeReplaceVisitor(oldNode, newNode);
+    LogicalNodeReplaceVisitor replacer = new LogicalNodeReplaceVisitor(plan.getLogicalNodeTree(), oldNode, newNode);
     try {
       replacer.visit(new ReplacerContext(), plan, null, startNode, new Stack<LogicalNode>());
     } catch (PlanningException e) {
@@ -223,7 +224,7 @@ public class PlannerUtil {
     private LogicalNode target;
     private LogicalNode tobeReplaced;
 
-    public LogicalNodeReplaceVisitor(LogicalNode target, LogicalNode tobeReplaced) {
+    public LogicalNodeReplaceVisitor(LogicalNodeTree plan, LogicalNode target, LogicalNode tobeReplaced) {
       this.target = target;
       this.tobeReplaced = tobeReplaced;
     }
@@ -231,8 +232,9 @@ public class PlannerUtil {
     /**
      * If this node can have child, it returns TRUE. Otherwise, it returns FALSE.
      */
-    private static boolean checkIfVisitable(LogicalNode node) {
-      return node instanceof UnaryNode || node instanceof BinaryNode;
+    private static boolean checkIfVisitable(LogicalNodeTree plan, LogicalNode node) {
+//      return node instanceof UnaryNode || node instanceof BinaryNode;
+      return plan.getChildCount(node.getPID()) > 0;
     }
 
     @Override
@@ -240,43 +242,82 @@ public class PlannerUtil {
                              LogicalNode node, Stack<LogicalNode> stack) throws PlanningException {
       LogicalNode left = null;
       LogicalNode right = null;
+      LogicalNodeTree nodeTree = plan.getLogicalNodeTree();
+      ArityClass arityClass = LogicalNodeTree.getArityClass(nodeTree, node);
 
-      if (node instanceof UnaryNode) {
-        UnaryNode unaryNode = (UnaryNode) node;
-        if (unaryNode.getChild().deepEquals(target)) {
-          unaryNode.setChild(tobeReplaced);
-          left = tobeReplaced;
-          context.updateSchemaFlag = true;
-        } else if (checkIfVisitable(unaryNode.getChild())) {
-          left = visit(context, plan, null, unaryNode.getChild(), stack);
-        }
-      } else if (node instanceof BinaryNode) {
-        BinaryNode binaryNode = (BinaryNode) node;
-        if (binaryNode.getLeftChild().deepEquals(target)) {
-          binaryNode.setLeftChild(tobeReplaced);
-          left = tobeReplaced;
-          context.updateSchemaFlag = true;
-        } else if (checkIfVisitable(binaryNode.getLeftChild())) {
-          left = visit(context, plan, null, binaryNode.getLeftChild(), stack);
-        } else {
-          left = binaryNode.getLeftChild();
-        }
+      switch (arityClass) {
+        case UNARY:
+          if (nodeTree.getChild(node).deepEquals(target)) {
+            nodeTree.setChild(tobeReplaced, node);
+            left = tobeReplaced;
+            context.updateSchemaFlag = true;
+          } else if (checkIfVisitable(nodeTree, nodeTree.getChild(node))) {
+            left = visit(context, plan, null, nodeTree.getChild(node), stack);
+          }
+          break;
+        case BINARY:
+          if (nodeTree.getLeftChild(node).deepEquals(target)) {
+            nodeTree.setLeftChild(tobeReplaced, node);
+            left = tobeReplaced;
+            context.updateSchemaFlag = true;
+          } else if (checkIfVisitable(nodeTree, nodeTree.getLeftChild(node))) {
+            left = visit(context, plan, null, nodeTree.getLeftChild(node), stack);
+          } else {
+            left = nodeTree.getLeftChild(node);
+          }
 
-        if (binaryNode.getRightChild().deepEquals(target)) {
-          binaryNode.setRightChild(tobeReplaced);
-          right = tobeReplaced;
-          context.updateSchemaFlag = true;
-        } else if (checkIfVisitable(binaryNode.getRightChild())) {
-          right = visit(context, plan, null, binaryNode.getRightChild(), stack);
-        } else {
-          right = binaryNode.getRightChild();
-        }
+          if (nodeTree.getRightChild(node).deepEquals(target)) {
+            nodeTree.setRightChild(tobeReplaced, node);
+            right = tobeReplaced;
+            context.updateSchemaFlag = true;
+          } else if (checkIfVisitable(nodeTree, nodeTree.getRightChild(node))) {
+            right = visit(context, plan, null, nodeTree.getRightChild(node), stack);
+          } else {
+            right = nodeTree.getRightChild(node);
+          }
+          break;
+        case NARY:
+          throw new UnsupportedException();
+        case NULLARY:
+          break;
       }
+
+//      if (node instanceof UnaryNode) {
+//        UnaryNode unaryNode = (UnaryNode) node;
+//        if (unaryNode.getChild().deepEquals(target)) {
+//          unaryNode.setChild(tobeReplaced);
+//          left = tobeReplaced;
+//          context.updateSchemaFlag = true;
+//        } else if (checkIfVisitable(unaryNode.getChild())) {
+//          left = visit(context, plan, null, unaryNode.getChild(), stack);
+//        }
+//      } else if (node instanceof BinaryNode) {
+//        BinaryNode binaryNode = (BinaryNode) node;
+//        if (binaryNode.getLeftChild().deepEquals(target)) {
+//          binaryNode.setLeftChild(tobeReplaced);
+//          left = tobeReplaced;
+//          context.updateSchemaFlag = true;
+//        } else if (checkIfVisitable(binaryNode.getLeftChild())) {
+//          left = visit(context, plan, null, binaryNode.getLeftChild(), stack);
+//        } else {
+//          left = binaryNode.getLeftChild();
+//        }
+//
+//        if (binaryNode.getRightChild().deepEquals(target)) {
+//          binaryNode.setRightChild(tobeReplaced);
+//          right = tobeReplaced;
+//          context.updateSchemaFlag = true;
+//        } else if (checkIfVisitable(binaryNode.getRightChild())) {
+//          right = visit(context, plan, null, binaryNode.getRightChild(), stack);
+//        } else {
+//          right = binaryNode.getRightChild();
+//        }
+//      }
 
       // update schemas of nodes except for leaf node (i.e., RelationNode)
       if (context.updateSchemaFlag) {
         if (node instanceof Projectable) {
-          if (node instanceof BinaryNode) {
+          if (arityClass == ArityClass.BINARY) {
             node.setInSchema(SchemaUtil.merge(left.getOutSchema(), right.getOutSchema()));
           } else {
             node.setInSchema(left.getOutSchema());
@@ -305,17 +346,17 @@ public class PlannerUtil {
     }
   }
 
-  public static void replaceNode(LogicalNodeTree tree, LogicalNode plan, LogicalNode newNode, NodeType type) {
-    LogicalNode parent = findTopParentNode(tree, plan, type);
-    Preconditions.checkArgument(parent instanceof UnaryNode);
-    Preconditions.checkArgument(!(newNode instanceof BinaryNode));
-    UnaryNode parentNode = (UnaryNode) parent;
-    LogicalNode child = parentNode.getChild();
-    if (child instanceof UnaryNode) {
-      ((UnaryNode) newNode).setChild(((UnaryNode) child).getChild());
-    }
-    parentNode.setChild(newNode);
-  }
+//  public static void replaceNode(LogicalNodeTree tree, LogicalNode plan, LogicalNode newNode, NodeType type) {
+//    LogicalNode parent = findTopParentNode(tree, plan, type);
+//    Preconditions.checkArgument(parent instanceof UnaryNode);
+//    Preconditions.checkArgument(!(newNode instanceof BinaryNode));
+//    UnaryNode parentNode = (UnaryNode) parent;
+//    LogicalNode child = parentNode.getChild();
+//    if (child instanceof UnaryNode) {
+//      ((UnaryNode) newNode).setChild(((UnaryNode) child).getChild());
+//    }
+//    parentNode.setChild(newNode);
+//  }
 
   /**
    * Find the top logical node matched to type from the given node
@@ -392,7 +433,7 @@ public class PlannerUtil {
     Preconditions.checkNotNull(node);
     Preconditions.checkNotNull(type);
 
-    ParentNodeFinder finder = new ParentNodeFinder(type);
+    ParentNodeFinder finder = new ParentNodeFinder(tree, type);
 //    node.postOrder(finder);
     tree.postOrder(finder, node);
 
@@ -443,23 +484,31 @@ public class PlannerUtil {
   private static class ParentNodeFinder implements LogicalNodeVisitor {
     private List<LogicalNode> list = new ArrayList<LogicalNode>();
     private NodeType tofind;
+    private LogicalNodeTree plan;
 
-    public ParentNodeFinder(NodeType type) {
+    public ParentNodeFinder(LogicalNodeTree plan, NodeType type) {
+      this.plan = plan;
       this.tofind = type;
     }
 
     @Override
     public void visit(LogicalNode node) {
-      if (node instanceof UnaryNode) {
-        UnaryNode unary = (UnaryNode) node;
-        if (unary.getChild().getType() == tofind) {
+//      if (node instanceof UnaryNode) {
+//        UnaryNode unary = (UnaryNode) node;
+//        if (unary.getChild().getType() == tofind) {
+//          list.add(node);
+//        }
+//      } else if (node instanceof BinaryNode) {
+//        BinaryNode bin = (BinaryNode) node;
+//        if (bin.getLeftChild().getType() == tofind ||
+//            bin.getRightChild().getType() == tofind) {
+//          list.add(node);
+//        }
+//      }
+      for (LogicalNode child : plan.getChilds(node)) {
+        if (child.getType() == tofind){
           list.add(node);
-        }
-      } else if (node instanceof BinaryNode) {
-        BinaryNode bin = (BinaryNode) node;
-        if (bin.getLeftChild().getType() == tofind ||
-            bin.getRightChild().getType() == tofind) {
-          list.add(node);
+          break;
         }
       }
     }

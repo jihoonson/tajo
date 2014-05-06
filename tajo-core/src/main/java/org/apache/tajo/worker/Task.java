@@ -83,6 +83,7 @@ public class Task {
   private TaskAttemptContext context;
   private List<Fetcher> fetcherRunners;
   private LogicalNodeTree plan;
+  private LogicalNode root;
   private final Map<String, TableDesc> descs = Maps.newHashMap();
   private PhysicalExec executor;
   private boolean interQuery;
@@ -155,8 +156,9 @@ public class Task {
     this.reporter = new Reporter(taskId, masterProxy);
     this.reporter.startCommunicationThread();
 
-    plan = CoreGsonHelper.fromJson(request.getSerializedData(), LogicalNodeTree.class);
-    LogicalNode [] scanNode = PlannerUtil.findAllNodes(plan, plan.getRoot(), NodeType.SCAN);
+    plan = CoreGsonHelper.fromJson(request.getSerializedPlan(), LogicalNodeTree.class);
+    root = CoreGsonHelper.fromJson(request.getSerializedRoot(), LogicalNode.class);
+    LogicalNode [] scanNode = PlannerUtil.findAllNodes(plan, root, NodeType.SCAN);
     for (LogicalNode node : scanNode) {
       ScanNode scan = (ScanNode)node;
       descs.put(scan.getCanonicalName(), scan.getTableDesc());
@@ -168,7 +170,7 @@ public class Task {
       this.shuffleType = context.getDataChannel().getShuffleType();
 
       if (shuffleType == ShuffleType.RANGE_SHUFFLE) {
-        SortNode sortNode = PlannerUtil.findTopNode(plan, plan.getRoot(), NodeType.SORT);
+        SortNode sortNode = PlannerUtil.findTopNode(plan, root, NodeType.SORT);
         this.finalSchema = PlannerUtil.sortSpecsToSchema(sortNode.getSortKeys());
         this.sortComp = new TupleComparator(finalSchema, sortNode.getSortKeys());
       }
@@ -378,7 +380,7 @@ public class Task {
 
       if (context.getFragmentSize() > 0) {
         this.executor = taskRunnerContext.getTQueryEngine().
-            createPlan(context, plan);
+            createPlan(context, plan, root);
         this.executor.init();
 
         while(!killed && executor.next() != null) {

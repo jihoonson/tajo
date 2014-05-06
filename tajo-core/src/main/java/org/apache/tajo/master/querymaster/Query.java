@@ -469,7 +469,7 @@ public class Query implements EventHandler<QueryEvent> {
       public boolean isEligible(QueryContext queryContext, Query query, ExecutionBlockId finalExecBlockId,
                                 Path finalOutputDir) {
         SubQuery lastStage = query.getSubQuery(finalExecBlockId);
-        NodeType type = lastStage.getBlock().getPlan().getRoot().getType();
+        NodeType type = lastStage.getBlock().getRoot().getType();
         return type != NodeType.CREATE_TABLE && type != NodeType.INSERT;
       }
 
@@ -501,7 +501,7 @@ public class Query implements EventHandler<QueryEvent> {
       public boolean isEligible(QueryContext queryContext, Query query, ExecutionBlockId finalExecBlockId,
                                 Path finalOutputDir) {
         SubQuery lastStage = query.getSubQuery(finalExecBlockId);
-        return lastStage.getBlock().getPlan().getRoot().getType() == NodeType.CREATE_TABLE;
+        return lastStage.getBlock().getRoot().getType() == NodeType.CREATE_TABLE;
       }
 
       @Override
@@ -511,7 +511,7 @@ public class Query implements EventHandler<QueryEvent> {
         SubQuery lastStage = query.getSubQuery(finalExecBlockId);
         TableStats stats = lastStage.getResultStats();
 
-        CreateTableNode createTableNode = (CreateTableNode) lastStage.getBlock().getPlan().getRoot();
+        CreateTableNode createTableNode = (CreateTableNode) lastStage.getBlock().getRoot();
         TableMeta meta = new TableMeta(createTableNode.getStorageType(), createTableNode.getOptions());
 
         TableDesc tableDescTobeCreated =
@@ -540,7 +540,7 @@ public class Query implements EventHandler<QueryEvent> {
       public boolean isEligible(QueryContext queryContext, Query query, ExecutionBlockId finalExecBlockId,
                                 Path finalOutputDir) {
         SubQuery lastStage = query.getSubQuery(finalExecBlockId);
-        return lastStage.getBlock().getPlan().getRoot().getType() == NodeType.INSERT;
+        return lastStage.getBlock().getRoot().getType() == NodeType.INSERT;
       }
 
       @Override
@@ -553,7 +553,7 @@ public class Query implements EventHandler<QueryEvent> {
         TableMeta meta = lastStage.getTableMeta();
         TableStats stats = lastStage.getResultStats();
 
-        InsertNode insertNode = (InsertNode) lastStage.getBlock().getPlan().getRoot();
+        InsertNode insertNode = (InsertNode) lastStage.getBlock().getRoot();
 
         TableDesc finalTable;
         if (insertNode.hasTargetTable()) {

@@ -26,6 +26,7 @@ import org.apache.tajo.engine.eval.*;
 import org.apache.tajo.engine.exception.InvalidQueryException;
 import org.apache.tajo.engine.planner.*;
 import org.apache.tajo.engine.planner.logical.*;
+import org.apache.tajo.engine.planner.logical.LogicalNode.ArityClass;
 import org.apache.tajo.util.TUtil;
 
 import java.util.*;
@@ -66,13 +67,18 @@ public class FilterPushDownRule extends BasicLogicalPlanVisitor<Set<EvalNode>, L
 //    visit(cnf, plan, block, selNode.getChild(), stack);
     visit(cnf, plan, block, plan.getChild(selNode), stack);
     stack.pop();
+    LogicalNodeTree nodeTree = plan.getLogicalNodeTree();
 
     if(cnf.size() == 0) { // remove the selection operator if there is no search condition after selection push.
       LogicalNode node = stack.peek();
-      if (node instanceof UnaryNode) {
-        UnaryNode unary = (UnaryNode) node;
+//      if (node instanceof UnaryNode) {
+//        UnaryNode unary = (UnaryNode) node;
 //        unary.setChild(selNode.getChild());
-        unary.setChild(plan.getChild(selNode));
+//      } else {
+//        throw new InvalidQueryException("Unexpected Logical Query Plan");
+//      }
+      if (LogicalNodeTree.getArityClass(nodeTree, node) == ArityClass.UNARY) {
+        nodeTree.setChild(nodeTree.getChild(selNode), node);
       } else {
         throw new InvalidQueryException("Unexpected Logical Query Plan");
       }
