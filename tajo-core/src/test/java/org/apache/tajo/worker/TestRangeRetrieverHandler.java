@@ -149,7 +149,7 @@ public class TestRangeRetrieverHandler {
     LogicalNode rootNode = optimizer.optimize(plan);
 
     PhysicalPlanner phyPlanner = new PhysicalPlannerImpl(conf,sm);
-    PhysicalExec exec = phyPlanner.createPlan(ctx, rootNode);
+    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getLogicalNodeTree(), rootNode);
 
     ExternalSortExec sort = null;
     if (exec instanceof ProjectionExec) {
@@ -272,7 +272,7 @@ public class TestRangeRetrieverHandler {
     LogicalNode rootNode = optimizer.optimize(plan);
 
     PhysicalPlanner phyPlanner = new PhysicalPlannerImpl(conf,sm);
-    PhysicalExec exec = phyPlanner.createPlan(ctx, rootNode);
+    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getLogicalNodeTree(), rootNode);
 
     ExternalSortExec sort = null;
     if (exec instanceof ProjectionExec) {

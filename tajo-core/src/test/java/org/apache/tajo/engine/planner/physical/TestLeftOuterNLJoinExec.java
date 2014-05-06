@@ -29,10 +29,7 @@ import org.apache.tajo.conf.TajoConf;
 import org.apache.tajo.datum.Datum;
 import org.apache.tajo.datum.DatumFactory;
 import org.apache.tajo.engine.parser.SQLAnalyzer;
-import org.apache.tajo.engine.planner.LogicalPlanner;
-import org.apache.tajo.engine.planner.PhysicalPlanner;
-import org.apache.tajo.engine.planner.PhysicalPlannerImpl;
-import org.apache.tajo.engine.planner.PlanningException;
+import org.apache.tajo.engine.planner.*;
 import org.apache.tajo.engine.planner.enforce.Enforcer;
 import org.apache.tajo.engine.planner.logical.LogicalNode;
 import org.apache.tajo.master.session.Session;
@@ -264,11 +261,12 @@ public class TestLeftOuterNLJoinExec {
         LocalTajoTestingUtility.newQueryUnitAttemptId(), merged, workDir);
     ctx.setEnforcer(new Enforcer());
     Expr context =  analyzer.parse(QUERIES[0]);
-    LogicalNode plan = planner.createPlan(session, context).getRootBlock().getRoot();
+    LogicalPlan plan = planner.createPlan(session, context);
+    LogicalNode root = plan.getRootBlock().getRoot();
 
 
     PhysicalPlanner phyPlanner = new PhysicalPlannerImpl(conf, sm);
-    PhysicalExec exec = phyPlanner.createPlan(ctx, plan);
+    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getLogicalNodeTree(), root);
 
     //maybe plan results with hash join exec algorithm usage. Must convert from HashLeftOuterJoinExec into NLLeftOuterJoinExec
     ProjectionExec proj = (ProjectionExec) exec;
@@ -306,11 +304,11 @@ public class TestLeftOuterNLJoinExec {
         LocalTajoTestingUtility.newQueryUnitAttemptId(), merged, workDir);
     ctx.setEnforcer(new Enforcer());
     Expr context =  analyzer.parse(QUERIES[1]);
-    LogicalNode plan = planner.createPlan(session, context).getRootBlock().getRoot();
-
+    LogicalPlan plan = planner.createPlan(session, context);
+    LogicalNode root = plan.getRootBlock().getRoot();
 
     PhysicalPlanner phyPlanner = new PhysicalPlannerImpl(conf, sm);
-    PhysicalExec exec = phyPlanner.createPlan(ctx, plan);
+    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getLogicalNodeTree(), root);
     
     //maybe plan results with hash join exec algorithm usage. Must convert from HashLeftOuterJoinExec into NLLeftOuterJoinExec
     ProjectionExec proj = (ProjectionExec) exec;
@@ -350,11 +348,11 @@ public class TestLeftOuterNLJoinExec {
         LocalTajoTestingUtility.newQueryUnitAttemptId(), merged, workDir);
     ctx.setEnforcer(new Enforcer());
     Expr context =  analyzer.parse(QUERIES[2]);
-    LogicalNode plan = planner.createPlan(session, context).getRootBlock().getRoot();
-
+    LogicalPlan plan = planner.createPlan(session, context);
+    LogicalNode root = plan.getRootBlock().getRoot();
 
     PhysicalPlanner phyPlanner = new PhysicalPlannerImpl(conf, sm);
-    PhysicalExec exec = phyPlanner.createPlan(ctx, plan);
+    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getLogicalNodeTree(), root);
     
     //maybe plan results with hash join exec algorithm usage. Must convert from HashLeftOuterJoinExec into NLLeftOuterJoinExec
     ProjectionExec proj = (ProjectionExec) exec;
@@ -395,11 +393,11 @@ public class TestLeftOuterNLJoinExec {
         LocalTajoTestingUtility.newQueryUnitAttemptId(), merged, workDir);
     ctx.setEnforcer(new Enforcer());
     Expr context =  analyzer.parse(QUERIES[3]);
-    LogicalNode plan = planner.createPlan(session, context).getRootBlock().getRoot();
-
+    LogicalPlan plan = planner.createPlan(session, context);
+    LogicalNode root = plan.getRootBlock().getRoot();
 
     PhysicalPlanner phyPlanner = new PhysicalPlannerImpl(conf, sm);
-    PhysicalExec exec = phyPlanner.createPlan(ctx, plan);
+    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getLogicalNodeTree(), root);
     
     //maybe plan results with hash join exec algorithm usage. Must convert from HashLeftOuterJoinExec into NLLeftOuterJoinExec
     ProjectionExec proj = (ProjectionExec) exec;
@@ -439,11 +437,11 @@ public class TestLeftOuterNLJoinExec {
         LocalTajoTestingUtility.newQueryUnitAttemptId(), merged, workDir);
     ctx.setEnforcer(new Enforcer());
     Expr context =  analyzer.parse(QUERIES[4]);
-    LogicalNode plan = planner.createPlan(session, context).getRootBlock().getRoot();
-
+    LogicalPlan plan = planner.createPlan(session, context);
+    LogicalNode root = plan.getRootBlock().getRoot();
 
     PhysicalPlanner phyPlanner = new PhysicalPlannerImpl(conf, sm);
-    PhysicalExec exec = phyPlanner.createPlan(ctx, plan);
+    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getLogicalNodeTree(), root);
     
     //maybe plan results with hash join exec algorithm usage. Must convert from HashLeftOuterJoinExec into NLLeftOuterJoinExec
     ProjectionExec proj = (ProjectionExec) exec;

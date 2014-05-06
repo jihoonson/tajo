@@ -140,9 +140,10 @@ public class TestHashJoinExec {
   @Test
   public final void testHashInnerJoin() throws IOException, PlanningException {
     Expr expr = analyzer.parse(QUERIES[0]);
-    LogicalNode plan = planner.createPlan(session, expr).getRootBlock().getRoot();
+    LogicalPlan plan = planner.createPlan(session, expr);
+    LogicalNode root = plan.getRootBlock().getRoot();
 
-    JoinNode joinNode = PlannerUtil.findTopNode(plan, NodeType.JOIN);
+    JoinNode joinNode = PlannerUtil.findTopNode(plan.getLogicalNodeTree(), root, NodeType.JOIN);
     Enforcer enforcer = new Enforcer();
     enforcer.enforceJoinAlgorithm(joinNode.getPID(), JoinAlgorithm.IN_MEMORY_HASH_JOIN);
 
@@ -156,7 +157,7 @@ public class TestHashJoinExec {
     ctx.setEnforcer(enforcer);
 
     PhysicalPlanner phyPlanner = new PhysicalPlannerImpl(conf, sm);
-    PhysicalExec exec = phyPlanner.createPlan(ctx, plan);
+    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getLogicalNodeTree(), root);
 
     ProjectionExec proj = (ProjectionExec) exec;
     assertTrue(proj.getChild() instanceof HashJoinExec);
@@ -181,9 +182,10 @@ public class TestHashJoinExec {
   @Test
   public final void testCheckIfInMemoryInnerJoinIsPossible() throws IOException, PlanningException {
     Expr expr = analyzer.parse(QUERIES[0]);
-    LogicalNode plan = planner.createPlan(session, expr).getRootBlock().getRoot();
+    LogicalPlan plan = planner.createPlan(session, expr);
+    LogicalNode root = plan.getRootBlock().getRoot();
 
-    JoinNode joinNode = PlannerUtil.findTopNode(plan, NodeType.JOIN);
+    JoinNode joinNode = PlannerUtil.findTopNode(plan.getLogicalNodeTree(), root, NodeType.JOIN);
     Enforcer enforcer = new Enforcer();
     enforcer.enforceJoinAlgorithm(joinNode.getPID(), JoinAlgorithm.IN_MEMORY_HASH_JOIN);
 
@@ -201,13 +203,13 @@ public class TestHashJoinExec {
     TajoConf localConf = new TajoConf(conf);
     localConf.setLongVar(TajoConf.ConfVars.EXECUTOR_INNER_JOIN_INMEMORY_HASH_THRESHOLD, 100l);
     PhysicalPlannerImpl phyPlanner = new PhysicalPlannerImpl(localConf, sm);
-    PhysicalExec exec = phyPlanner.createPlan(ctx, plan);
+    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getLogicalNodeTree(), root);
 
     ProjectionExec proj = (ProjectionExec) exec;
     assertTrue(proj.getChild() instanceof HashJoinExec);
     HashJoinExec joinExec = proj.getChild();
 
-    assertCheckInnerJoinRelatedFunctions(ctx, phyPlanner, joinNode, joinExec);
+    assertCheckInnerJoinRelatedFunctions(ctx, plan.getLogicalNodeTree(), phyPlanner, joinNode, joinExec);
   }
 
   /**
@@ -218,12 +220,13 @@ public class TestHashJoinExec {
    * we use some boolean variable <code>leftSmaller</code> to indicate which side is small.
    */
   private static boolean assertCheckInnerJoinRelatedFunctions(TaskAttemptContext ctx,
+                                                              LogicalNodeTree logicalPlanTree,
                                                        PhysicalPlannerImpl phyPlanner,
                                                        JoinNode joinNode, BinaryPhysicalExec joinExec) throws
       IOException {
 
-    String [] left = PlannerUtil.getRelationLineage(joinNode.getLeftChild());
-    String [] right = PlannerUtil.getRelationLineage(joinNode.getRightChild());
+    String [] left = PlannerUtil.getRelationLineage(logicalPlanTree, logicalPlanTree.getLeftChild(joinNode));
+    String [] right = PlannerUtil.getRelationLineage(logicalPlanTree, logicalPlanTree.getRightChild(joinNode));
 
     boolean leftSmaller;
     if (left[0].equals("default.p")) {
@@ -245,16 +248,16 @@ public class TestHashJoinExec {
     }
 
     if (leftSmaller) {
-      PhysicalExec [] ordered = phyPlanner.switchJoinSidesIfNecessary(ctx, joinNode, joinExec.getLeftChild(),
-          joinExec.getRightChild());
+      PhysicalExec [] ordered = phyPlanner.switchJoinSidesIfNecessary(ctx, logicalPlanTree, joinNode,
+          joinExec.getLeftChild(), joinExec.getRightChild());
       assertEquals(ordered[0], joinExec.getLeftChild());
       assertEquals(ordered[1], joinExec.getRightChild());
 
       assertEquals("default.p", left[0]);
       assertEquals("default.e", right[0]);
     } else {
-      PhysicalExec [] ordered = phyPlanner.switchJoinSidesIfNecessary(ctx, joinNode, joinExec.getLeftChild(),
-          joinExec.getRightChild());
+      PhysicalExec [] ordered = phyPlanner.switchJoinSidesIfNecessary(ctx, logicalPlanTree, joinNode,
+          joinExec.getLeftChild(), joinExec.getRightChild());
       assertEquals(ordered[1], joinExec.getLeftChild());
       assertEquals(ordered[0], joinExec.getRightChild());
 
@@ -263,11 +266,15 @@ public class TestHashJoinExec {
     }
 
     if (leftSmaller) {
-      assertTrue(phyPlanner.checkIfInMemoryInnerJoinIsPossible(ctx, joinNode.getLeftChild(), true));
-      assertFalse(phyPlanner.checkIfInMemoryInnerJoinIsPossible(ctx, joinNode.getRightChild(), false));
+      assertTrue(phyPlanner.checkIfInMemoryInnerJoinIsPossible(ctx, logicalPlanTree,
+          logicalPlanTree.getLeftChild(joinNode), true));
+      assertFalse(phyPlanner.checkIfInMemoryInnerJoinIsPossible(ctx, logicalPlanTree,
+          logicalPlanTree.getRightChild(joinNode), false));
     } else {
-      assertFalse(phyPlanner.checkIfInMemoryInnerJoinIsPossible(ctx, joinNode.getLeftChild(), true));
-      assertTrue(phyPlanner.checkIfInMemoryInnerJoinIsPossible(ctx, joinNode.getRightChild(), false));
+      assertFalse(phyPlanner.checkIfInMemoryInnerJoinIsPossible(ctx, logicalPlanTree,
+          logicalPlanTree.getLeftChild(joinNode), true));
+      assertTrue(phyPlanner.checkIfInMemoryInnerJoinIsPossible(ctx, logicalPlanTree,
+          logicalPlanTree.getRightChild(joinNode), false));
     }
 
     return leftSmaller;

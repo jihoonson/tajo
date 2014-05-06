@@ -207,20 +207,25 @@ public class TestBroadcastJoinPlan {
     assertTrue(broadcastTables.contains("default.small2"));
     assertTrue(!broadcastTables.contains("default.large1"));
 
-    LogicalNode leafNode = leafEB.getPlan();
+    LogicalNode leafNode = leafEB.getRoot();
     assertEquals(NodeType.GROUP_BY, leafNode.getType());
 
-    LogicalNode joinNode = ((GroupbyNode)leafNode).getChild();
+//    LogicalNode joinNode = ((GroupbyNode)leafNode).getChild();
+    LogicalNode joinNode = plan.getChild(leafNode);
     assertEquals(NodeType.JOIN, joinNode.getType());
 
-    LogicalNode leftNode = ((JoinNode)joinNode).getLeftChild();
-    LogicalNode rightNode = ((JoinNode)joinNode).getRightChild();
+//    LogicalNode leftNode = ((JoinNode)joinNode).getLeftChild();
+//    LogicalNode rightNode = ((JoinNode)joinNode).getRightChild();
+    LogicalNode leftNode = plan.getLeftChild(joinNode);
+    LogicalNode rightNode = plan.getRightChild(joinNode);
 
     assertEquals(NodeType.JOIN, leftNode.getType());
     assertEquals(NodeType.SCAN, rightNode.getType());
 
-    LogicalNode lastLeftNode = ((JoinNode)leftNode).getLeftChild();
-    LogicalNode lastRightNode = ((JoinNode)leftNode).getRightChild();
+//    LogicalNode lastLeftNode = ((JoinNode)leftNode).getLeftChild();
+//    LogicalNode lastRightNode = ((JoinNode)leftNode).getRightChild();
+    LogicalNode lastLeftNode = plan.getLeftChild(leftNode);
+    LogicalNode lastRightNode = plan.getRightChild(leftNode);
 
     assertEquals(NodeType.SCAN, lastLeftNode.getType());
     assertEquals(NodeType.SCAN, lastRightNode.getType());

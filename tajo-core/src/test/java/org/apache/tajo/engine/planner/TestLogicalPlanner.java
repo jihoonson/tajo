@@ -159,16 +159,16 @@ public class TestLogicalPlanner {
     assertEquals(NodeType.ROOT, plan.getType());
     TestLogicalNode.testCloneLogicalNode(plan);
     LogicalRootNode root = (LogicalRootNode) plan;
-    testJsonSerDerObject(root);
+    testJsonSerDerObject(planNode, root);
 
-    assertEquals(NodeType.PROJECTION, root.getChild().getType());
-    ProjectionNode projNode = root.getChild();
+    assertEquals(NodeType.PROJECTION, planNode.getChild(root).getType());
+    ProjectionNode projNode = planNode.getChild(root);
 
-    assertEquals(NodeType.SELECTION, projNode.getChild().getType());
-    SelectionNode selNode = projNode.getChild();
+    assertEquals(NodeType.SELECTION, planNode.getChild(projNode).getType());
+    SelectionNode selNode = planNode.getChild(projNode);
 
-    assertEquals(NodeType.SCAN, selNode.getChild().getType());
-    ScanNode scanNode = selNode.getChild();
+    assertEquals(NodeType.SCAN, planNode.getChild(selNode).getType());
+    ScanNode scanNode = planNode.getChild(selNode);
     assertEquals(CatalogUtil.buildFQName(DEFAULT_DATABASE_NAME, "employee"), scanNode.getTableName());
   }
 
@@ -192,7 +192,7 @@ public class TestLogicalPlanner {
 
     assertEquals(NodeType.ROOT, plan.getType());
     LogicalRootNode root = (LogicalRootNode) plan;
-    testJsonSerDerObject(root);
+    testJsonSerDerObject(planNode, root);
     TestLogicalNode.testCloneLogicalNode(root);
 
     Schema expectedSchema = new Schema();
@@ -205,23 +205,23 @@ public class TestLogicalPlanner {
       assertEquals(expectedSchema.getColumn(i).getDataType(), found.getDataType());
     }
 
-    assertEquals(NodeType.PROJECTION, root.getChild().getType());
-    ProjectionNode projNode = root.getChild();
+    assertEquals(NodeType.PROJECTION, planNode.getChild(root).getType());
+    ProjectionNode projNode = planNode.getChild(root);
 
-    assertEquals(NodeType.JOIN, projNode.getChild().getType());
-    JoinNode joinNode = projNode.getChild();
+    assertEquals(NodeType.JOIN, planNode.getChild(projNode).getType());
+    JoinNode joinNode = planNode.getChild(projNode);
 
-    assertEquals(NodeType.SCAN, joinNode.getLeftChild().getType());
-    ScanNode leftNode = joinNode.getLeftChild();
+    assertEquals(NodeType.SCAN, planNode.getLeftChild(joinNode).getType());
+    ScanNode leftNode = planNode.getLeftChild(joinNode);
     assertEquals(CatalogUtil.buildFQName(DEFAULT_DATABASE_NAME, "employee"), leftNode.getTableName());
-    assertEquals(NodeType.SCAN, joinNode.getRightChild().getType());
-    ScanNode rightNode = joinNode.getRightChild();
+    assertEquals(NodeType.SCAN, planNode.getRightChild(joinNode).getType());
+    ScanNode rightNode = planNode.getRightChild(joinNode);
     assertEquals(CatalogUtil.buildFQName(DEFAULT_DATABASE_NAME, "dept"), rightNode.getTableName());
 
     // three relations
     expr = sqlAnalyzer.parse(QUERIES[2]);
     plan = planner.createPlan(session, expr).getRootBlock().getRoot();
-    testJsonSerDerObject(plan);
+    testJsonSerDerObject(planNode, plan);
     TestLogicalNode.testCloneLogicalNode(plan);
 
     expectedSchema.addColumn("score", Type.INT4);
@@ -230,27 +230,27 @@ public class TestLogicalPlanner {
     assertEquals(NodeType.ROOT, plan.getType());
     root = (LogicalRootNode) plan;
 
-    assertEquals(NodeType.PROJECTION, root.getChild().getType());
-    projNode = root.getChild();
+    assertEquals(NodeType.PROJECTION, planNode.getChild(root).getType());
+    projNode = planNode.getChild(root);
 
-    assertEquals(NodeType.JOIN, projNode.getChild().getType());
-    joinNode = projNode.getChild();
+    assertEquals(NodeType.JOIN, planNode.getChild(projNode).getType());
+    joinNode = planNode.getChild(projNode);
 
-    assertEquals(NodeType.JOIN, joinNode.getLeftChild().getType());
+    assertEquals(NodeType.JOIN, planNode.getLeftChild(joinNode).getType());
 
-    assertEquals(NodeType.SCAN, joinNode.getRightChild().getType());
-    ScanNode scan1 = joinNode.getRightChild();
+    assertEquals(NodeType.SCAN, planNode.getRightChild(joinNode).getType());
+    ScanNode scan1 = planNode.getRightChild(joinNode);
     assertEquals(CatalogUtil.buildFQName(DEFAULT_DATABASE_NAME, "score"), scan1.getTableName());
 
-    JoinNode leftNode2 = joinNode.getLeftChild();
+    JoinNode leftNode2 = planNode.getLeftChild(joinNode);
     assertEquals(NodeType.JOIN, leftNode2.getType());
 
-    assertEquals(NodeType.SCAN, leftNode2.getLeftChild().getType());
-    ScanNode leftScan = leftNode2.getLeftChild();
+    assertEquals(NodeType.SCAN, planNode.getLeftChild(leftNode2).getType());
+    ScanNode leftScan = planNode.getLeftChild(leftNode2);
     assertEquals(CatalogUtil.buildFQName(DEFAULT_DATABASE_NAME, "employee"), leftScan.getTableName());
 
-    assertEquals(NodeType.SCAN, leftNode2.getRightChild().getType());
-    ScanNode rightScan = leftNode2.getRightChild();
+    assertEquals(NodeType.SCAN, planNode.getRightChild(leftNode2).getType());
+    ScanNode rightScan = planNode.getRightChild(leftNode2);
     assertEquals(CatalogUtil.buildFQName(DEFAULT_DATABASE_NAME, "dept"), rightScan.getTableName());
   }
 
@@ -274,30 +274,31 @@ public class TestLogicalPlanner {
   public final void testNaturalJoinPlan() throws PlanningException {
     // two relations
     Expr context = sqlAnalyzer.parse(JOINS[0]);
-    LogicalNode plan = planner.createPlan(session, context).getRootBlock().getRoot();
-    testJsonSerDerObject(plan);
+    LogicalPlan planNode = planner.createPlan(session, context);
+    LogicalNode plan = planNode.getRootBlock().getRoot();
+    testJsonSerDerObject(planNode, plan);
     assertSchema(expectedJoinSchema, plan.getOutSchema());
 
     assertEquals(NodeType.ROOT, plan.getType());
     LogicalRootNode root = (LogicalRootNode) plan;
-    assertEquals(NodeType.PROJECTION, root.getChild().getType());
-    ProjectionNode proj = root.getChild();
-    assertEquals(NodeType.JOIN, proj.getChild().getType());
-    JoinNode join = proj.getChild();
+    assertEquals(NodeType.PROJECTION, planNode.getChild(root).getType());
+    ProjectionNode proj = planNode.getChild(root);
+    assertEquals(NodeType.JOIN, planNode.getChild(proj).getType());
+    JoinNode join = planNode.getChild(proj);
     assertEquals(JoinType.INNER, join.getJoinType());
-    assertEquals(NodeType.SCAN, join.getRightChild().getType());
+    assertEquals(NodeType.SCAN, planNode.getRightChild(join).getType());
     assertTrue(join.hasJoinQual());
-    ScanNode scan = join.getRightChild();
+    ScanNode scan = planNode.getRightChild(join);
     assertEquals("default.score", scan.getTableName());
 
-    assertEquals(NodeType.JOIN, join.getLeftChild().getType());
-    join = join.getLeftChild();
+    assertEquals(NodeType.JOIN, planNode.getLeftChild(join).getType());
+    join = planNode.getLeftChild(join);
     assertEquals(JoinType.INNER, join.getJoinType());
-    assertEquals(NodeType.SCAN, join.getLeftChild().getType());
-    ScanNode outer = join.getLeftChild();
+    assertEquals(NodeType.SCAN, planNode.getLeftChild(join).getType());
+    ScanNode outer = planNode.getLeftChild(join);
     assertEquals("default.employee", outer.getTableName());
-    assertEquals(NodeType.SCAN, join.getRightChild().getType());
-    ScanNode inner = join.getRightChild();
+    assertEquals(NodeType.SCAN, planNode.getRightChild(join).getType());
+    ScanNode inner = planNode.getRightChild(join);
     assertEquals("default.dept", inner.getTableName());
   }
 
@@ -307,27 +308,27 @@ public class TestLogicalPlanner {
     Expr expr = sqlAnalyzer.parse(JOINS[1]);
     LogicalPlan plan = planner.createPlan(session, expr);
     LogicalNode root = plan.getRootBlock().getRoot();
-    testJsonSerDerObject(root);
+    testJsonSerDerObject(plan, root);
     assertSchema(expectedJoinSchema, root.getOutSchema());
 
     assertEquals(NodeType.ROOT, root.getType());
-    assertEquals(NodeType.PROJECTION, ((LogicalRootNode)root).getChild().getType());
-    ProjectionNode proj = ((LogicalRootNode)root).getChild();
-    assertEquals(NodeType.JOIN, proj.getChild().getType());
-    JoinNode join = proj.getChild();
+    assertEquals(NodeType.PROJECTION, plan.getChild(root).getType());
+    ProjectionNode proj = plan.getChild(root);
+    assertEquals(NodeType.JOIN, plan.getChild(proj).getType());
+    JoinNode join = plan.getChild(proj);
     assertEquals(JoinType.INNER, join.getJoinType());
-    assertEquals(NodeType.SCAN, join.getRightChild().getType());
-    ScanNode scan = join.getRightChild();
+    assertEquals(NodeType.SCAN, plan.getRightChild(join).getType());
+    ScanNode scan = plan.getRightChild(join);
     assertEquals("default.score", scan.getTableName());
 
-    assertEquals(NodeType.JOIN, join.getLeftChild().getType());
-    join = join.getLeftChild();
+    assertEquals(NodeType.JOIN, plan.getLeftChild(join).getType());
+    join = plan.getLeftChild(join);
     assertEquals(JoinType.INNER, join.getJoinType());
-    assertEquals(NodeType.SCAN, join.getLeftChild().getType());
-    ScanNode outer = join.getLeftChild();
+    assertEquals(NodeType.SCAN, plan.getLeftChild(join).getType());
+    ScanNode outer = plan.getLeftChild(join);
     assertEquals("default.employee", outer.getTableName());
-    assertEquals(NodeType.SCAN, join.getRightChild().getType());
-    ScanNode inner = join.getRightChild();
+    assertEquals(NodeType.SCAN, plan.getRightChild(join).getType());
+    ScanNode inner = plan.getRightChild(join);
     assertEquals("default.dept", inner.getTableName());
     assertTrue(join.hasJoinQual());
     assertEquals(EvalType.EQUAL, join.getJoinQual().getType());
@@ -337,29 +338,29 @@ public class TestLogicalPlanner {
   public final void testOuterJoinPlan() throws PlanningException {
     // two relations
     Expr expr = sqlAnalyzer.parse(JOINS[2]);
-    LogicalNode plan = planner.createPlan(session, expr).getRootBlock().getRoot();
-    testJsonSerDerObject(plan);
-    assertSchema(expectedJoinSchema, plan.getOutSchema());
+    LogicalPlan plan = planner.createPlan(session, expr);
+    LogicalNode root = plan.getRootBlock().getRoot();
+    testJsonSerDerObject(plan, root);
+    assertSchema(expectedJoinSchema, root.getOutSchema());
 
-    assertEquals(NodeType.ROOT, plan.getType());
-    LogicalRootNode root = (LogicalRootNode) plan;
-    assertEquals(NodeType.PROJECTION, root.getChild().getType());
-    ProjectionNode proj = root.getChild();
-    assertEquals(NodeType.JOIN, proj.getChild().getType());
-    JoinNode join = proj.getChild();
+    assertEquals(NodeType.ROOT, root.getType());
+    assertEquals(NodeType.PROJECTION,  plan.getChild(root).getType());
+    ProjectionNode proj = plan.getChild(root);
+    assertEquals(NodeType.JOIN, plan.getChild(proj).getType());
+    JoinNode join = plan.getChild(proj);
     assertEquals(JoinType.RIGHT_OUTER, join.getJoinType());
-    assertEquals(NodeType.SCAN, join.getRightChild().getType());
-    ScanNode scan = join.getRightChild();
+    assertEquals(NodeType.SCAN, plan.getRightChild(join).getType());
+    ScanNode scan = plan.getRightChild(join);
     assertEquals("default.score", scan.getTableName());
 
-    assertEquals(NodeType.JOIN, join.getLeftChild().getType());
-    join = join.getLeftChild();
+    assertEquals(NodeType.JOIN, plan.getLeftChild(join).getType());
+    join = plan.getLeftChild(join);
     assertEquals(JoinType.LEFT_OUTER, join.getJoinType());
-    assertEquals(NodeType.SCAN, join.getLeftChild().getType());
-    ScanNode outer = join.getLeftChild();
+    assertEquals(NodeType.SCAN, plan.getLeftChild(join).getType());
+    ScanNode outer = plan.getLeftChild(join);
     assertEquals("default.employee", outer.getTableName());
-    assertEquals(NodeType.SCAN, join.getRightChild().getType());
-    ScanNode inner = join.getRightChild();
+    assertEquals(NodeType.SCAN, plan.getRightChild(join).getType());
+    ScanNode inner = plan.getRightChild(join);
     assertEquals("default.dept", inner.getTableName());
     assertTrue(join.hasJoinQual());
     assertEquals(EvalType.EQUAL, join.getJoinQual().getType());
@@ -370,36 +371,36 @@ public class TestLogicalPlanner {
   public final void testGroupby() throws CloneNotSupportedException, PlanningException {
     // without 'having clause'
     Expr context = sqlAnalyzer.parse(QUERIES[7]);
-    LogicalNode plan = planner.createPlan(session, context).getRootBlock().getRoot();
+    LogicalPlan plan = planner.createPlan(session, context);
+    LogicalNode root = plan.getRootBlock().getRoot();
 
-    assertEquals(NodeType.ROOT, plan.getType());
-    LogicalRootNode root = (LogicalRootNode) plan;
-    testJsonSerDerObject(root);
-    testQuery7(root.getChild());
+    assertEquals(NodeType.ROOT, root.getType());
+    testJsonSerDerObject(plan, root);
+    testQuery7(plan, plan.getChild(root));
 
     // with having clause
     context = sqlAnalyzer.parse(QUERIES[3]);
-    plan = planner.createPlan(session, context).getRootBlock().getRoot();
-    TestLogicalNode.testCloneLogicalNode(plan);
+    plan = planner.createPlan(session, context);
+    root = plan.getRootBlock().getRoot();
+    TestLogicalNode.testCloneLogicalNode(root);
 
-    assertEquals(NodeType.ROOT, plan.getType());
-    root = (LogicalRootNode) plan;
+    assertEquals(NodeType.ROOT, root.getType());
 
-    assertEquals(NodeType.PROJECTION, root.getChild().getType());
-    ProjectionNode projNode = root.getChild();
-    assertEquals(NodeType.HAVING, projNode.getChild().getType());
-    HavingNode havingNode = projNode.getChild();
-    assertEquals(NodeType.GROUP_BY, havingNode.getChild().getType());
-    GroupbyNode groupByNode =  havingNode.getChild();
+    assertEquals(NodeType.PROJECTION, plan.getChild(root).getType());
+    ProjectionNode projNode = plan.getChild(root);
+    assertEquals(NodeType.HAVING, plan.getChild(projNode).getType());
+    HavingNode havingNode = plan.getChild(projNode);
+    assertEquals(NodeType.GROUP_BY, plan.getChild(havingNode).getType());
+    GroupbyNode groupByNode = plan.getChild(havingNode);
 
-    assertEquals(NodeType.JOIN, groupByNode.getChild().getType());
-    JoinNode joinNode = groupByNode.getChild();
+    assertEquals(NodeType.JOIN, plan.getChild(groupByNode).getType());
+    JoinNode joinNode = plan.getChild(groupByNode);
 
-    assertEquals(NodeType.SCAN, joinNode.getLeftChild().getType());
-    ScanNode leftNode = joinNode.getLeftChild();
+    assertEquals(NodeType.SCAN, plan.getLeftChild(joinNode).getType());
+    ScanNode leftNode = plan.getLeftChild(joinNode);
     assertEquals("default.dept", leftNode.getTableName());
-    assertEquals(NodeType.SCAN, joinNode.getRightChild().getType());
-    ScanNode rightNode = joinNode.getRightChild();
+    assertEquals(NodeType.SCAN, plan.getRightChild(joinNode).getType());
+    ScanNode rightNode = plan.getRightChild(joinNode);
     assertEquals("default.score", rightNode.getTableName());
 
     //LogicalOptimizer.optimize(context, plan);
@@ -410,10 +411,11 @@ public class TestLogicalPlanner {
   public final void testMultipleJoin() throws IOException, PlanningException {
     Expr expr = sqlAnalyzer.parse(
         FileUtil.readTextFile(new File("src/test/resources/queries/TestJoinQuery/testTPCHQ2Join.sql")));
-    LogicalNode plan = planner.createPlan(LocalTajoTestingUtility.createDummySession(), expr).getRootBlock().getRoot();
-    testJsonSerDerObject(plan);
+    LogicalPlan plan = planner.createPlan(LocalTajoTestingUtility.createDummySession(), expr);
+    LogicalNode root = plan.getRootBlock().getRoot();
+    testJsonSerDerObject(plan, root);
     Schema expected = tpch.getOutSchema("q2");
-    assertSchema(expected, plan.getOutSchema());
+    assertSchema(expected, root.getOutSchema());
   }
 
   private final void findJoinQual(EvalNode evalNode, Map<BinaryEval, Boolean> qualMap,
@@ -471,7 +473,7 @@ public class TestLogicalPlanner {
 
     LogicalPlan plan = planner.createPlan(LocalTajoTestingUtility.createDummySession(),expr);
     LogicalNode node = plan.getRootBlock().getRoot();
-    testJsonSerDerObject(node);
+    testJsonSerDerObject(plan, node);
 
     Schema expected = tpch.getOutSchema("q2");
     assertSchema(expected, node.getOutSchema());
@@ -479,7 +481,7 @@ public class TestLogicalPlanner {
     LogicalOptimizer optimizer = new LogicalOptimizer(util.getConfiguration());
     optimizer.optimize(plan);
 
-    LogicalNode[] nodes = PlannerUtil.findAllNodes(node, NodeType.JOIN);
+    LogicalNode[] nodes = PlannerUtil.findAllNodes(plan.getLogicalNodeTree(), node, NodeType.JOIN);
     Map<BinaryEval, Boolean> qualMap = TUtil.newHashMap();
     BinaryEval joinQual = new BinaryEval(EvalType.EQUAL
         , new FieldEval(new Column("default.n.n_regionkey", Type.INT4))
@@ -512,12 +514,12 @@ public class TestLogicalPlanner {
 
     LogicalPlan plan = planner.createPlan(LocalTajoTestingUtility.createDummySession(),expr);
     LogicalNode node = plan.getRootBlock().getRoot();
-    testJsonSerDerObject(node);
+    testJsonSerDerObject(plan, node);
 
     LogicalOptimizer optimizer = new LogicalOptimizer(util.getConfiguration());
     optimizer.optimize(plan);
 
-    LogicalNode[] nodes = PlannerUtil.findAllNodes(node, NodeType.SCAN);
+    LogicalNode[] nodes = PlannerUtil.findAllNodes(plan.getLogicalNodeTree(), node, NodeType.SCAN);
     Map<BinaryEval, Boolean> qualMap = TUtil.newHashMap();
     BinaryEval joinQual = new BinaryEval(EvalType.EQUAL
         , new FieldEval(new Column("default.n.n_name", Type.TEXT))
@@ -552,12 +554,12 @@ public class TestLogicalPlanner {
 
     LogicalPlan plan = planner.createPlan(LocalTajoTestingUtility.createDummySession(),expr);
     LogicalNode node = plan.getRootBlock().getRoot();
-    testJsonSerDerObject(node);
+    testJsonSerDerObject(plan, node);
 
     LogicalOptimizer optimizer = new LogicalOptimizer(util.getConfiguration());
     optimizer.optimize(plan);
 
-    LogicalNode[] nodes = PlannerUtil.findAllNodes(node, NodeType.SCAN);
+    LogicalNode[] nodes = PlannerUtil.findAllNodes(plan.getLogicalNodeTree(), node, NodeType.SCAN);
     Map<BinaryEval, Boolean> qualMap = TUtil.newHashMap();
     TextDatum[] datums = new TextDatum[3];
     datums[0] = new TextDatum("ARGENTINA");
@@ -598,7 +600,7 @@ public class TestLogicalPlanner {
 
     LogicalPlan plan = planner.createPlan(LocalTajoTestingUtility.createDummySession(),expr);
     LogicalNode node = plan.getRootBlock().getRoot();
-    testJsonSerDerObject(node);
+    testJsonSerDerObject(plan, node);
 
     LogicalOptimizer optimizer = new LogicalOptimizer(util.getConfiguration());
     optimizer.optimize(plan);
@@ -622,7 +624,7 @@ public class TestLogicalPlanner {
     );
     joinQualMap.put(joinQual, Boolean.FALSE);
 
-    LogicalNode[] nodes = PlannerUtil.findAllNodes(node, NodeType.JOIN);
+    LogicalNode[] nodes = PlannerUtil.findAllNodes(plan.getLogicalNodeTree(), node, NodeType.JOIN);
     for(LogicalNode eachNode : nodes) {
       JoinNode joinNode = (JoinNode)eachNode;
       if (joinNode.hasJoinQual()) {
@@ -634,7 +636,7 @@ public class TestLogicalPlanner {
       }
     }
 
-    nodes = PlannerUtil.findAllNodes(node, NodeType.SCAN);
+    nodes = PlannerUtil.findAllNodes(plan.getLogicalNodeTree(), node, NodeType.SCAN);
     for(LogicalNode eachNode : nodes) {
       ScanNode scanNode = (ScanNode)eachNode;
       if (scanNode.hasQual()) {
@@ -662,20 +664,20 @@ public class TestLogicalPlanner {
     }
   }
 
-  static void testQuery7(LogicalNode plan) {
-    assertEquals(NodeType.PROJECTION, plan.getType());
-    ProjectionNode projNode = (ProjectionNode) plan;
-    assertEquals(NodeType.GROUP_BY, projNode.getChild().getType());
-    GroupbyNode groupByNode = projNode.getChild();
+  static void testQuery7(LogicalPlan plan, LogicalNode root) {
+    assertEquals(NodeType.PROJECTION, root.getType());
+    ProjectionNode projNode = (ProjectionNode) root;
+    assertEquals(NodeType.GROUP_BY, plan.getChild(projNode).getType());
+    GroupbyNode groupByNode = plan.getChild(projNode);
 
-    assertEquals(NodeType.JOIN, groupByNode.getChild().getType());
-    JoinNode joinNode = groupByNode.getChild();
+    assertEquals(NodeType.JOIN, plan.getChild(groupByNode).getType());
+    JoinNode joinNode = plan.getChild(groupByNode);
 
-    assertEquals(NodeType.SCAN, joinNode.getLeftChild().getType());
-    ScanNode leftNode = joinNode.getLeftChild();
+    assertEquals(NodeType.SCAN, plan.getLeftChild(joinNode).getType());
+    ScanNode leftNode = plan.getLeftChild(joinNode);
     assertEquals(CatalogUtil.buildFQName(DEFAULT_DATABASE_NAME, "dept"), leftNode.getTableName());
-    assertEquals(NodeType.SCAN, joinNode.getRightChild().getType());
-    ScanNode rightNode = joinNode.getRightChild();
+    assertEquals(NodeType.SCAN, plan.getRightChild(joinNode).getType());
+    ScanNode rightNode = plan.getRightChild(joinNode);
     assertEquals(CatalogUtil.buildFQName(DEFAULT_DATABASE_NAME, "score"), rightNode.getTableName());
   }
 
@@ -683,79 +685,79 @@ public class TestLogicalPlanner {
   @Test
   public final void testStoreTable() throws CloneNotSupportedException, PlanningException {
     Expr context = sqlAnalyzer.parse(QUERIES[8]);
-    LogicalNode plan = planner.createPlan(session, context).getRootBlock().getRoot();
-    TestLogicalNode.testCloneLogicalNode(plan);
-    testJsonSerDerObject(plan);
+    LogicalPlan plan = planner.createPlan(session, context);
+    LogicalNode root = plan.getRootBlock().getRoot();
+    TestLogicalNode.testCloneLogicalNode(root);
+    testJsonSerDerObject(plan, root);
 
-    assertEquals(NodeType.ROOT, plan.getType());
-    LogicalRootNode root = (LogicalRootNode) plan;
+    assertEquals(NodeType.ROOT, root.getType());
 
-    assertEquals(NodeType.CREATE_TABLE, root.getChild().getType());
-    StoreTableNode storeNode = root.getChild();
-    testQuery7(storeNode.getChild());
+    assertEquals(NodeType.CREATE_TABLE, plan.getChild(root).getType());
+    StoreTableNode storeNode = plan.getChild(root);
+    testQuery7(plan, plan.getChild(storeNode));
   }
 
   @Test
   public final void testOrderBy() throws CloneNotSupportedException, PlanningException {
     Expr expr = sqlAnalyzer.parse(QUERIES[4]);
-    LogicalNode plan = planner.createPlan(session, expr).getRootBlock().getRoot();
-    testJsonSerDerObject(plan);
-    TestLogicalNode.testCloneLogicalNode(plan);
+    LogicalPlan plan = planner.createPlan(session, expr);
+    LogicalNode root = plan.getRootBlock().getRoot();
+    testJsonSerDerObject(plan, root);
+    TestLogicalNode.testCloneLogicalNode(root);
 
-    assertEquals(NodeType.ROOT, plan.getType());
-    LogicalRootNode root = (LogicalRootNode) plan;
+    assertEquals(NodeType.ROOT, root.getType());
 
-    assertEquals(NodeType.PROJECTION, root.getChild().getType());
-    ProjectionNode projNode = root.getChild();
+    assertEquals(NodeType.PROJECTION, plan.getChild(root).getType());
+    ProjectionNode projNode = plan.getChild(root);
 
-    assertEquals(NodeType.SORT, projNode.getChild().getType());
-    SortNode sortNode = projNode.getChild();
+    assertEquals(NodeType.SORT, plan.getChild(projNode).getType());
+    SortNode sortNode = plan.getChild(projNode);
 
-    assertEquals(NodeType.JOIN, sortNode.getChild().getType());
-    JoinNode joinNode = sortNode.getChild();
+    assertEquals(NodeType.JOIN, plan.getChild(sortNode).getType());
+    JoinNode joinNode = plan.getChild(sortNode);
 
-    assertEquals(NodeType.SCAN, joinNode.getLeftChild().getType());
-    ScanNode leftNode = joinNode.getLeftChild();
+    assertEquals(NodeType.SCAN, plan.getLeftChild(joinNode).getType());
+    ScanNode leftNode = plan.getLeftChild(joinNode);
     assertEquals(CatalogUtil.buildFQName(DEFAULT_DATABASE_NAME, "dept"), leftNode.getTableName());
-    assertEquals(NodeType.SCAN, joinNode.getRightChild().getType());
-    ScanNode rightNode = joinNode.getRightChild();
+    assertEquals(NodeType.SCAN, plan.getRightChild(joinNode).getType());
+    ScanNode rightNode = plan.getRightChild(joinNode);
     assertEquals(CatalogUtil.buildFQName(DEFAULT_DATABASE_NAME, "score"), rightNode.getTableName());
   }
 
   @Test
   public final void testLimit() throws CloneNotSupportedException, PlanningException {
     Expr expr = sqlAnalyzer.parse(QUERIES[12]);
-    LogicalNode plan = planner.createPlan(session, expr).getRootBlock().getRoot();
-    testJsonSerDerObject(plan);
-    TestLogicalNode.testCloneLogicalNode(plan);
+    LogicalPlan plan = planner.createPlan(session, expr);
+    LogicalNode root = plan.getRootBlock().getRoot();
+    testJsonSerDerObject(plan, root);
+    TestLogicalNode.testCloneLogicalNode(root);
 
-    assertEquals(NodeType.ROOT, plan.getType());
-    LogicalRootNode root = (LogicalRootNode) plan;
+    assertEquals(NodeType.ROOT, root.getType());
 
-    assertEquals(NodeType.PROJECTION, root.getChild().getType());
-    ProjectionNode projNode = root.getChild();
+    assertEquals(NodeType.PROJECTION, plan.getChild(root).getType());
+    ProjectionNode projNode = plan.getChild(root);
 
-    assertEquals(NodeType.LIMIT, projNode.getChild().getType());
-    LimitNode limitNode = projNode.getChild();
+    assertEquals(NodeType.LIMIT, plan.getChild(projNode).getType());
+    LimitNode limitNode = plan.getChild(projNode);
 
-    assertEquals(NodeType.SORT, limitNode.getChild().getType());
+    assertEquals(NodeType.SORT, plan.getChild(limitNode).getType());
   }
 
   @Test
   public final void testSPJPush() throws CloneNotSupportedException, PlanningException {
     Expr expr = sqlAnalyzer.parse(QUERIES[5]);
-    LogicalNode plan = planner.createPlan(session, expr).getRootBlock().getRoot();
-    testJsonSerDerObject(plan);
-    TestLogicalNode.testCloneLogicalNode(plan);
+    LogicalPlan plan = planner.createPlan(session, expr);
+    LogicalNode root = plan.getRootBlock().getRoot();
+    testJsonSerDerObject(plan, root);
+    TestLogicalNode.testCloneLogicalNode(root);
 
-    assertEquals(NodeType.ROOT, plan.getType());
-    LogicalRootNode root = (LogicalRootNode) plan;
-    assertEquals(NodeType.PROJECTION, root.getChild().getType());
-    ProjectionNode projNode = root.getChild();
-    assertEquals(NodeType.SELECTION, projNode.getChild().getType());
-    SelectionNode selNode = projNode.getChild();
-    assertEquals(NodeType.SCAN, selNode.getChild().getType());
-    ScanNode scanNode = selNode.getChild();
+    assertEquals(NodeType.ROOT, root.getType());
+    assertEquals(NodeType.PROJECTION, plan.getChild(root).getType());
+    ProjectionNode projNode = plan.getChild(root);
+    assertEquals(NodeType.SELECTION, plan.getChild(projNode).getType());
+    SelectionNode selNode = plan.getChild(projNode);
+    assertEquals(NodeType.SCAN, plan.getChild(selNode).getType());
+    ScanNode scanNode = plan.getChild(selNode);
     assertEquals(CatalogUtil.buildFQName(DEFAULT_DATABASE_NAME, "employee"), scanNode.getTableName());
   }
 
@@ -764,28 +766,30 @@ public class TestLogicalPlanner {
   @Test
   public final void testSPJ() throws CloneNotSupportedException, PlanningException {
     Expr expr = sqlAnalyzer.parse(QUERIES[6]);
-    LogicalNode plan = planner.createPlan(session, expr).getRootBlock().getRoot();
-    testJsonSerDerObject(plan);
-    TestLogicalNode.testCloneLogicalNode(plan);
+    LogicalPlan plan = planner.createPlan(session, expr);
+    LogicalNode root = plan.getRootBlock().getRoot();
+    testJsonSerDerObject(plan, root);
+    TestLogicalNode.testCloneLogicalNode(root);
   }
 
   @Test
   public final void testJson() throws PlanningException {
 	  Expr expr = sqlAnalyzer.parse(QUERIES[9]);
-	  LogicalNode plan = planner.createPlan(session, expr).getRootBlock().getRoot();
-    testJsonSerDerObject(plan);
+    LogicalPlan plan = planner.createPlan(session, expr);
+	  LogicalNode root = plan.getRootBlock().getRoot();
+    testJsonSerDerObject(plan, root);
 
-	  String json = plan.toJson();
-	  LogicalNode fromJson = CoreGsonHelper.fromJson(json, LogicalNode.class);
-	  assertEquals(NodeType.ROOT, fromJson.getType());
-	  LogicalNode project = ((LogicalRootNode)fromJson).getChild();
+	  String json = plan.getLogicalNodeTree().toJson();
+	  LogicalNodeTree fromJson = CoreGsonHelper.fromJson(json, LogicalNodeTree.class);
+	  assertEquals(NodeType.ROOT, root.getType());
+	  LogicalNode project = fromJson.getChild(root);
 	  assertEquals(NodeType.PROJECTION, project.getType());
-	  assertEquals(NodeType.HAVING, ((ProjectionNode) project).getChild().getType());
-    HavingNode havingNode = ((ProjectionNode) project).getChild();
-    assertEquals(NodeType.GROUP_BY, havingNode.getChild().getType());
-    GroupbyNode groupbyNode = havingNode.getChild();
-    assertEquals(NodeType.SCAN, groupbyNode.getChild().getType());
-	  LogicalNode scan = groupbyNode.getChild();
+	  assertEquals(NodeType.HAVING, fromJson.getChild(project).getType());
+    HavingNode havingNode = fromJson.getChild(project);
+    assertEquals(NodeType.GROUP_BY, fromJson.getChild(havingNode).getType());
+    GroupbyNode groupbyNode = fromJson.getChild(havingNode);
+    assertEquals(NodeType.SCAN, fromJson.getChild(groupbyNode).getType());
+	  LogicalNode scan = fromJson.getChild(groupbyNode);
 	  assertEquals(NodeType.SCAN, scan.getType());
   }
 
@@ -793,10 +797,12 @@ public class TestLogicalPlanner {
   public final void testVisitor() throws PlanningException {
     // two relations
     Expr expr = sqlAnalyzer.parse(QUERIES[1]);
-    LogicalNode plan = planner.createPlan(session, expr).getRootBlock().getRoot();
+    LogicalPlan plan = planner.createPlan(session, expr);
+    LogicalNode root = plan.getRootBlock().getRoot();
 
     TestVisitor vis = new TestVisitor();
-    plan.postOrder(vis);
+    plan.getLogicalNodeTree().postOrder(vis, root);
+//    plan.postOrder(vis);
 
     assertEquals(NodeType.ROOT, vis.stack.pop().getType());
     assertEquals(NodeType.PROJECTION, vis.stack.pop().getType());
@@ -817,12 +823,11 @@ public class TestLogicalPlanner {
   @Test
   public final void testExprNode() throws PlanningException {
     Expr expr = sqlAnalyzer.parse(QUERIES[10]);
-    LogicalPlan rootNode = planner.createPlan(session, expr);
-    LogicalNode plan = rootNode.getRootBlock().getRoot();
-    testJsonSerDerObject(plan);
-    assertEquals(NodeType.ROOT, plan.getType());
-    LogicalRootNode root = (LogicalRootNode) plan;
-    assertEquals(NodeType.EXPRS, root.getChild().getType());
+    LogicalPlan plan = planner.createPlan(session, expr);
+    LogicalNode root = plan.getRootBlock().getRoot();
+    testJsonSerDerObject(plan, root);
+    assertEquals(NodeType.ROOT, root.getType());
+    assertEquals(NodeType.EXPRS, plan.getChild(root).getType());
     Schema out = root.getOutSchema();
 
     Iterator<Column> it = out.getColumns().iterator();
@@ -842,17 +847,17 @@ public class TestLogicalPlanner {
     assertEquals(NodeType.ROOT, plan.getType());
     TestLogicalNode.testCloneLogicalNode(plan);
     LogicalRootNode root = (LogicalRootNode) plan;
-    testJsonSerDerObject(root);
+    testJsonSerDerObject(planNode, root);
 
-    assertEquals(NodeType.PROJECTION, root.getChild().getType());
-    ProjectionNode projNode = root.getChild();
+    assertEquals(NodeType.PROJECTION, planNode.getChild(root).getType());
+    ProjectionNode projNode = planNode.getChild(root);
     assertEquals(6, projNode.getOutSchema().size());
 
-    assertEquals(NodeType.SELECTION, projNode.getChild().getType());
-    SelectionNode selNode = projNode.getChild();
+    assertEquals(NodeType.SELECTION, planNode.getChild(projNode).getType());
+    SelectionNode selNode = planNode.getChild(projNode);
 
-    assertEquals(NodeType.SCAN, selNode.getChild().getType());
-    ScanNode scanNode = selNode.getChild();
+    assertEquals(NodeType.SCAN, planNode.getChild(selNode).getType());
+    ScanNode scanNode = planNode.getChild(selNode);
     assertEquals(CatalogUtil.buildFQName(DEFAULT_DATABASE_NAME, "employee"), scanNode.getTableName());
   }
 
@@ -865,9 +870,9 @@ public class TestLogicalPlanner {
   @Test
   public final void testAlias1() throws PlanningException {
     Expr expr = sqlAnalyzer.parse(ALIAS[0]);
-    LogicalNode plan = planner.createPlan(session, expr).getRootBlock().getRoot();
-    LogicalRootNode root = (LogicalRootNode) plan;
-    testJsonSerDerObject(root);
+    LogicalPlan plan = planner.createPlan(session, expr);
+    LogicalNode root = plan.getRootBlock().getRoot();
+    testJsonSerDerObject(plan, root);
 
     Schema finalSchema = root.getOutSchema();
     Iterator<Column> it = finalSchema.getColumns().iterator();
@@ -877,8 +882,8 @@ public class TestLogicalPlanner {
     assertEquals("total", col.getSimpleName());
 
     expr = sqlAnalyzer.parse(ALIAS[1]);
-    plan = planner.createPlan(session, expr).getRootBlock().getRoot();
-    root = (LogicalRootNode) plan;
+    plan = planner.createPlan(session, expr);
+    root = plan.getRootBlock().getRoot();
 
     finalSchema = root.getOutSchema();
     it = finalSchema.getColumns().iterator();
@@ -891,9 +896,9 @@ public class TestLogicalPlanner {
   @Test
   public final void testAlias2() throws PlanningException {
     Expr expr = sqlAnalyzer.parse(ALIAS[1]);
-    LogicalNode plan = planner.createPlan(session, expr).getRootBlock().getRoot();
-    LogicalRootNode root = (LogicalRootNode) plan;
-    testJsonSerDerObject(root);
+    LogicalPlan plan = planner.createPlan(session, expr);
+    LogicalNode root = plan.getRootBlock().getRoot();
+    testJsonSerDerObject(plan, root);
 
     Schema finalSchema = root.getOutSchema();
     Iterator<Column> it = finalSchema.getColumns().iterator();
@@ -910,11 +915,11 @@ public class TestLogicalPlanner {
   @Test
   public final void testCreateTableDef() throws PlanningException {
     Expr expr = sqlAnalyzer.parse(CREATE_TABLE[0]);
-    LogicalNode plan = planner.createPlan(session, expr).getRootBlock().getRoot();
-    LogicalRootNode root = (LogicalRootNode) plan;
-    testJsonSerDerObject(root);
-    assertEquals(NodeType.CREATE_TABLE, root.getChild().getType());
-    CreateTableNode createTable = root.getChild();
+    LogicalPlan plan = planner.createPlan(session, expr);
+    LogicalNode root = plan.getRootBlock().getRoot();
+    testJsonSerDerObject(plan, root);
+    assertEquals(NodeType.CREATE_TABLE, plan.getChild(root).getType());
+    CreateTableNode createTable = plan.getChild(root);
 
     Schema def = createTable.getTableSchema();
     assertEquals("name", def.getColumn(0).getSimpleName());
@@ -994,14 +999,14 @@ public class TestLogicalPlanner {
   @Test
   public final void testSetPlan() throws PlanningException {
     Expr expr = sqlAnalyzer.parse(setStatements[0]);
-    LogicalNode plan = planner.createPlan(session, expr).getRootBlock().getRoot();
-    testJsonSerDerObject(plan);
-    assertEquals(NodeType.ROOT, plan.getType());
-    LogicalRootNode root = (LogicalRootNode) plan;
-    assertEquals(NodeType.UNION, root.getChild().getType());
-    UnionNode union = root.getChild();
-    assertEquals(NodeType.PROJECTION, union.getLeftChild().getType());
-    assertEquals(NodeType.PROJECTION, union.getRightChild().getType());
+    LogicalPlan plan = planner.createPlan(session, expr);
+    LogicalNode root = plan.getRootBlock().getRoot();
+    testJsonSerDerObject(plan, root);
+    assertEquals(NodeType.ROOT, root.getType());
+    assertEquals(NodeType.UNION, plan.getChild(root).getType());
+    UnionNode union = plan.getChild(root);
+    assertEquals(NodeType.PROJECTION, plan.getLeftChild(union).getType());
+    assertEquals(NodeType.PROJECTION, plan.getRightChild(union).getType());
   }
 
   static final String [] setQualifiers = {
@@ -1013,33 +1018,33 @@ public class TestLogicalPlanner {
   @Test
   public void testSetQualifier() throws PlanningException {
     Expr context = sqlAnalyzer.parse(setQualifiers[0]);
-    LogicalNode plan = planner.createPlan(session, context).getRootBlock().getRoot();
-    testJsonSerDerObject(plan);
-    assertEquals(NodeType.ROOT, plan.getType());
-    LogicalRootNode root = (LogicalRootNode) plan;
-    assertEquals(NodeType.PROJECTION, root.getChild().getType());
-    ProjectionNode projectionNode = root.getChild();
-    assertEquals(NodeType.SCAN, projectionNode.getChild().getType());
+    LogicalPlan plan = planner.createPlan(session, context);
+    LogicalNode root = plan.getRootBlock().getRoot();
+    testJsonSerDerObject(plan, root);
+    assertEquals(NodeType.ROOT, root.getType());
+    assertEquals(NodeType.PROJECTION, plan.getChild(root).getType());
+    ProjectionNode projectionNode = plan.getChild(root);
+    assertEquals(NodeType.SCAN, plan.getChild(projectionNode).getType());
 
     context = sqlAnalyzer.parse(setQualifiers[1]);
-    plan = planner.createPlan(session, context).getRootBlock().getRoot();
-    testJsonSerDerObject(plan);
-    assertEquals(NodeType.ROOT, plan.getType());
-    root = (LogicalRootNode) plan;
-    assertEquals(NodeType.PROJECTION, root.getChild().getType());
-    projectionNode = root.getChild();
-    assertEquals(NodeType.GROUP_BY, projectionNode.getChild().getType());
+    plan = planner.createPlan(session, context);
+    root = plan.getRootBlock().getRoot();
+    testJsonSerDerObject(plan, root);
+    assertEquals(NodeType.ROOT, root.getType());
+    assertEquals(NodeType.PROJECTION, plan.getChild(root).getType());
+    projectionNode = plan.getChild(root);
+    assertEquals(NodeType.GROUP_BY, plan.getChild(projectionNode).getType());
 
     context = sqlAnalyzer.parse(setQualifiers[2]);
-    plan = planner.createPlan(session, context).getRootBlock().getRoot();
-    testJsonSerDerObject(plan);
-    root = (LogicalRootNode) plan;
-    assertEquals(NodeType.PROJECTION, root.getChild().getType());
-    projectionNode = root.getChild();
-    assertEquals(NodeType.SCAN, projectionNode.getChild().getType());
+    plan = planner.createPlan(session, context);
+    root = plan.getRootBlock().getRoot();
+    testJsonSerDerObject(plan, root);
+    assertEquals(NodeType.PROJECTION, plan.getChild(root).getType());
+    projectionNode = plan.getChild(root);
+    assertEquals(NodeType.SCAN, plan.getChild(projectionNode).getType());
   }
 
-  public void testJsonSerDerObject(LogicalNode rootNode) {
+  public void testJsonSerDerObject(LogicalPlan plan, LogicalNode rootNode) {
     String json = rootNode.toJson();
     LogicalNode fromJson = CoreGsonHelper.fromJson(json, LogicalNode.class);
     assertTrue("JSON (de) serialization equivalence check", rootNode.deepEquals(fromJson));
@@ -1130,7 +1135,7 @@ public class TestLogicalPlanner {
 
   private static InsertNode getInsertNode(LogicalPlan plan) {
     LogicalRootNode root = plan.getRootBlock().getRoot();
-    assertEquals(NodeType.INSERT, root.getChild().getType());
-    return root.getChild();
+    assertEquals(NodeType.INSERT, plan.getChild(root).getType());
+    return plan.getChild(root);
   }
 }

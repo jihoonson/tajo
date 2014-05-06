@@ -347,7 +347,7 @@ public class TestJoinBroadcast extends QueryTestCaseBase {
 
     ExecutionBlock firstJoinEB = plan.getChild(rootEB.getId(), 0);
     assertNotNull(firstJoinEB);
-    assertEquals(NodeType.JOIN, firstJoinEB.getPlan().getType());
+    assertEquals(NodeType.JOIN, firstJoinEB.getRoot().getType());
     assertEquals(0, firstJoinEB.getBroadcastTables().size());
 
     ExecutionBlock leafEB1 = plan.getChild(firstJoinEB.getId(), 0);

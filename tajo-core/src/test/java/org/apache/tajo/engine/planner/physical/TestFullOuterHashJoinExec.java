@@ -259,8 +259,9 @@ public class TestFullOuterHashJoinExec {
   @Test
   public final void testFullOuterHashJoinExec0() throws IOException, PlanningException {
     Expr expr = analyzer.parse(QUERIES[0]);
-    LogicalNode plan = planner.createPlan(session, expr).getRootBlock().getRoot();
-    JoinNode joinNode = PlannerUtil.findTopNode(plan, NodeType.JOIN);
+    LogicalPlan plan = planner.createPlan(session, expr);
+    LogicalNode root = plan.getRootBlock().getRoot();
+    JoinNode joinNode = PlannerUtil.findTopNode(plan.getLogicalNodeTree(), root, NodeType.JOIN);
     Enforcer enforcer = new Enforcer();
     enforcer.enforceJoinAlgorithm(joinNode.getPID(), JoinAlgorithm.IN_MEMORY_HASH_JOIN);
 
@@ -274,7 +275,7 @@ public class TestFullOuterHashJoinExec {
     ctx.setEnforcer(enforcer);
 
     PhysicalPlanner phyPlanner = new PhysicalPlannerImpl(conf, sm);
-    PhysicalExec exec = phyPlanner.createPlan(ctx, plan);
+    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getLogicalNodeTree(), root);
 
     ProjectionExec proj = (ProjectionExec) exec;
     assertTrue(proj.getChild() instanceof HashFullOuterJoinExec);
@@ -296,8 +297,9 @@ public class TestFullOuterHashJoinExec {
   @Test
   public final void testFullOuterHashJoinExec1() throws IOException, PlanningException {
     Expr expr = analyzer.parse(QUERIES[1]);
-    LogicalNode plan = planner.createPlan(session, expr).getRootBlock().getRoot();
-    JoinNode joinNode = PlannerUtil.findTopNode(plan, NodeType.JOIN);
+    LogicalPlan plan = planner.createPlan(session, expr);
+    LogicalNode root = plan.getRootBlock().getRoot();
+    JoinNode joinNode = PlannerUtil.findTopNode(plan.getLogicalNodeTree(), root, NodeType.JOIN);
     Enforcer enforcer = new Enforcer();
     enforcer.enforceJoinAlgorithm(joinNode.getPID(), JoinAlgorithm.IN_MEMORY_HASH_JOIN);
 
@@ -311,7 +313,7 @@ public class TestFullOuterHashJoinExec {
     ctx.setEnforcer(enforcer);
 
     PhysicalPlanner phyPlanner = new PhysicalPlannerImpl(conf, sm);
-    PhysicalExec exec = phyPlanner.createPlan(ctx, plan);
+    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getLogicalNodeTree(), root);
 
     ProjectionExec proj = (ProjectionExec) exec;
     assertTrue(proj.getChild() instanceof HashFullOuterJoinExec);
@@ -332,8 +334,9 @@ public class TestFullOuterHashJoinExec {
   @Test
   public final void testFullOuterHashJoinExec2() throws IOException, PlanningException {
     Expr expr = analyzer.parse(QUERIES[2]);
-    LogicalNode plan = planner.createPlan(session, expr).getRootBlock().getRoot();
-    JoinNode joinNode = PlannerUtil.findTopNode(plan, NodeType.JOIN);
+    LogicalPlan plan = planner.createPlan(session, expr);
+    LogicalNode root = plan.getRootBlock().getRoot();
+    JoinNode joinNode = PlannerUtil.findTopNode(plan.getLogicalNodeTree(), root, NodeType.JOIN);
     Enforcer enforcer = new Enforcer();
     enforcer.enforceJoinAlgorithm(joinNode.getPID(), JoinAlgorithm.IN_MEMORY_HASH_JOIN);
 
@@ -347,7 +350,7 @@ public class TestFullOuterHashJoinExec {
     ctx.setEnforcer(enforcer);
 
     PhysicalPlanner phyPlanner = new PhysicalPlannerImpl(conf, sm);
-    PhysicalExec exec = phyPlanner.createPlan(ctx, plan);
+    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getLogicalNodeTree(), root);
 
     ProjectionExec proj = (ProjectionExec) exec;
     assertTrue(proj.getChild() instanceof HashFullOuterJoinExec);
@@ -369,8 +372,9 @@ public class TestFullOuterHashJoinExec {
   @Test
   public final void testFullOuterHashJoinExec3() throws IOException, PlanningException {
     Expr expr = analyzer.parse(QUERIES[3]);
-    LogicalNode plan = planner.createPlan(session, expr).getRootBlock().getRoot();
-    JoinNode joinNode = PlannerUtil.findTopNode(plan, NodeType.JOIN);
+    LogicalPlan plan = planner.createPlan(session, expr);
+    LogicalNode root = plan.getRootBlock().getRoot();
+    JoinNode joinNode = PlannerUtil.findTopNode(plan.getLogicalNodeTree(), root, NodeType.JOIN);
     Enforcer enforcer = new Enforcer();
     enforcer.enforceJoinAlgorithm(joinNode.getPID(), JoinAlgorithm.IN_MEMORY_HASH_JOIN);
 
@@ -385,7 +389,7 @@ public class TestFullOuterHashJoinExec {
     ctx.setEnforcer(enforcer);
 
     PhysicalPlanner phyPlanner = new PhysicalPlannerImpl(conf, sm);
-    PhysicalExec exec = phyPlanner.createPlan(ctx, plan);
+    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getLogicalNodeTree(), root);
 
     ProjectionExec proj = (ProjectionExec) exec;
     assertTrue(proj.getChild() instanceof HashFullOuterJoinExec);

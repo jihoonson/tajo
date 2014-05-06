@@ -156,7 +156,7 @@ public class TestMergeJoinExec {
     LogicalPlan plan = planner.createPlan(LocalTajoTestingUtility.createDummySession(), expr);
     LogicalNode root = plan.getRootBlock().getRoot();
 
-    JoinNode joinNode = PlannerUtil.findTopNode(root, NodeType.JOIN);
+    JoinNode joinNode = PlannerUtil.findTopNode(plan.getLogicalNodeTree(), root, NodeType.JOIN);
     Enforcer enforcer = new Enforcer();
     enforcer.enforceJoinAlgorithm(joinNode.getPID(), JoinAlgorithm.MERGE_JOIN);
 
@@ -170,7 +170,7 @@ public class TestMergeJoinExec {
     ctx.setEnforcer(enforcer);
 
     PhysicalPlanner phyPlanner = new PhysicalPlannerImpl(conf,sm);
-    PhysicalExec exec = phyPlanner.createPlan(ctx, root);
+    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getLogicalNodeTree(), root);
     ProjectionExec proj = (ProjectionExec) exec;
     assertTrue(proj.getChild() instanceof MergeJoinExec);
 

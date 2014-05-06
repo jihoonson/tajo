@@ -162,7 +162,7 @@ public class TestHashAntiJoinExec {
     LogicalNode rootNode = plan.getRootBlock().getRoot();
 
     PhysicalPlanner phyPlanner = new PhysicalPlannerImpl(conf, sm);
-    PhysicalExec exec = phyPlanner.createPlan(ctx, rootNode);
+    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getLogicalNodeTree(), rootNode);
 
     // replace an equal join with an hash anti join.
     if (exec instanceof MergeJoinExec) {

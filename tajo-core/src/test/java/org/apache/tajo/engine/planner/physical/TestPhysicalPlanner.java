@@ -209,7 +209,7 @@ public class TestPhysicalPlanner {
 
 
     PhysicalPlanner phyPlanner = new PhysicalPlannerImpl(conf, sm);
-    PhysicalExec exec = phyPlanner.createPlan(ctx, rootNode);
+    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getLogicalNodeTree(), rootNode);
 
     Tuple tuple;
     int i = 0;
@@ -239,7 +239,7 @@ public class TestPhysicalPlanner {
 
 
     PhysicalPlanner phyPlanner = new PhysicalPlannerImpl(conf,sm);
-    PhysicalExec exec = phyPlanner.createPlan(ctx, rootNode);
+    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getLogicalNodeTree(), rootNode);
 
     Tuple tuple;
     int i = 0;
@@ -266,7 +266,7 @@ public class TestPhysicalPlanner {
     LogicalNode rootNode = plan.getRootBlock().getRoot();
 
     PhysicalPlanner phyPlanner = new PhysicalPlannerImpl(conf,sm);
-    PhysicalExec exec = phyPlanner.createPlan(ctx, rootNode);
+    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getLogicalNodeTree(), rootNode);
 
     int i = 0;
     Tuple tuple;
@@ -296,7 +296,7 @@ public class TestPhysicalPlanner {
     LogicalNode rootNode = optimizer.optimize(plan);
 
     PhysicalPlanner phyPlanner = new PhysicalPlannerImpl(conf,sm);
-    PhysicalExec exec = phyPlanner.createPlan(ctx, rootNode);
+    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getLogicalNodeTree(), rootNode);
 
     int i = 0;
     Tuple tuple;
@@ -324,7 +324,7 @@ public class TestPhysicalPlanner {
     optimizer.optimize(plan);
 
     PhysicalPlanner phyPlanner = new PhysicalPlannerImpl(conf,sm);
-    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getRootBlock().getRoot());
+    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getLogicalNodeTree(), plan.getRootBlock().getRoot());
 
     /*HashAggregateExec hashAgg = (HashAggregateExec) exec;
 
@@ -388,7 +388,7 @@ public class TestPhysicalPlanner {
     TableMeta outputMeta = CatalogUtil.newTableMeta(StoreType.CSV);
 
     PhysicalPlanner phyPlanner = new PhysicalPlannerImpl(conf,sm);
-    PhysicalExec exec = phyPlanner.createPlan(ctx, rootNode);
+    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getLogicalNodeTree(), rootNode);
     exec.init();
     exec.next();
     exec.close();
@@ -428,7 +428,7 @@ public class TestPhysicalPlanner {
     TableMeta outputMeta = CatalogUtil.newTableMeta(StoreType.RCFILE);
 
     PhysicalPlanner phyPlanner = new PhysicalPlannerImpl(conf,sm);
-    PhysicalExec exec = phyPlanner.createPlan(ctx, rootNode);
+    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getLogicalNodeTree(), rootNode);
     exec.init();
     exec.next();
     exec.close();
@@ -465,7 +465,7 @@ public class TestPhysicalPlanner {
     LogicalPlan plan = planner.createPlan(session, context);
     LogicalNode rootNode = optimizer.optimize(plan);
     PhysicalPlanner phyPlanner = new PhysicalPlannerImpl(conf,sm);
-    PhysicalExec exec = phyPlanner.createPlan(ctx, rootNode);
+    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getLogicalNodeTree(), rootNode);
     assertTrue(exec instanceof SortBasedColPartitionStoreExec);
   }
 
@@ -475,7 +475,7 @@ public class TestPhysicalPlanner {
     Expr context = analyzer.parse(CreateTableAsStmts[2]);
     LogicalPlan plan = planner.createPlan(session, context);
     LogicalRootNode rootNode = (LogicalRootNode) optimizer.optimize(plan);
-    CreateTableNode createTableNode = rootNode.getChild();
+    CreateTableNode createTableNode = plan.getChild(rootNode);
     Enforcer enforcer = new Enforcer();
     enforcer.enforceColumnPartitionAlgorithm(createTableNode.getPID(), ColumnPartitionAlgorithm.HASH_PARTITION);
 
@@ -488,7 +488,7 @@ public class TestPhysicalPlanner {
     ctx.setOutputPath(new Path(workDir, "grouped4"));
 
     PhysicalPlanner phyPlanner = new PhysicalPlannerImpl(conf,sm);
-    PhysicalExec exec = phyPlanner.createPlan(ctx, rootNode);
+    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getLogicalNodeTree(), rootNode);
     assertTrue(exec instanceof HashBasedColPartitionStoreExec);
   }
 
@@ -498,7 +498,7 @@ public class TestPhysicalPlanner {
     Expr context = analyzer.parse(CreateTableAsStmts[2]);
     LogicalPlan plan = planner.createPlan(session, context);
     LogicalRootNode rootNode = (LogicalRootNode) optimizer.optimize(plan);
-    CreateTableNode createTableNode = rootNode.getChild();
+    CreateTableNode createTableNode = plan.getChild(rootNode);
     Enforcer enforcer = new Enforcer();
     enforcer.enforceColumnPartitionAlgorithm(createTableNode.getPID(), ColumnPartitionAlgorithm.SORT_PARTITION);
 
@@ -511,7 +511,7 @@ public class TestPhysicalPlanner {
     ctx.setOutputPath(new Path(workDir, "grouped5"));
 
     PhysicalPlanner phyPlanner = new PhysicalPlannerImpl(conf,sm);
-    PhysicalExec exec = phyPlanner.createPlan(ctx, rootNode);
+    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getLogicalNodeTree(), rootNode);
     assertTrue(exec instanceof SortBasedColPartitionStoreExec);
   }
 
@@ -540,7 +540,7 @@ public class TestPhysicalPlanner {
     FileSystem fs = sm.getFileSystem();
 
     PhysicalPlanner phyPlanner = new PhysicalPlannerImpl(conf,sm);
-    PhysicalExec exec = phyPlanner.createPlan(ctx, rootNode);
+    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getLogicalNodeTree(), rootNode);
     exec.init();
     exec.next();
     exec.close();
@@ -596,7 +596,7 @@ public class TestPhysicalPlanner {
     TableMeta outputMeta = CatalogUtil.newTableMeta(dataChannel.getStoreType());
 
     PhysicalPlanner phyPlanner = new PhysicalPlannerImpl(conf,sm);
-    PhysicalExec exec = phyPlanner.createPlan(ctx, rootNode);
+    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getLogicalNodeTree(), rootNode);
     exec.init();
     exec.next();
     exec.close();
@@ -642,13 +642,13 @@ public class TestPhysicalPlanner {
     LogicalNode rootNode = optimizer.optimize(plan);
 
     // Set all aggregation functions to the first phase mode
-    GroupbyNode groupbyNode = PlannerUtil.findTopNode(rootNode, NodeType.GROUP_BY);
+    GroupbyNode groupbyNode = PlannerUtil.findTopNode(plan.getLogicalNodeTree(), rootNode, NodeType.GROUP_BY);
     for (AggregationFunctionCallEval function : groupbyNode.getAggFunctions()) {
       function.setFirstPhase();
     }
 
     PhysicalPlanner phyPlanner = new PhysicalPlannerImpl(conf,sm);
-    PhysicalExec exec = phyPlanner.createPlan(ctx, rootNode);
+    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getLogicalNodeTree(), rootNode);
 
     exec.init();
     Tuple tuple = exec.next();
@@ -672,13 +672,13 @@ public class TestPhysicalPlanner {
     LogicalNode rootNode = optimizer.optimize(plan);
 
     // Set all aggregation functions to the first phase mode
-    GroupbyNode groupbyNode = PlannerUtil.findTopNode(rootNode, NodeType.GROUP_BY);
+    GroupbyNode groupbyNode = PlannerUtil.findTopNode(plan.getLogicalNodeTree(), rootNode, NodeType.GROUP_BY);
     for (AggregationFunctionCallEval function : groupbyNode.getAggFunctions()) {
       function.setFirstPhase();
     }
 
     PhysicalPlanner phyPlanner = new PhysicalPlannerImpl(conf,sm);
-    PhysicalExec exec = phyPlanner.createPlan(ctx, rootNode);
+    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getLogicalNodeTree(), rootNode);
     exec.init();
     Tuple tuple = exec.next();
     assertEquals(30, tuple.get(0).asInt8());
@@ -699,7 +699,7 @@ public class TestPhysicalPlanner {
     LogicalNode rootNode = optimizer.optimize(plan);
 
     PhysicalPlanner phyPlanner = new PhysicalPlannerImpl(conf,sm);
-    PhysicalExec exec = phyPlanner.createPlan(ctx, rootNode);
+    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getLogicalNodeTree(), rootNode);
 
     int count = 0;
     exec.init();
@@ -723,12 +723,12 @@ public class TestPhysicalPlanner {
     LogicalNode rootNode = optimizer.optimize(plan);
     LogicalRootNode root = (LogicalRootNode) rootNode;
     UnionNode union = plan.createNode(UnionNode.class);
-    union.setLeftChild(root.getChild());
-    union.setRightChild(root.getChild());
-    root.setChild(union);
+    plan.setLeftChild(plan.getChild(root), union);
+    plan.setRightChild(plan.getChild(root), union);
+    plan.setChild(union, root);
 
     PhysicalPlanner phyPlanner = new PhysicalPlannerImpl(conf,sm);
-    PhysicalExec exec = phyPlanner.createPlan(ctx, root);
+    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getLogicalNodeTree(), root);
 
     int count = 0;
     exec.init();
@@ -749,7 +749,7 @@ public class TestPhysicalPlanner {
     LogicalNode rootNode = optimizer.optimize(plan);
 
     PhysicalPlanner phyPlanner = new PhysicalPlannerImpl(conf, sm);
-    PhysicalExec exec = phyPlanner.createPlan(ctx, rootNode);
+    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getLogicalNodeTree(), rootNode);
     Tuple tuple;
     exec.init();
     tuple = exec.next();
@@ -762,7 +762,7 @@ public class TestPhysicalPlanner {
     rootNode = optimizer.optimize(plan);
 
     phyPlanner = new PhysicalPlannerImpl(conf, sm);
-    exec = phyPlanner.createPlan(ctx, rootNode);
+    exec = phyPlanner.createPlan(ctx, plan.getLogicalNodeTree(), rootNode);
     exec.init();
     tuple = exec.next();
     exec.close();
@@ -785,7 +785,7 @@ public class TestPhysicalPlanner {
     LogicalNode rootNode = optimizer.optimize(plan);
 
     PhysicalPlanner phyPlanner = new PhysicalPlannerImpl(conf, sm);
-    PhysicalExec exec = phyPlanner.createPlan(ctx, rootNode);
+    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getLogicalNodeTree(), rootNode);
     exec.init();
     while (exec.next() != null) {
     }
@@ -813,7 +813,7 @@ public class TestPhysicalPlanner {
     LogicalNode rootNode = optimizer.optimize(plan);
 
     PhysicalPlanner phyPlanner = new PhysicalPlannerImpl(conf,sm);
-    PhysicalExec exec = phyPlanner.createPlan(ctx, rootNode);
+    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getLogicalNodeTree(), rootNode);
     Tuple tuple;
 
     int cnt = 0;
@@ -845,14 +845,14 @@ public class TestPhysicalPlanner {
     LogicalPlan plan = planner.createPlan(session, context);
     LogicalNode rootNode = optimizer.optimize(plan);
 
-    SortNode sortNode = PlannerUtil.findTopNode(rootNode, NodeType.SORT);
+    SortNode sortNode = PlannerUtil.findTopNode(plan.getLogicalNodeTree(), rootNode, NodeType.SORT);
     DataChannel channel = new DataChannel(masterPlan.newExecutionBlockId(), masterPlan.newExecutionBlockId(),
         TajoWorkerProtocol.ShuffleType.RANGE_SHUFFLE);
     channel.setShuffleKeys(PlannerUtil.sortSpecsToSchema(sortNode.getSortKeys()).toArray());
     ctx.setDataChannel(channel);
 
     PhysicalPlanner phyPlanner = new PhysicalPlannerImpl(conf,sm);
-    PhysicalExec exec = phyPlanner.createPlan(ctx, rootNode);
+    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getLogicalNodeTree(), rootNode);
 
     Tuple tuple;
     exec.init();
@@ -935,7 +935,7 @@ public class TestPhysicalPlanner {
     optimizer.optimize(plan);
     LogicalNode rootNode = plan.getRootBlock().getRoot();
 
-    SortNode sortNode = PlannerUtil.findTopNode(rootNode, NodeType.SORT);
+    SortNode sortNode = PlannerUtil.findTopNode(plan.getLogicalNodeTree(), rootNode, NodeType.SORT);
 
     Enforcer enforcer = new Enforcer();
     enforcer.enforceSortAlgorithm(sortNode.getPID(), SortAlgorithm.IN_MEMORY_SORT);
@@ -944,7 +944,7 @@ public class TestPhysicalPlanner {
     ctx.setEnforcer(enforcer);
 
     PhysicalPlanner phyPlanner = new PhysicalPlannerImpl(conf,sm);
-    PhysicalExec exec = phyPlanner.createPlan(ctx, rootNode);
+    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getLogicalNodeTree(), rootNode);
     exec.init();
     exec.next();
     exec.close();
@@ -956,7 +956,7 @@ public class TestPhysicalPlanner {
     optimizer.optimize(plan);
     rootNode = plan.getRootBlock().getRoot();
 
-    sortNode = PlannerUtil.findTopNode(rootNode, NodeType.SORT);
+    sortNode = PlannerUtil.findTopNode(plan.getLogicalNodeTree(), rootNode, NodeType.SORT);
 
     enforcer = new Enforcer();
     enforcer.enforceSortAlgorithm(sortNode.getPID(), SortAlgorithm.MERGE_SORT);
@@ -965,7 +965,7 @@ public class TestPhysicalPlanner {
     ctx.setEnforcer(enforcer);
 
     phyPlanner = new PhysicalPlannerImpl(conf,sm);
-    exec = phyPlanner.createPlan(ctx, rootNode);
+    exec = phyPlanner.createPlan(ctx, plan.getLogicalNodeTree(), rootNode);
     exec.init();
     exec.next();
     exec.close();
@@ -983,7 +983,7 @@ public class TestPhysicalPlanner {
     optimizer.optimize(plan);
     LogicalNode rootNode = plan.getRootBlock().getRoot();
 
-    GroupbyNode groupByNode = PlannerUtil.findTopNode(rootNode, NodeType.GROUP_BY);
+    GroupbyNode groupByNode = PlannerUtil.findTopNode(plan.getLogicalNodeTree(), rootNode, NodeType.GROUP_BY);
 
     Enforcer enforcer = new Enforcer();
     enforcer.enforceHashAggregation(groupByNode.getPID());
@@ -992,7 +992,7 @@ public class TestPhysicalPlanner {
     ctx.setEnforcer(enforcer);
 
     PhysicalPlanner phyPlanner = new PhysicalPlannerImpl(conf,sm);
-    PhysicalExec exec = phyPlanner.createPlan(ctx, rootNode);
+    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getLogicalNodeTree(), rootNode);
     exec.init();
     exec.next();
     exec.close();
@@ -1004,7 +1004,7 @@ public class TestPhysicalPlanner {
     optimizer.optimize(plan);
     rootNode = plan.getRootBlock().getRoot();
 
-    groupByNode = PlannerUtil.findTopNode(rootNode, NodeType.GROUP_BY);
+    groupByNode = PlannerUtil.findTopNode(plan.getLogicalNodeTree(), rootNode, NodeType.GROUP_BY);
 
     enforcer = new Enforcer();
     enforcer.enforceSortAggregation(groupByNode.getPID(), null);
@@ -1013,7 +1013,7 @@ public class TestPhysicalPlanner {
     ctx.setEnforcer(enforcer);
 
     phyPlanner = new PhysicalPlannerImpl(conf,sm);
-    exec = phyPlanner.createPlan(ctx, rootNode);
+    exec = phyPlanner.createPlan(ctx, plan.getLogicalNodeTree(), rootNode);
     exec.init();
     exec.next();
     exec.close();

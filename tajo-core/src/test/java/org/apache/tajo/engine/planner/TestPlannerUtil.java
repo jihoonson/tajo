@@ -110,35 +110,35 @@ public class TestPlannerUtil {
   public final void testFindTopNode() throws CloneNotSupportedException, PlanningException {
     // two relations
     Expr expr = analyzer.parse(TestLogicalPlanner.QUERIES[1]);
-    LogicalNode plan = planner.createPlan(session, expr).getRootBlock().getRoot();
+    LogicalPlan plan = planner.createPlan(session, expr);
+    LogicalNode root = plan.getRootBlock().getRoot();
 
-    assertEquals(NodeType.ROOT, plan.getType());
-    LogicalRootNode root = (LogicalRootNode) plan;
+    assertEquals(NodeType.ROOT, root.getType());
     TestLogicalNode.testCloneLogicalNode(root);
 
-    assertEquals(NodeType.PROJECTION, root.getChild().getType());
-    ProjectionNode projNode = root.getChild();
+    assertEquals(NodeType.PROJECTION, plan.getChild(root).getType());
+    ProjectionNode projNode = plan.getChild(root);
 
-    assertEquals(NodeType.JOIN, projNode.getChild().getType());
-    JoinNode joinNode = projNode.getChild();
+    assertEquals(NodeType.JOIN, plan.getChild(projNode).getType());
+    JoinNode joinNode = plan.getChild(projNode);
 
-    assertEquals(NodeType.SCAN, joinNode.getLeftChild().getType());
-    ScanNode leftNode = joinNode.getLeftChild();
+    assertEquals(NodeType.SCAN, plan.getLeftChild(joinNode).getType());
+    ScanNode leftNode = plan.getLeftChild(joinNode);
     assertEquals("default.employee", leftNode.getTableName());
-    assertEquals(NodeType.SCAN, joinNode.getRightChild().getType());
-    ScanNode rightNode = joinNode.getRightChild();
+    assertEquals(NodeType.SCAN, plan.getRightChild(joinNode).getType());
+    ScanNode rightNode = plan.getRightChild(joinNode);
     assertEquals("default.dept", rightNode.getTableName());
     
-    LogicalNode node = PlannerUtil.findTopNode(root, NodeType.ROOT);
+    LogicalNode node = PlannerUtil.findTopNode(plan.getLogicalNodeTree(), root, NodeType.ROOT);
     assertEquals(NodeType.ROOT, node.getType());
     
-    node = PlannerUtil.findTopNode(root, NodeType.PROJECTION);
+    node = PlannerUtil.findTopNode(plan.getLogicalNodeTree(), root, NodeType.PROJECTION);
     assertEquals(NodeType.PROJECTION, node.getType());
     
-    node = PlannerUtil.findTopNode(root, NodeType.JOIN);
+    node = PlannerUtil.findTopNode(plan.getLogicalNodeTree(), root, NodeType.JOIN);
     assertEquals(NodeType.JOIN, node.getType());
     
-    node = PlannerUtil.findTopNode(root, NodeType.SCAN);
+    node = PlannerUtil.findTopNode(plan.getLogicalNodeTree(), root, NodeType.SCAN);
     assertEquals(NodeType.SCAN, node.getType());
   }
 
