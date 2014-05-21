@@ -613,8 +613,9 @@ public class PlannerUtil {
   /**
    * @return the first array contains left table's columns, and the second array contains right table's columns.
    */
-  public static Column[][] joinJoinKeyForEachTable(EvalNode joinQual, Schema leftSchema, Schema rightSchema) {
-    List<Column[]> joinKeys = getJoinKeyPairs(joinQual, leftSchema, rightSchema, true);
+  public static Column[][] joinJoinKeyForEachTable(EvalNode joinQual, Schema leftSchema,
+                                                   Schema rightSchema, boolean includeThetaJoin) {
+    List<Column[]> joinKeys = getJoinKeyPairs(joinQual, leftSchema, rightSchema, includeThetaJoin);
     Column[] leftColumns = new Column[joinKeys.size()];
     Column[] rightColumns = new Column[joinKeys.size()];
     for (int i = 0; i < joinKeys.size(); i++) {
@@ -726,6 +727,12 @@ public class PlannerUtil {
         copy.setPID(-1);
       } else {
         copy.setPID(plan.newPID());
+        if (node instanceof DistinctGroupbyNode) {
+          DistinctGroupbyNode dNode = (DistinctGroupbyNode)copy;
+          for (GroupbyNode eachNode: dNode.getGroupByNodes()) {
+            eachNode.setPID(plan.newPID());
+          }
+        }
       }
       return copy;
     } catch (CloneNotSupportedException e) {

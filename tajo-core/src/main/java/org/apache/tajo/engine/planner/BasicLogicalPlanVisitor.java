@@ -74,6 +74,9 @@ public class BasicLogicalPlanVisitor<CONTEXT, RESULT> implements LogicalPlanVisi
       case GROUP_BY:
         current = visitGroupBy(context, plan, block, (GroupbyNode) node, stack);
         break;
+      case DISTINCT_GROUP_BY:
+        current = visitDistinct(context, plan, block, (DistinctGroupbyNode) node, stack);
+        break;
       case SELECTION:
         current = visitFilter(context, plan, block, (SelectionNode) node, stack);
         break;
@@ -180,6 +183,15 @@ public class BasicLogicalPlanVisitor<CONTEXT, RESULT> implements LogicalPlanVisi
                              Stack<LogicalNode> stack) throws PlanningException {
     stack.push(node);
     RESULT result = visit(context, plan, block, plan.getLogicalNodeTree().getChild(node), stack);
+    stack.pop();
+    return result;
+  }
+
+  @Override
+  public RESULT visitDistinct(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, DistinctGroupbyNode node,
+                             Stack<LogicalNode> stack) throws PlanningException {
+    stack.push(node);
+    RESULT result = visit(context, plan, block, plan.getChild(node), stack);
     stack.pop();
     return result;
   }

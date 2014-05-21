@@ -27,12 +27,14 @@ public class SimpleTree<V,E> extends SimpleDirectedGraph<V,E> {
 
   @Override
   public void addEdge(V tail, V head, E edge) {
-    Preconditions.checkState(getParentCount(tail) == 0);
+    if (directedEdges.containsKey(tail)) {
+      Preconditions.checkState(getParentCount(tail) == 0);
+    }
     super.addEdge(tail, head, edge);
   }
 
   public V getParent(V v) {
-    return getParent(v, 0);
+    return super.getParent(v, 0);
   }
 
   @Override

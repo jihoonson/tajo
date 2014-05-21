@@ -301,15 +301,19 @@ public class TajoCli {
         continue;
       }
 
-      List<ParsedResult> parsedResults = parser.parseLines(line);
+      if (line.startsWith("{")) {
+        executeJsonQuery(line);
+      } else {
+        List<ParsedResult> parsedResults = parser.parseLines(line);
 
-      if (parsedResults.size() > 0) {
-        for (ParsedResult parsed : parsedResults) {
-          history.addStatement(parsed.getStatement() + (parsed.getType() == STATEMENT ? ";":""));
+        if (parsedResults.size() > 0) {
+          for (ParsedResult parsed : parsedResults) {
+            history.addStatement(parsed.getHistoryStatement() + (parsed.getType() == STATEMENT ? ";" : ""));
+          }
+          executeParsedResults(parsedResults);
+          currentPrompt = updatePrompt(parser.getState());
         }
       }
-      executeParsedResults(parsedResults);
-      currentPrompt = updatePrompt(parser.getState());
     }
     return code;
   }
@@ -343,10 +347,35 @@ public class TajoCli {
       } catch (Exception e) {
         outputFormatter.printErrorMessage(sout, e);
         return -1;
+      } finally {
+        context.getOutput().flush();
       }
     }
 
     return 0;
+  }
+
+  private void executeJsonQuery(String json) throws ServiceException {
+    long startTime = System.currentTimeMillis();
+    ClientProtos.SubmitQueryResponse response = client.executeQueryWithJson(json);
+    if (response == null) {
+      outputFormatter.printErrorMessage(sout, "response is null");
+    } else if (response.getResultCode() == ClientProtos.ResultCode.OK) {
+      if (response.getIsForwarded()) {
+        QueryId queryId = new QueryId(response.getQueryId());
+        waitForQueryCompleted(queryId);
+      } else {
+        if (!response.hasTableDesc() && !response.hasResultSet()) {
+          outputFormatter.printMessage(sout, "OK");
+        } else {
+          localQueryCompleted(response, startTime);
+        }
+      }
+    } else {
+      if (response.hasErrorMessage()) {
+        outputFormatter.printErrorMessage(sout, response.getErrorMessage());
+      }
+    }
   }
 
   private void executeQuery(String statement) throws ServiceException {
@@ -375,10 +404,18 @@ public class TajoCli {
   private void localQueryCompleted(ClientProtos.SubmitQueryResponse response, long startTime) {
     ResultSet res = null;
     try {
-      res = TajoClient.createResultSet(client, response);
+      QueryId queryId = new QueryId(response.getQueryId());
       float responseTime = ((float)(System.currentTimeMillis() - startTime) / 1000.0f);
       TableDesc desc = new TableDesc(response.getTableDesc());
-      outputFormatter.printResult(sout, sin, desc, responseTime, res);
+
+      // non-forwarded INSERT INTO query does not have any query id.
+      // In this case, it just returns succeeded query information without printing the query results.
+      if (response.getMaxRowNum() < 0 && queryId.equals(QueryIdFactory.NULL_QUERY_ID)) {
+        outputFormatter.printResult(sout, sin, desc, responseTime, res);
+      } else {
+        res = TajoClient.createResultSet(client, response);
+        outputFormatter.printResult(sout, sin, desc, responseTime, res);
+      }
     } catch (Throwable t) {
       outputFormatter.printErrorMessage(sout, t);
     } finally {
@@ -469,11 +506,11 @@ public class TajoCli {
 
   private void printUsage() {
     HelpFormatter formatter = new HelpFormatter();
-    formatter.printHelp( "tsql [options] [database]", options );
+    formatter.printHelp("tsql [options] [database]", options);
   }
 
   private void printInvalidCommand(String command) {
-    sout.println("Invalid command " + command +". Try \\? for help.");
+    sout.println("Invalid command " + command + ". Try \\? for help.");
   }
 
   public void close() {

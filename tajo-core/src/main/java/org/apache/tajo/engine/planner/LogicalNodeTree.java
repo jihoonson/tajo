@@ -40,42 +40,57 @@ public class LogicalNodeTree extends SimpleTree<Integer, LogicalNodeEdge> implem
     nodeMap.put(child.getPID(), child);
     nodeMap.put(parent.getPID(), parent);
     this.addEdge(child.getPID(), parent.getPID(),
-        new LogicalNodeEdge(child.getPID(), parent.getPID(), EdgeType.UNORDERED));
+        new LogicalNodeEdge(parent.getPID(), child.getPID(), EdgeType.UNORDERED));
   }
 
   public void setChild(LogicalNode child, LogicalNode parent) {
-    Integer childPid = getChild(parent.getPID(), 0);
-    if (childPid != null) {
-      removeEdge(childPid, parent.getPID());
-      nodeMap.remove(childPid);
+    Integer pid = getChild(parent.getPID(), 0);
+    if (pid != null) {
+      removeEdge(pid, parent.getPID());
+      nodeMap.remove(pid);
+    }
+    pid = getParent(child.getPID());
+    if (pid != null) {
+      removeEdge(child.getPID(), pid);
+      nodeMap.remove(pid);
     }
     addChild(child, parent);
   }
 
   public void setLeftChild(LogicalNode child, LogicalNode parent) {
-    Integer leftChildPid = getLeftChildPid(parent.getPID());
-    if (leftChildPid != null) {
-      removeEdge(leftChildPid, parent.getPID());
-      nodeMap.remove(leftChildPid);
+    Integer pid = getLeftChildPid(parent.getPID());
+    if (pid != null) {
+      removeEdge(pid, parent.getPID());
+      nodeMap.remove(pid);
+    }
+    pid = getParent(child.getPID());
+    if (pid != null) {
+      removeEdge(child.getPID(), pid);
+      nodeMap.remove(pid);
     }
 
     nodeMap.put(child.getPID(), child);
     nodeMap.put(parent.getPID(), parent);
     this.addEdge(child.getPID(), parent.getPID(),
-        new LogicalNodeEdge(child.getPID(), parent.getPID(), EdgeType.ORDERED_LEFT));
+        new LogicalNodeEdge(parent.getPID(), child.getPID(), EdgeType.ORDERED_LEFT));
   }
 
   public void setRightChild(LogicalNode child, LogicalNode parent) {
-    Integer rightChildPid = getRightChildPid(parent.getPID());
-    if (rightChildPid != null) {
-      removeEdge(rightChildPid, parent.getPID());
-      nodeMap.remove(rightChildPid);
+    Integer pid = getRightChildPid(parent.getPID());
+    if (pid != null) {
+      removeEdge(pid, parent.getPID());
+      nodeMap.remove(pid);
+    }
+    pid = getParent(child.getPID());
+    if (pid != null) {
+      removeEdge(child.getPID(), pid);
+      nodeMap.remove(pid);
     }
 
     nodeMap.put(child.getPID(), child);
     nodeMap.put(parent.getPID(), parent);
     this.addEdge(child.getPID(), parent.getPID(),
-        new LogicalNodeEdge(child.getPID(), parent.getPID(), EdgeType.ORDERED_RIGHT));
+        new LogicalNodeEdge(parent.getPID(), child.getPID(), EdgeType.ORDERED_RIGHT));
   }
 
   public <NODE extends LogicalNode> NODE getParent(LogicalNode child) {
@@ -111,11 +126,11 @@ public class LogicalNodeTree extends SimpleTree<Integer, LogicalNodeEdge> implem
   private Integer getLeftChildPid(Integer parentPid) {
     List<LogicalNodeEdge> edges = this.getIncomingEdges(parentPid);
     if (edges != null) {
-      Preconditions.checkState(edges.size() == 2);
-      if (edges.get(0).getEdgeType() == EdgeType.ORDERED_LEFT) {
-        return edges.get(0).getChildPid();
-      } else if (edges.get(1).getEdgeType() == EdgeType.ORDERED_LEFT) {
-        return edges.get(1).getChildPid();
+      Preconditions.checkState(edges.size() <= 2);
+      for (int i = 0; i < edges.size(); i++) {
+        if (edges.get(i).getEdgeType() == EdgeType.ORDERED_LEFT) {
+          return edges.get(i).getChildPid();
+        }
       }
     }
     return null;
@@ -132,11 +147,11 @@ public class LogicalNodeTree extends SimpleTree<Integer, LogicalNodeEdge> implem
   private Integer getRightChildPid(Integer parentPid) {
     List<LogicalNodeEdge> edges = this.getIncomingEdges(parentPid);
     if (edges != null) {
-      Preconditions.checkState(edges.size() == 2);
-      if (edges.get(0).getEdgeType() == EdgeType.ORDERED_RIGHT) {
-        return edges.get(0).getChildPid();
-      } else if (edges.get(1).getEdgeType() == EdgeType.ORDERED_RIGHT) {
-        return edges.get(1).getChildPid();
+      Preconditions.checkState(edges.size() <= 2);
+      for (int i = 0; i < edges.size(); i++) {
+        if (edges.get(i).getEdgeType() == EdgeType.ORDERED_RIGHT) {
+          return edges.get(i).getChildPid();
+        }
       }
     }
     return null;
@@ -210,14 +225,18 @@ public class LogicalNodeTree extends SimpleTree<Integer, LogicalNodeEdge> implem
 
   public void preOrder(LogicalNodeVisitor visitor, LogicalNode current) {
     visitor.visit(current);
-    for (LogicalNode child : getChildsInOrder(current)) {
-      preOrder(visitor, child);
+    if (childAvailable(current)) {
+      for (LogicalNode child : getChildsInOrder(current)) {
+        preOrder(visitor, child);
+      }
     }
   }
 
   public void postOrder(LogicalNodeVisitor visitor, LogicalNode current) {
-    for (LogicalNode child : getChildsInOrder(current)) {
-      preOrder(visitor, child);
+    if (childAvailable(current)) {
+      for (LogicalNode child : getChildsInOrder(current)) {
+        postOrder(visitor, child);
+      }
     }
 	  visitor.visit(current);
   }
@@ -233,5 +252,39 @@ public class LogicalNodeTree extends SimpleTree<Integer, LogicalNodeEdge> implem
     else if (childCount == 2) return ArityClass.BINARY;
     else if (childCount == 3) return ArityClass.NARY;
     else return ArityClass.NULLARY;
+  }
+
+  private static boolean childAvailable(LogicalNode node) {
+    switch (node.getType()) {
+      case ROOT:
+      case PROJECTION:
+      case LIMIT:
+      case SORT:
+      case HAVING:
+      case GROUP_BY:
+      case SELECTION:
+      case JOIN:
+      case UNION:
+      case INTERSECT:
+      case EXCEPT:
+      case TABLE_SUBQUERY:
+      case STORE:
+      case INSERT:
+      case DISTINCT_GROUP_BY:
+      case CREATE_TABLE:
+        return true;
+      case EXPRS:
+      case SCAN:
+      case PARTITIONS_SCAN:
+      case BST_INDEX_SCAN:
+      case CREATE_DATABASE:
+      case DROP_DATABASE:
+      case DROP_TABLE:
+      case ALTER_TABLESPACE:
+      case ALTER_TABLE:
+        return false;
+      default:
+        return false;
+    }
   }
 }
