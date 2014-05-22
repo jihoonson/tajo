@@ -18,7 +18,9 @@
 
 package org.apache.tajo.engine.planner;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
+import com.google.gson.annotations.Expose;
 import org.apache.commons.lang.ObjectUtils;
 import org.apache.tajo.algebra.*;
 import org.apache.tajo.annotation.NotThreadSafe;
@@ -51,9 +53,9 @@ public class LogicalPlan {
   public static final String ROOT_BLOCK = VIRTUAL_TABLE_PREFIX + "ROOT";
   public static final String NONAME_BLOCK_PREFIX = VIRTUAL_TABLE_PREFIX + "QB_";
   private static final int NO_SEQUENCE_PID = -1;
-  private int nextPid = 0;
   private Integer noNameBlockId = 0;
   private Integer noNameColumnId = 0;
+  private PidFactory pidFactory = new PidFactory();
 
   /** a map from between a block name to a block plan */
   private Map<String, QueryBlock> queryBlocks = new LinkedHashMap<String, QueryBlock>();
@@ -61,7 +63,7 @@ public class LogicalPlan {
   private Map<Integer, QueryBlock> queryBlockByPID = new HashMap<Integer, QueryBlock>();
   private Map<String, String> exprToBlockNameMap = TUtil.newHashMap();
   private SimpleDirectedGraph<String, BlockEdge> queryBlockGraph = new SimpleDirectedGraph<String, BlockEdge>();
-  private LogicalPlanTree logicalPlanTree = new LogicalPlanTree();
+  private LogicalPlanTree logicalPlanTree = new LogicalPlanTree(pidFactory);
 
   /** planning and optimization log */
   private List<String> planingHistory = Lists.newArrayList();
@@ -127,7 +129,11 @@ public class LogicalPlan {
   }
 
   public int newPID() {
-    return nextPid++;
+    return pidFactory.newPid();
+  }
+
+  public PidFactory getPidFactory() {
+    return pidFactory;
   }
 
   public QueryBlock newQueryBlock() {
@@ -568,6 +574,18 @@ public class LogicalPlan {
   @Override
   public String toString() {
     return getQueryGraphAsString();
+  }
+
+  public static class PidFactory {
+    @Expose private int nextPid = -1;
+    @VisibleForTesting
+    public PidFactory() {
+
+    }
+
+    public int newPid() {
+      return ++nextPid;
+    }
   }
 
   ///////////////////////////////////////////////////////////////////////////

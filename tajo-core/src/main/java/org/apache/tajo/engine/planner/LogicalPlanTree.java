@@ -21,6 +21,7 @@ package org.apache.tajo.engine.planner;
 import com.google.common.base.Preconditions;
 import com.google.gson.annotations.Expose;
 import org.apache.tajo.engine.json.CoreGsonHelper;
+import org.apache.tajo.engine.planner.LogicalPlan.PidFactory;
 import org.apache.tajo.engine.planner.graph.SimpleTree;
 import org.apache.tajo.engine.planner.logical.ArityClass;
 import org.apache.tajo.engine.planner.logical.LogicalNode;
@@ -30,13 +31,18 @@ import org.apache.tajo.engine.planner.logical.LogicalNodeVisitor;
 import org.apache.tajo.json.GsonObject;
 import org.apache.tajo.util.TUtil;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
 
-public class LogicalPlanTree extends SimpleTree<Integer, LogicalNodeEdge> implements GsonObject,
-    Cloneable {
+public class LogicalPlanTree extends SimpleTree<Integer, LogicalNodeEdge>
+    implements GsonObject, Cloneable {
   @Expose private Map<Integer, LogicalNode> nodeMap = TUtil.newHashMap();
+  @Expose private PidFactory pidFactory;
+
+  public LogicalPlanTree(PidFactory pidFactory) {
+    this.pidFactory = pidFactory;
+  }
 
   public void addChild(LogicalNode child, LogicalNode parent) {
     nodeMap.put(child.getPID(), child);
@@ -254,26 +260,30 @@ public class LogicalPlanTree extends SimpleTree<Integer, LogicalNodeEdge> implem
 
   @Override
   public Object clone() throws CloneNotSupportedException {
-    LogicalPlanTree clone = new LogicalPlanTree();
+    LogicalPlanTree clone = new LogicalPlanTree(pidFactory);
+    Map<Integer, Integer> cloneNodeMap = new HashMap<Integer, Integer>();
+
     for (LogicalNode eachNode : nodeMap.values()) {
-      if (directedEdges.containsKey(eachNode.getPID())) {
-        for (Entry<Integer, LogicalNodeEdge> e : directedEdges.get(eachNode.getPID()).entrySet()) {
-          LogicalNode child = (LogicalNode) eachNode.clone();
-          LogicalNode parent = (LogicalNode) nodeMap.get(e.getKey()).clone();
-          switch (e.getValue().getEdgeType()) {
-            case ORDERED_LEFT:
-              clone.setLeftChild(child, parent);
-              break;
-            case ORDERED_RIGHT:
-              clone.setRightChild(child, parent);
-              break;
-            case UNORDERED:
-              clone.setChild(child, parent);
-              break;
-          }
-        }
-      }
+      LogicalNode cloneNode = (LogicalNode) eachNode.clone();
+      cloneNode.setPID(pidFactory.newPid());
+      clone.nodeMap.put(cloneNode.getPID(), cloneNode);
+      cloneNodeMap.put(eachNode.getPID(), cloneNode.getPID());
+    }
+
+    for (LogicalNodeEdge eachEdge : getEdgesAll()) {
+      Integer cloneChild = cloneNodeMap.get(eachEdge.getChildPid());
+      Integer cloneParent = cloneNodeMap.get(eachEdge.getParentPid());
+      clone.addEdge(cloneChild, cloneParent,
+          new LogicalNodeEdge(cloneChild, cloneParent, eachEdge.getEdgeType()));
     }
     return clone;
+  }
+
+  public LogicalNode getRootNode() {
+    if (root != null) {
+      return nodeMap.get(root);
+    } else {
+      return null;
+    }
   }
 }
