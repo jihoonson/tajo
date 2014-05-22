@@ -156,7 +156,7 @@ public class TestNLJoinExec {
     LogicalNode root = plan.getRootBlock().getRoot();
 
     PhysicalPlanner phyPlanner = new PhysicalPlannerImpl(conf, sm);
-    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getLogicalPlanTree(), root);
+    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getPlanTree(), root);
 
     int i = 0;
     exec.init();
@@ -186,7 +186,7 @@ public class TestNLJoinExec {
     //LogicalOptimizer.optimize(ctx, plan);
 
     PhysicalPlanner phyPlanner = new PhysicalPlannerImpl(conf, sm);
-    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getLogicalPlanTree(), root);
+    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getPlanTree(), root);
     
     Tuple tuple;
     int i = 1;

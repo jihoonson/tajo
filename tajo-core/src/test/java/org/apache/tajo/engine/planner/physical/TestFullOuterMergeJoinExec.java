@@ -305,7 +305,7 @@ public class TestFullOuterMergeJoinExec {
     Expr expr = analyzer.parse(QUERIES[0]);
     LogicalPlan plan = planner.createPlan(session, expr);
     LogicalNode root = plan.getRootBlock().getRoot();
-    JoinNode joinNode = PlannerUtil.findTopNode(plan.getLogicalPlanTree(), root, NodeType.JOIN);
+    JoinNode joinNode = PlannerUtil.findTopNode(plan.getPlanTree(), root, NodeType.JOIN);
     Enforcer enforcer = new Enforcer();
     enforcer.enforceJoinAlgorithm(joinNode.getPID(), JoinAlgorithm.MERGE_JOIN);
 
@@ -321,7 +321,7 @@ public class TestFullOuterMergeJoinExec {
     ctx.setEnforcer(enforcer);
 
     PhysicalPlanner phyPlanner = new PhysicalPlannerImpl(conf,sm);
-    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getLogicalPlanTree(), root);
+    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getPlanTree(), root);
 
     ProjectionExec proj = (ProjectionExec) exec;
     assertTrue(proj.getChild() instanceof MergeFullOuterJoinExec);
@@ -343,7 +343,7 @@ public class TestFullOuterMergeJoinExec {
     Expr expr = analyzer.parse(QUERIES[1]);
     LogicalPlan plan = planner.createPlan(session, expr);
     LogicalNode root = plan.getRootBlock().getRoot();
-    JoinNode joinNode = PlannerUtil.findTopNode(plan.getLogicalPlanTree(), root, NodeType.JOIN);
+    JoinNode joinNode = PlannerUtil.findTopNode(plan.getPlanTree(), root, NodeType.JOIN);
     Enforcer enforcer = new Enforcer();
     enforcer.enforceJoinAlgorithm(joinNode.getPID(), JoinAlgorithm.MERGE_JOIN);
 
@@ -359,7 +359,7 @@ public class TestFullOuterMergeJoinExec {
     ctx.setEnforcer(enforcer);
 
     PhysicalPlanner phyPlanner = new PhysicalPlannerImpl(conf,sm);
-    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getLogicalPlanTree(), root);
+    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getPlanTree(), root);
 
     ProjectionExec proj = (ProjectionExec) exec;
     assertTrue(proj.getChild() instanceof MergeFullOuterJoinExec);
@@ -381,7 +381,7 @@ public class TestFullOuterMergeJoinExec {
     Expr expr = analyzer.parse(QUERIES[2]);
     LogicalPlan plan = planner.createPlan(session, expr);
     LogicalNode root = plan.getRootBlock().getRoot();
-    JoinNode joinNode = PlannerUtil.findTopNode(plan.getLogicalPlanTree(), root, NodeType.JOIN);
+    JoinNode joinNode = PlannerUtil.findTopNode(plan.getPlanTree(), root, NodeType.JOIN);
     Enforcer enforcer = new Enforcer();
     enforcer.enforceJoinAlgorithm(joinNode.getPID(), JoinAlgorithm.MERGE_JOIN);
 
@@ -397,7 +397,7 @@ public class TestFullOuterMergeJoinExec {
     ctx.setEnforcer(enforcer);
 
     PhysicalPlanner phyPlanner = new PhysicalPlannerImpl(conf,sm);
-    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getLogicalPlanTree(), root);
+    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getPlanTree(), root);
 
     ProjectionExec proj = (ProjectionExec) exec;
     assertTrue(proj.getChild() instanceof MergeFullOuterJoinExec);
@@ -420,7 +420,7 @@ public class TestFullOuterMergeJoinExec {
     Expr expr = analyzer.parse(QUERIES[3]);
     LogicalPlan plan = planner.createPlan(session, expr);
     LogicalNode root = plan.getRootBlock().getRoot();
-    JoinNode joinNode = PlannerUtil.findTopNode(plan.getLogicalPlanTree(), root, NodeType.JOIN);
+    JoinNode joinNode = PlannerUtil.findTopNode(plan.getPlanTree(), root, NodeType.JOIN);
     Enforcer enforcer = new Enforcer();
     enforcer.enforceJoinAlgorithm(joinNode.getPID(), JoinAlgorithm.MERGE_JOIN);
 
@@ -436,7 +436,7 @@ public class TestFullOuterMergeJoinExec {
     ctx.setEnforcer(enforcer);
 
     PhysicalPlanner phyPlanner = new PhysicalPlannerImpl(conf,sm);
-    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getLogicalPlanTree(), root);
+    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getPlanTree(), root);
 
     ProjectionExec proj = (ProjectionExec) exec;
 
@@ -461,7 +461,7 @@ public class TestFullOuterMergeJoinExec {
     Expr expr = analyzer.parse(QUERIES[4]);
     LogicalPlan plan = planner.createPlan(session, expr);
     LogicalNode root = plan.getRootBlock().getRoot();
-    JoinNode joinNode = PlannerUtil.findTopNode(plan.getLogicalPlanTree(), root, NodeType.JOIN);
+    JoinNode joinNode = PlannerUtil.findTopNode(plan.getPlanTree(), root, NodeType.JOIN);
     Enforcer enforcer = new Enforcer();
     enforcer.enforceJoinAlgorithm(joinNode.getPID(), JoinAlgorithm.MERGE_JOIN);
 
@@ -478,7 +478,7 @@ public class TestFullOuterMergeJoinExec {
     ctx.setEnforcer(enforcer);
 
     PhysicalPlanner phyPlanner = new PhysicalPlannerImpl(conf,sm);
-    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getLogicalPlanTree(), root);
+    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getPlanTree(), root);
 
     ProjectionExec proj = (ProjectionExec) exec;
     assertTrue(proj.getChild() instanceof MergeFullOuterJoinExec);
@@ -501,7 +501,7 @@ public class TestFullOuterMergeJoinExec {
     Expr expr = analyzer.parse(QUERIES[5]);
     LogicalPlan plan = planner.createPlan(session, expr);
     LogicalNode root = plan.getRootBlock().getRoot();
-    JoinNode joinNode = PlannerUtil.findTopNode(plan.getLogicalPlanTree(), root, NodeType.JOIN);
+    JoinNode joinNode = PlannerUtil.findTopNode(plan.getPlanTree(), root, NodeType.JOIN);
     Enforcer enforcer = new Enforcer();
     enforcer.enforceJoinAlgorithm(joinNode.getPID(), JoinAlgorithm.MERGE_JOIN);
 
@@ -518,7 +518,7 @@ public class TestFullOuterMergeJoinExec {
     ctx.setEnforcer(enforcer);
 
     PhysicalPlanner phyPlanner = new PhysicalPlannerImpl(conf,sm);
-    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getLogicalPlanTree(), root);
+    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getPlanTree(), root);
 
     ProjectionExec proj = (ProjectionExec) exec;
     assertTrue(proj.getChild() instanceof MergeFullOuterJoinExec);

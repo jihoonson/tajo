@@ -72,7 +72,7 @@ public class DistinctGroupbyBuilder {
       DistinctGroupbyNode secondStageDistinctNode = distinctNodes[1];
 
       // Set latestExecBlock's plan with firstDistinctNode
-      latestExecBlock.setPlan(plan.getLogicalPlanTree(), firstStageDistinctNode);
+      latestExecBlock.setPlan(plan.getPlanTree(), firstStageDistinctNode);
 
       // Make SecondStage ExecutionBlock
       ExecutionBlock secondStageBlock = context.getPlan().newExecutionBlock();
@@ -96,7 +96,7 @@ public class DistinctGroupbyBuilder {
 //      secondStageDistinctNode.setChild(scanNode);
       plan.setChild(scanNode, secondStageDistinctNode);
 
-      secondStageBlock.setPlan(plan.getLogicalPlanTree(), secondStageDistinctNode);
+      secondStageBlock.setPlan(plan.getPlanTree(), secondStageDistinctNode);
 
       context.getPlan().addConnect(channel);
 

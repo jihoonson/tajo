@@ -51,7 +51,8 @@ public class FilterPushDownRule extends BasicLogicalPlanVisitor<Set<EvalNode>, L
   @Override
   public LogicalPlan rewrite(LogicalPlan plan) throws PlanningException {
     for (LogicalPlan.QueryBlock block : plan.getQueryBlocks()) {
-      this.visit(new HashSet<EvalNode>(), plan, block, block.getRoot(), new Stack<LogicalNode>());
+      this.visit(new HashSet<EvalNode>(), plan, block, plan.getPlanTree(), block.getRoot(),
+          new Stack<LogicalNode>());
     }
 
     return plan;
@@ -59,14 +60,15 @@ public class FilterPushDownRule extends BasicLogicalPlanVisitor<Set<EvalNode>, L
 
   @Override
   public LogicalNode visitFilter(Set<EvalNode> cnf, LogicalPlan plan, LogicalPlan.QueryBlock block,
-                                 SelectionNode selNode, Stack<LogicalNode> stack) throws PlanningException {
+                                 LogicalPlanTree planTree, SelectionNode selNode, Stack<LogicalNode> stack)
+      throws PlanningException {
     cnf.addAll(Sets.newHashSet(AlgebraicUtil.toConjunctiveNormalFormArray(selNode.getQual())));
 
     stack.push(selNode);
 //    visit(cnf, plan, block, selNode.getChild(), stack);
-    visit(cnf, plan, block, plan.getChild(selNode), stack);
+    visit(cnf, plan, block, planTree, planTree.getChild(selNode), stack);
     stack.pop();
-    LogicalPlanTree nodeTree = plan.getLogicalPlanTree();
+    LogicalPlanTree nodeTree = plan.getPlanTree();
 
     if(cnf.size() == 0) { // remove the selection operator if there is no search condition after selection push.
       LogicalNode node = stack.peek();
@@ -106,12 +108,13 @@ public class FilterPushDownRule extends BasicLogicalPlanVisitor<Set<EvalNode>, L
   }
 
   @Override
-  public LogicalNode visitJoin(Set<EvalNode> cnf, LogicalPlan plan, LogicalPlan.QueryBlock block, JoinNode joinNode,
+  public LogicalNode visitJoin(Set<EvalNode> cnf, LogicalPlan plan, LogicalPlan.QueryBlock block,
+                               LogicalPlanTree planTree, JoinNode joinNode,
                                Stack<LogicalNode> stack) throws PlanningException {
 //    LogicalNode left = joinNode.getRightChild();
 //    LogicalNode right = joinNode.getLeftChild();
-    LogicalNode left = plan.getRightChild(joinNode);
-    LogicalNode right = plan.getLeftChild(joinNode);
+    LogicalNode left = planTree.getRightChild(joinNode);
+    LogicalNode right = planTree.getLeftChild(joinNode);
 
     // here we should stop selection pushdown on the null supplying side(s) of an outer join
     // get the two operands of the join operation as well as the join type
@@ -129,10 +132,10 @@ public class FilterPushDownRule extends BasicLogicalPlanVisitor<Set<EvalNode>, L
 //        Set<String> leftTableSet = Sets.newHashSet(PlannerUtil.getRelationLineageWithinQueryBlock(plan,
 //            joinNode.getLeftChild()));
         Set<String> leftTableSet = Sets.newHashSet(PlannerUtil.getRelationLineageWithinQueryBlock(plan,
-            plan.getLeftChild(joinNode)));
+            planTree.getLeftChild(joinNode)));
         Set<String> rightTableSet = Sets.newHashSet(PlannerUtil.getRelationLineageWithinQueryBlock(plan,
 //            joinNode.getRightChild()));
-            plan.getRightChild(joinNode)));
+            planTree.getRightChild(joinNode)));
 
         // some verification
         if (joinType == JoinType.FULL_OUTER) {
@@ -149,14 +152,14 @@ public class FilterPushDownRule extends BasicLogicalPlanVisitor<Set<EvalNode>, L
 
         } else if (joinType == JoinType.LEFT_OUTER) {
 //          nullSuppliers.add(((RelationNode)joinNode.getRightChild()).getCanonicalName());
-          nullSuppliers.add(((RelationNode)plan.getRightChild(joinNode)).getCanonicalName());
+          nullSuppliers.add(((RelationNode)planTree.getRightChild(joinNode)).getCanonicalName());
           //verify that this null supplier is indeed in the right sub-tree
           if (!rightTableSet.contains(nullSuppliers.get(0))) {
             throw new InvalidQueryException("Incorrect Logical Query Plan with regard to outer join");
           }
         } else if (joinType == JoinType.RIGHT_OUTER) {
 //          if (((RelationNode)joinNode.getRightChild()).getCanonicalName().equals(rightTableName)) {
-          if (((RelationNode)plan.getRightChild(joinNode)).getCanonicalName().equals(rightTableName)) {
+          if (((RelationNode)planTree.getRightChild(joinNode)).getCanonicalName().equals(rightTableName)) {
             nullSuppliers.add(leftTableName);
           } else {
             nullSuppliers.add(rightTableName);
@@ -220,8 +223,8 @@ public class FilterPushDownRule extends BasicLogicalPlanVisitor<Set<EvalNode>, L
       cnf.addAll(Sets.newHashSet(AlgebraicUtil.toConjunctiveNormalFormArray(joinNode.getJoinQual())));
     }
 
-    visit(cnf, plan, block, left, stack);
-    visit(cnf, plan, block, right, stack);
+    visit(cnf, plan, block, planTree, left, stack);
+    visit(cnf, plan, block, planTree, right, stack);
 
     List<EvalNode> matched = Lists.newArrayList();
     for (EvalNode eval : cnf) {
@@ -254,7 +257,8 @@ public class FilterPushDownRule extends BasicLogicalPlanVisitor<Set<EvalNode>, L
 
   @Override
   public LogicalNode visitTableSubQuery(Set<EvalNode> cnf, LogicalPlan plan, LogicalPlan.QueryBlock block,
-                                        TableSubQueryNode node, Stack<LogicalNode> stack) throws PlanningException {
+                                        LogicalPlanTree planTree, TableSubQueryNode node, Stack<LogicalNode> stack)
+      throws PlanningException {
     List<EvalNode> matched = Lists.newArrayList();
     for (EvalNode eval : cnf) {
       if (LogicalPlanner.checkIfBeEvaluatedAtRelation(block, eval, node)) {
@@ -319,7 +323,8 @@ public class FilterPushDownRule extends BasicLogicalPlanVisitor<Set<EvalNode>, L
   }
 
   @Override
-  public LogicalNode visitScan(Set<EvalNode> cnf, LogicalPlan plan, LogicalPlan.QueryBlock block, ScanNode scanNode,
+  public LogicalNode visitScan(Set<EvalNode> cnf, LogicalPlan plan, LogicalPlan.QueryBlock block,
+                               LogicalPlanTree planTree, ScanNode scanNode,
                                Stack<LogicalNode> stack) throws PlanningException {
     List<EvalNode> matched = Lists.newArrayList();
     for (EvalNode eval : cnf) {

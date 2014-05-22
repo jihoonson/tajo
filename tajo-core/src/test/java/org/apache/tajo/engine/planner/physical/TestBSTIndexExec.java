@@ -175,7 +175,7 @@ public class TestBSTIndexExec {
     LogicalNode rootNode = optimizer.optimize(plan);
 
     TmpPlanner phyPlanner = new TmpPlanner(conf, sm);
-    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getLogicalPlanTree(), rootNode);
+    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getPlanTree(), rootNode);
 
     int tupleCount = this.randomValues.get(rndKey);
     int counter = 0;

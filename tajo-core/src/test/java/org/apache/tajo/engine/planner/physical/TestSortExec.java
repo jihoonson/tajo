@@ -117,7 +117,7 @@ public class TestSortExec {
     LogicalNode rootNode = optimizer.optimize(plan);
 
     PhysicalPlanner phyPlanner = new PhysicalPlannerImpl(conf, sm);
-    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getLogicalPlanTree(), rootNode);
+    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getPlanTree(), rootNode);
 
     Tuple tuple;
     Datum preVal = null;
