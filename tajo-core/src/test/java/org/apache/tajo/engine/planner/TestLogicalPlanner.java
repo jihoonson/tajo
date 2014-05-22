@@ -482,7 +482,7 @@ public class TestLogicalPlanner {
     LogicalOptimizer optimizer = new LogicalOptimizer(util.getConfiguration());
     optimizer.optimize(plan);
 
-    LogicalNode[] nodes = PlannerUtil.findAllNodes(plan.getLogicalNodeTree(), node, NodeType.JOIN);
+    LogicalNode[] nodes = PlannerUtil.findAllNodes(plan.getLogicalPlanTree(), node, NodeType.JOIN);
     Map<BinaryEval, Boolean> qualMap = TUtil.newHashMap();
     BinaryEval joinQual = new BinaryEval(EvalType.EQUAL
         , new FieldEval(new Column("default.n.n_regionkey", Type.INT4))
@@ -520,7 +520,7 @@ public class TestLogicalPlanner {
     LogicalOptimizer optimizer = new LogicalOptimizer(util.getConfiguration());
     optimizer.optimize(plan);
 
-    LogicalNode[] nodes = PlannerUtil.findAllNodes(plan.getLogicalNodeTree(), node, NodeType.SCAN);
+    LogicalNode[] nodes = PlannerUtil.findAllNodes(plan.getLogicalPlanTree(), node, NodeType.SCAN);
     Map<BinaryEval, Boolean> qualMap = TUtil.newHashMap();
     BinaryEval joinQual = new BinaryEval(EvalType.EQUAL
         , new FieldEval(new Column("default.n.n_name", Type.TEXT))
@@ -560,7 +560,7 @@ public class TestLogicalPlanner {
     LogicalOptimizer optimizer = new LogicalOptimizer(util.getConfiguration());
     optimizer.optimize(plan);
 
-    LogicalNode[] nodes = PlannerUtil.findAllNodes(plan.getLogicalNodeTree(), node, NodeType.SCAN);
+    LogicalNode[] nodes = PlannerUtil.findAllNodes(plan.getLogicalPlanTree(), node, NodeType.SCAN);
     Map<BinaryEval, Boolean> qualMap = TUtil.newHashMap();
     TextDatum[] datums = new TextDatum[3];
     datums[0] = new TextDatum("ARGENTINA");
@@ -625,7 +625,7 @@ public class TestLogicalPlanner {
     );
     joinQualMap.put(joinQual, Boolean.FALSE);
 
-    LogicalNode[] nodes = PlannerUtil.findAllNodes(plan.getLogicalNodeTree(), node, NodeType.JOIN);
+    LogicalNode[] nodes = PlannerUtil.findAllNodes(plan.getLogicalPlanTree(), node, NodeType.JOIN);
     for(LogicalNode eachNode : nodes) {
       JoinNode joinNode = (JoinNode)eachNode;
       if (joinNode.hasJoinQual()) {
@@ -637,7 +637,7 @@ public class TestLogicalPlanner {
       }
     }
 
-    nodes = PlannerUtil.findAllNodes(plan.getLogicalNodeTree(), node, NodeType.SCAN);
+    nodes = PlannerUtil.findAllNodes(plan.getLogicalPlanTree(), node, NodeType.SCAN);
     for(LogicalNode eachNode : nodes) {
       ScanNode scanNode = (ScanNode)eachNode;
       if (scanNode.hasQual()) {
@@ -780,8 +780,8 @@ public class TestLogicalPlanner {
 	  LogicalNode root = plan.getRootBlock().getRoot();
     testJsonSerDerObject(plan, root);
 
-	  String json = plan.getLogicalNodeTree().toJson();
-	  LogicalNodeTree fromJson = CoreGsonHelper.fromJson(json, LogicalNodeTree.class);
+	  String json = plan.getLogicalPlanTree().toJson();
+	  LogicalPlanTree fromJson = CoreGsonHelper.fromJson(json, LogicalPlanTree.class);
 	  assertEquals(NodeType.ROOT, root.getType());
 	  LogicalNode project = fromJson.getChild(root);
 	  assertEquals(NodeType.PROJECTION, project.getType());
@@ -802,7 +802,7 @@ public class TestLogicalPlanner {
     LogicalNode root = plan.getRootBlock().getRoot();
 
     TestVisitor vis = new TestVisitor();
-    plan.getLogicalNodeTree().postOrder(vis, root);
+    plan.getLogicalPlanTree().postOrder(vis, root);
 //    plan.postOrder(vis);
 
     assertEquals(NodeType.ROOT, vis.stack.pop().getType());

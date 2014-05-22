@@ -66,7 +66,7 @@ public class FilterPushDownRule extends BasicLogicalPlanVisitor<Set<EvalNode>, L
 //    visit(cnf, plan, block, selNode.getChild(), stack);
     visit(cnf, plan, block, plan.getChild(selNode), stack);
     stack.pop();
-    LogicalNodeTree nodeTree = plan.getLogicalNodeTree();
+    LogicalPlanTree nodeTree = plan.getLogicalPlanTree();
 
     if(cnf.size() == 0) { // remove the selection operator if there is no search condition after selection push.
       LogicalNode node = stack.peek();

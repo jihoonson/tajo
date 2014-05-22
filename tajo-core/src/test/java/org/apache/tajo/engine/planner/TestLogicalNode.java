@@ -45,7 +45,7 @@ public class TestLogicalNode {
     schema.addColumn("id", Type.INT4);
     schema.addColumn("name", Type.TEXT);
     schema.addColumn("age", Type.INT2);
-    LogicalNodeTree tree = new LogicalNodeTree();
+    LogicalPlanTree tree = new LogicalPlanTree();
 
     GroupbyNode groupbyNode = new GroupbyNode(0);
     groupbyNode.setGroupingColumns(new Column[]{schema.getColumn(1), schema.getColumn(2)});
@@ -77,5 +77,34 @@ public class TestLogicalNode {
 
     assertTrue(groupbyNode.equals(groupbyNode2));
     assertTrue(groupbyNode.deepEquals(groupbyNode2));
+  }
+
+  @Test
+  public final void testLogicalPlanTreeClone() throws CloneNotSupportedException {
+    Schema schema = new Schema();
+    schema.addColumn("id", Type.INT4);
+    schema.addColumn("name", Type.TEXT);
+    schema.addColumn("age", Type.INT2);
+    LogicalPlanTree tree = new LogicalPlanTree();
+
+    GroupbyNode groupbyNode = new GroupbyNode(0);
+    groupbyNode.setGroupingColumns(new Column[]{schema.getColumn(1), schema.getColumn(2)});
+    ScanNode scanNode = new ScanNode(0);
+    scanNode.init(CatalogUtil.newTableDesc("in", schema, CatalogUtil.newTableMeta(StoreType.CSV), new Path("in")));
+
+    GroupbyNode groupbyNode2 = new GroupbyNode(0);
+    groupbyNode2.setGroupingColumns(new Column[]{schema.getColumn(1), schema.getColumn(2)});
+    JoinNode joinNode = new JoinNode(0);
+    ScanNode scanNode2 = new ScanNode(0);
+    scanNode2.init(CatalogUtil.newTableDesc("in2", schema, CatalogUtil.newTableMeta(StoreType.CSV), new Path("in2")));
+
+    tree.setChild(scanNode, groupbyNode);
+    tree.setChild(joinNode, groupbyNode2);
+    tree.setLeftChild(scanNode, joinNode);
+    tree.setRightChild(scanNode2, joinNode);
+
+    LogicalPlanTree clone = (LogicalPlanTree) tree.clone();
+    System.out.println(tree);
+    System.out.println(clone);
   }
 }

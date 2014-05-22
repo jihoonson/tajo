@@ -142,7 +142,7 @@ public class TestBNLJoinExec {
     Expr expr = analyzer.parse(QUERIES[0]);
     LogicalPlan plan = planner.createPlan(LocalTajoTestingUtility.createDummySession(), expr);
     LogicalNode root = plan.getRootBlock().getRoot();
-    JoinNode joinNode = PlannerUtil.findTopNode(plan.getLogicalNodeTree(), root, NodeType.JOIN);
+    JoinNode joinNode = PlannerUtil.findTopNode(plan.getLogicalPlanTree(), root, NodeType.JOIN);
     Enforcer enforcer = new Enforcer();
     enforcer.enforceJoinAlgorithm(joinNode.getPID(), JoinAlgorithm.BLOCK_NESTED_LOOP_JOIN);
 
@@ -157,7 +157,7 @@ public class TestBNLJoinExec {
     ctx.setEnforcer(enforcer);
 
     PhysicalPlanner phyPlanner = new PhysicalPlannerImpl(conf,sm);
-    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getLogicalNodeTree(), root);
+    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getLogicalPlanTree(), root);
 
     ProjectionExec proj = (ProjectionExec) exec;
     assertTrue(proj.getChild() instanceof BNLJoinExec);
@@ -184,7 +184,7 @@ public class TestBNLJoinExec {
     FileFragment[] merged = TUtil.concat(empFrags, peopleFrags);
 
 
-    JoinNode joinNode = PlannerUtil.findTopNode(plan.getLogicalNodeTree(), root, NodeType.JOIN);
+    JoinNode joinNode = PlannerUtil.findTopNode(plan.getLogicalPlanTree(), root, NodeType.JOIN);
     Enforcer enforcer = new Enforcer();
     enforcer.enforceJoinAlgorithm(joinNode.getPID(), JoinAlgorithm.BLOCK_NESTED_LOOP_JOIN);
 
@@ -195,7 +195,7 @@ public class TestBNLJoinExec {
 
 
     PhysicalPlanner phyPlanner = new PhysicalPlannerImpl(conf,sm);
-    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getLogicalNodeTree(), root);
+    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getLogicalPlanTree(), root);
 
     ProjectionExec proj = (ProjectionExec) exec;
     assertTrue(proj.getChild() instanceof BNLJoinExec);

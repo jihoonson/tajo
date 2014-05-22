@@ -61,7 +61,7 @@ public class LogicalPlan {
   private Map<Integer, QueryBlock> queryBlockByPID = new HashMap<Integer, QueryBlock>();
   private Map<String, String> exprToBlockNameMap = TUtil.newHashMap();
   private SimpleDirectedGraph<String, BlockEdge> queryBlockGraph = new SimpleDirectedGraph<String, BlockEdge>();
-  private LogicalNodeTree logicalNodeTree = new LogicalNodeTree();
+  private LogicalPlanTree logicalPlanTree = new LogicalPlanTree();
 
   /** planning and optimization log */
   private List<String> planingHistory = Lists.newArrayList();
@@ -195,45 +195,45 @@ public class LogicalPlan {
     return prefix;
   }
 
-  public LogicalNodeTree getLogicalNodeTree() {
-    return logicalNodeTree;
+  public LogicalPlanTree getLogicalPlanTree() {
+    return logicalPlanTree;
   }
 
   public void setChild(LogicalNode child, LogicalNode parent) {
-    logicalNodeTree.setChild(child, parent);
+    logicalPlanTree.setChild(child, parent);
   }
 
   public void setChild(LogicalNode left, LogicalNode right, LogicalNode parent) {
-    logicalNodeTree.setLeftChild(left, parent);
-    logicalNodeTree.setRightChild(right, parent);
+    logicalPlanTree.setLeftChild(left, parent);
+    logicalPlanTree.setRightChild(right, parent);
   }
 
   public void setLeftChild(LogicalNode child, LogicalNode parent) {
-    logicalNodeTree.setLeftChild(child, parent);
+    logicalPlanTree.setLeftChild(child, parent);
   }
 
   public void setRightChild(LogicalNode child, LogicalNode parent) {
-    logicalNodeTree.setRightChild(child, parent);
+    logicalPlanTree.setRightChild(child, parent);
   }
 
   public <NODE extends LogicalNode> NODE getParent(LogicalNode child) {
-    return logicalNodeTree.getParent(child);
+    return logicalPlanTree.getParent(child);
   }
 
   public int getChildCount(LogicalNode parent) {
-    return logicalNodeTree.getChildCount(parent.getPID());
+    return logicalPlanTree.getChildCount(parent.getPID());
   }
 
   public <NODE extends LogicalNode> NODE getChild(LogicalNode parent) {
-    return logicalNodeTree.getChild(parent);
+    return logicalPlanTree.getChild(parent);
   }
 
   public <NODE extends LogicalNode> NODE getLeftChild(LogicalNode parent) {
-    return logicalNodeTree.getLeftChild(parent);
+    return logicalPlanTree.getLeftChild(parent);
   }
 
   public <NODE extends LogicalNode> NODE getRightChild(LogicalNode parent) {
-    return logicalNodeTree.getRightChild(parent);
+    return logicalPlanTree.getRightChild(parent);
   }
 
   public QueryBlock getRootBlock() {
@@ -655,7 +655,7 @@ public class LogicalPlan {
       this.rootNode = blockRoot;
       if (blockRoot instanceof LogicalRootNode) {
         LogicalRootNode rootNode = (LogicalRootNode) blockRoot;
-        rootType = logicalNodeTree.getChild(rootNode).getType();
+        rootType = logicalPlanTree.getChild(rootNode).getType();
       }
     }
 

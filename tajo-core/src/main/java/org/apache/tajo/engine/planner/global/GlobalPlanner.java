@@ -196,7 +196,7 @@ public class GlobalPlanner {
   /**
    * It calculates the total volume of all descendent relation nodes.
    */
-  public static long computeDescendentVolume(LogicalNodeTree tree, LogicalNode node) throws PlanningException {
+  public static long computeDescendentVolume(LogicalPlanTree tree, LogicalNode node) throws PlanningException {
 
     if (node instanceof RelationNode) {
       switch (node.getType()) {
@@ -236,7 +236,7 @@ public class GlobalPlanner {
     return node.getType() == NodeType.SCAN || node.getType() == NodeType.PARTITIONS_SCAN;
   }
 
-  private ExecutionBlock buildJoinPlan(GlobalPlanContext context, LogicalNodeTree tree, JoinNode joinNode,
+  private ExecutionBlock buildJoinPlan(GlobalPlanContext context, LogicalPlanTree tree, JoinNode joinNode,
                                         ExecutionBlock leftBlock, ExecutionBlock rightBlock)
       throws PlanningException {
     MasterPlan masterPlan = context.plan;
@@ -509,7 +509,7 @@ public class GlobalPlanner {
       masterPlan.getLogicalPlan().setChild(childBlock.getRoot(), firstPhaseGroupBy);
 //      firstPhaseGroupbyCopy.setChild(childBlock.getPlan());
 //      childBlock.setPlan(firstPhaseGroupbyCopy);
-      childBlock.setPlan(masterPlan.getLogicalPlan().getLogicalNodeTree(), firstPhaseGroupBy);
+      childBlock.setPlan(masterPlan.getLogicalPlan().getLogicalPlanTree(), firstPhaseGroupBy);
 
       // just keep the last data channel.
       lastDataChannel = dataChannel;
@@ -519,7 +519,7 @@ public class GlobalPlanner {
 //    secondPhaseGroupBy.setChild(scanNode);
     masterPlan.getLogicalPlan().setChild(scanNode, secondPhaseGroupBy);
 //    lastBlock.setPlan(secondPhaseGroupBy);
-    lastBlock.setPlan(masterPlan.getLogicalPlan().getLogicalNodeTree(), secondPhaseGroupBy);
+    lastBlock.setPlan(masterPlan.getLogicalPlan().getLogicalPlanTree(), secondPhaseGroupBy);
     return lastBlock;
   }
 
@@ -621,7 +621,7 @@ public class GlobalPlanner {
     secondPhaseGroupby.setTargets(groupbyNode.getTargets());
 
     ExecutionBlock secondStage = context.plan.newExecutionBlock();
-    secondStage.setPlan(context.plan.getLogicalPlan().getLogicalNodeTree(), secondPhaseGroupby);
+    secondStage.setPlan(context.plan.getLogicalPlan().getLogicalPlanTree(), secondPhaseGroupby);
     SortSpec [] sortSpecs = PlannerUtil.columnsToSortSpec(firstStageGroupingColumns);
     secondStage.getEnforcer().enforceSortAggregation(secondPhaseGroupby.getPID(), sortSpecs);
 
@@ -637,7 +637,7 @@ public class GlobalPlanner {
 //    secondPhaseGroupby.setChild(scanNode);
     secondPhaseGroupby.setInSchema(scanNode.getOutSchema());
     context.plan.getLogicalPlan().setChild(scanNode, secondPhaseGroupby);
-    secondStage.setPlan(context.plan.getLogicalPlan().getLogicalNodeTree(), secondPhaseGroupby);
+    secondStage.setPlan(context.plan.getLogicalPlan().getLogicalPlanTree(), secondPhaseGroupby);
 
     context.plan.addConnect(channel);
 
@@ -1145,7 +1145,7 @@ public class GlobalPlanner {
       ExecutionBlock leftChildBlock = context.execBlockMap.get(leftChild.getPID());
       ExecutionBlock rightChildBlock = context.execBlockMap.get(rightChild.getPID());
 
-      ExecutionBlock newExecBlock = buildJoinPlan(context, plan.getLogicalNodeTree(), node, leftChildBlock,
+      ExecutionBlock newExecBlock = buildJoinPlan(context, plan.getLogicalPlanTree(), node, leftChildBlock,
           rightChildBlock);
       context.execBlockMap.put(node.getPID(), newExecBlock);
 
@@ -1207,7 +1207,7 @@ public class GlobalPlanner {
 
     private LogicalNode handleUnaryNode(GlobalPlanContext context, LogicalNode child, LogicalNode node) {
       ExecutionBlock execBlock = context.execBlockMap.remove(child.getPID());
-      execBlock.setPlan(context.plan.getLogicalPlan().getLogicalNodeTree(), node);
+      execBlock.setPlan(context.plan.getLogicalPlan().getLogicalPlanTree(), node);
       context.execBlockMap.put(node.getPID(), execBlock);
 
       return node;
@@ -1253,7 +1253,7 @@ public class GlobalPlanner {
     public LogicalNode visitScan(GlobalPlanContext context, LogicalPlan plan, LogicalPlan.QueryBlock queryBlock,
                                  ScanNode node, Stack<LogicalNode> stack) throws PlanningException {
       ExecutionBlock newExecBlock = context.plan.newExecutionBlock();
-      newExecBlock.setPlan(context.plan.getLogicalPlan().getLogicalNodeTree(), node);
+      newExecBlock.setPlan(context.plan.getLogicalPlan().getLogicalPlanTree(), node);
       context.execBlockMap.put(node.getPID(), newExecBlock);
       return node;
     }
@@ -1263,7 +1263,7 @@ public class GlobalPlanner {
                                                  LogicalPlan.QueryBlock block, PartitionedTableScanNode node,
                                                  Stack<LogicalNode> stack)throws PlanningException {
       ExecutionBlock newExecBlock = context.plan.newExecutionBlock();
-      newExecBlock.setPlan(context.plan.getLogicalPlan().getLogicalNodeTree(), node);
+      newExecBlock.setPlan(context.plan.getLogicalPlan().getLogicalPlanTree(), node);
       context.execBlockMap.put(node.getPID(), newExecBlock);
       return node;
     }

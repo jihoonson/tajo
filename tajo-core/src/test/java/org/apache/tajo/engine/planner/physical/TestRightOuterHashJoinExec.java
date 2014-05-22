@@ -241,7 +241,7 @@ public class TestRightOuterHashJoinExec {
     LogicalNode root = plan.getRootBlock().getRoot();
 
     PhysicalPlanner phyPlanner = new PhysicalPlannerImpl(conf, sm);
-    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getLogicalNodeTree(), root);
+    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getLogicalPlanTree(), root);
 
     ProjectionExec proj = (ProjectionExec) exec;
     if (proj.getChild() instanceof RightOuterMergeJoinExec) {
@@ -283,7 +283,7 @@ public class TestRightOuterHashJoinExec {
     LogicalNode root = plan.getRootBlock().getRoot();
 
     PhysicalPlanner phyPlanner = new PhysicalPlannerImpl(conf, sm);
-    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getLogicalNodeTree(), root);
+    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getLogicalPlanTree(), root);
 
     ProjectionExec proj = (ProjectionExec) exec;
     if (proj.getChild() instanceof RightOuterMergeJoinExec) {
@@ -325,7 +325,7 @@ public class TestRightOuterHashJoinExec {
     LogicalNode root = plan.getRootBlock().getRoot();
 
     PhysicalPlanner phyPlanner = new PhysicalPlannerImpl(conf, sm);
-    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getLogicalNodeTree(), root);
+    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getLogicalPlanTree(), root);
 
     ProjectionExec proj = (ProjectionExec) exec;
     if (proj.getChild() instanceof RightOuterMergeJoinExec) {

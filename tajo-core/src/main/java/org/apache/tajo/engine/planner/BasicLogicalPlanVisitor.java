@@ -136,7 +136,7 @@ public class BasicLogicalPlanVisitor<CONTEXT, RESULT> implements LogicalPlanVisi
   public RESULT visitRoot(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, LogicalRootNode node,
                           Stack<LogicalNode> stack) throws PlanningException {
     stack.push(node);
-    RESULT result = visit(context, plan, block, plan.getLogicalNodeTree().getChild(node), stack);
+    RESULT result = visit(context, plan, block, plan.getLogicalPlanTree().getChild(node), stack);
     stack.pop();
     return result;
   }
@@ -146,7 +146,7 @@ public class BasicLogicalPlanVisitor<CONTEXT, RESULT> implements LogicalPlanVisi
                                 Stack<LogicalNode> stack)
       throws PlanningException {
     stack.push(node);
-    RESULT result = visit(context, plan, block, plan.getLogicalNodeTree().getChild(node), stack);
+    RESULT result = visit(context, plan, block, plan.getLogicalPlanTree().getChild(node), stack);
     stack.pop();
     return result;
   }
@@ -155,7 +155,7 @@ public class BasicLogicalPlanVisitor<CONTEXT, RESULT> implements LogicalPlanVisi
   public RESULT visitLimit(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, LimitNode node,
                            Stack<LogicalNode> stack) throws PlanningException {
     stack.push(node);
-    RESULT result = visit(context, plan, block, plan.getLogicalNodeTree().getChild(node), stack);
+    RESULT result = visit(context, plan, block, plan.getLogicalPlanTree().getChild(node), stack);
     stack.pop();
     return result;
   }
@@ -164,7 +164,7 @@ public class BasicLogicalPlanVisitor<CONTEXT, RESULT> implements LogicalPlanVisi
   public RESULT visitSort(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, SortNode node,
                           Stack<LogicalNode> stack) throws PlanningException {
     stack.push(node);
-    RESULT result = visit(context, plan, block, plan.getLogicalNodeTree().getChild(node), stack);
+    RESULT result = visit(context, plan, block, plan.getLogicalPlanTree().getChild(node), stack);
     stack.pop();
     return result;
   }
@@ -173,7 +173,7 @@ public class BasicLogicalPlanVisitor<CONTEXT, RESULT> implements LogicalPlanVisi
   public RESULT visitHaving(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, HavingNode node,
                             Stack<LogicalNode> stack) throws PlanningException {
     stack.push(node);
-    RESULT result = visit(context, plan, block, plan.getLogicalNodeTree().getChild(node), stack);
+    RESULT result = visit(context, plan, block, plan.getLogicalPlanTree().getChild(node), stack);
     stack.pop();
     return result;
   }
@@ -182,7 +182,7 @@ public class BasicLogicalPlanVisitor<CONTEXT, RESULT> implements LogicalPlanVisi
   public RESULT visitGroupBy(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, GroupbyNode node,
                              Stack<LogicalNode> stack) throws PlanningException {
     stack.push(node);
-    RESULT result = visit(context, plan, block, plan.getLogicalNodeTree().getChild(node), stack);
+    RESULT result = visit(context, plan, block, plan.getLogicalPlanTree().getChild(node), stack);
     stack.pop();
     return result;
   }
@@ -200,7 +200,7 @@ public class BasicLogicalPlanVisitor<CONTEXT, RESULT> implements LogicalPlanVisi
   public RESULT visitFilter(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, SelectionNode node,
                             Stack<LogicalNode> stack) throws PlanningException {
     stack.push(node);
-    RESULT result = visit(context, plan, block, plan.getLogicalNodeTree().getChild(node), stack);
+    RESULT result = visit(context, plan, block, plan.getLogicalPlanTree().getChild(node), stack);
     stack.pop();
     return result;
   }
@@ -209,8 +209,8 @@ public class BasicLogicalPlanVisitor<CONTEXT, RESULT> implements LogicalPlanVisi
   public RESULT visitJoin(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, JoinNode node,
                           Stack<LogicalNode> stack) throws PlanningException {
     stack.push(node);
-    RESULT result = visit(context, plan, block, plan.getLogicalNodeTree().getLeftChild(node), stack);
-    visit(context, plan, block, plan.getLogicalNodeTree().getRightChild(node), stack);
+    RESULT result = visit(context, plan, block, plan.getLogicalPlanTree().getLeftChild(node), stack);
+    visit(context, plan, block, plan.getLogicalPlanTree().getRightChild(node), stack);
     stack.pop();
     return result;
   }
@@ -219,9 +219,9 @@ public class BasicLogicalPlanVisitor<CONTEXT, RESULT> implements LogicalPlanVisi
   public RESULT visitUnion(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, UnionNode node,
                            Stack<LogicalNode> stack) throws PlanningException {
     stack.push(node);
-    LogicalPlan.QueryBlock leftBlock = plan.getBlock(plan.getLogicalNodeTree().getLeftChild(node));
+    LogicalPlan.QueryBlock leftBlock = plan.getBlock(plan.getLogicalPlanTree().getLeftChild(node));
     RESULT result = visit(context, plan, leftBlock, leftBlock.getRoot(), stack);
-    LogicalPlan.QueryBlock rightBlock = plan.getBlock(plan.getLogicalNodeTree().getRightChild(node));
+    LogicalPlan.QueryBlock rightBlock = plan.getBlock(plan.getLogicalPlanTree().getRightChild(node));
     visit(context, plan, rightBlock, rightBlock.getRoot(), stack);
     stack.pop();
     return result;
@@ -231,8 +231,8 @@ public class BasicLogicalPlanVisitor<CONTEXT, RESULT> implements LogicalPlanVisi
   public RESULT visitExcept(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, ExceptNode node,
                             Stack<LogicalNode> stack) throws PlanningException {
     stack.push(node);
-    RESULT result = visit(context, plan, block, plan.getLogicalNodeTree().getLeftChild(node), stack);
-    visit(context, plan, block, plan.getLogicalNodeTree().getRightChild(node), stack);
+    RESULT result = visit(context, plan, block, plan.getLogicalPlanTree().getLeftChild(node), stack);
+    visit(context, plan, block, plan.getLogicalPlanTree().getRightChild(node), stack);
     stack.pop();
     return result;
   }
@@ -241,8 +241,8 @@ public class BasicLogicalPlanVisitor<CONTEXT, RESULT> implements LogicalPlanVisi
   public RESULT visitIntersect(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, IntersectNode node,
                                Stack<LogicalNode> stack) throws PlanningException {
     stack.push(node);
-    RESULT result = visit(context, plan, block, plan.getLogicalNodeTree().getLeftChild(node), stack);
-    visit(context, plan, block, plan.getLogicalNodeTree().getRightChild(node), stack);
+    RESULT result = visit(context, plan, block, plan.getLogicalPlanTree().getLeftChild(node), stack);
+    visit(context, plan, block, plan.getLogicalPlanTree().getRightChild(node), stack);
     stack.pop();
     return result;
   }
@@ -274,7 +274,7 @@ public class BasicLogicalPlanVisitor<CONTEXT, RESULT> implements LogicalPlanVisi
   public RESULT visitStoreTable(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, StoreTableNode node,
                                 Stack<LogicalNode> stack) throws PlanningException {
     stack.push(node);
-    RESULT result = visit(context, plan, block, plan.getLogicalNodeTree().getChild(node), stack);
+    RESULT result = visit(context, plan, block, plan.getLogicalPlanTree().getChild(node), stack);
     stack.pop();
     return result;
   }
@@ -283,7 +283,7 @@ public class BasicLogicalPlanVisitor<CONTEXT, RESULT> implements LogicalPlanVisi
   public RESULT visitInsert(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, InsertNode node,
                             Stack<LogicalNode> stack) throws PlanningException {
     stack.push(node);
-    RESULT result = visit(context, plan, block, plan.getLogicalNodeTree().getChild(node), stack);
+    RESULT result = visit(context, plan, block, plan.getLogicalPlanTree().getChild(node), stack);
     stack.pop();
     return result;
   }
@@ -305,8 +305,8 @@ public class BasicLogicalPlanVisitor<CONTEXT, RESULT> implements LogicalPlanVisi
     RESULT result = null;
     stack.push(node);
 //    if (node.hasSubQuery()) {
-    if (plan.getLogicalNodeTree().hasChild(node)) {
-      result = visit(context, plan, block, plan.getLogicalNodeTree().getChild(node), stack);
+    if (plan.getLogicalPlanTree().hasChild(node)) {
+      result = visit(context, plan, block, plan.getLogicalPlanTree().getChild(node), stack);
     }
     stack.pop();
     return result;

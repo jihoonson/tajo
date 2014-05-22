@@ -32,7 +32,7 @@ import org.apache.tajo.QueryIdFactory;
 import org.apache.tajo.QueryUnitAttemptId;
 import org.apache.tajo.QueryUnitId;
 import org.apache.tajo.catalog.statistics.TableStats;
-import org.apache.tajo.engine.planner.LogicalNodeTree;
+import org.apache.tajo.engine.planner.LogicalPlanTree;
 import org.apache.tajo.engine.planner.logical.*;
 import org.apache.tajo.master.FragmentPair;
 import org.apache.tajo.master.TaskState;
@@ -61,7 +61,7 @@ public class QueryUnit implements EventHandler<TaskEvent> {
 	private QueryUnitId taskId;
   private EventHandler eventHandler;
 	private StoreTableNode store = null;
-	private LogicalNodeTree plan = null;
+	private LogicalPlanTree plan = null;
   private LogicalNode root = null;
 	private List<ScanNode> scan;
 	
@@ -209,7 +209,7 @@ public class QueryUnit implements EventHandler<TaskEvent> {
   }
 
 //	public void setLogicalPlan(LogicalNode plan) {
-  public void setLogicalPlan(LogicalNodeTree plan, LogicalNode root) {
+  public void setLogicalPlan(LogicalPlanTree plan, LogicalNode root) {
 	  this.plan = plan;
     this.root = root;
 
@@ -300,7 +300,7 @@ public class QueryUnit implements EventHandler<TaskEvent> {
     return fragmentProtos;
   }
 	
-	public LogicalNodeTree getLogicalPlan() {
+	public LogicalPlanTree getLogicalPlan() {
 	  return this.plan;
 	}
 	

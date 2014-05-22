@@ -38,7 +38,7 @@ import org.apache.tajo.catalog.proto.CatalogProtos;
 import org.apache.tajo.catalog.statistics.TableStats;
 import org.apache.tajo.conf.TajoConf;
 import org.apache.tajo.engine.json.CoreGsonHelper;
-import org.apache.tajo.engine.planner.LogicalNodeTree;
+import org.apache.tajo.engine.planner.LogicalPlanTree;
 import org.apache.tajo.engine.planner.PlannerUtil;
 import org.apache.tajo.engine.planner.logical.LogicalNode;
 import org.apache.tajo.engine.planner.logical.NodeType;
@@ -82,7 +82,7 @@ public class Task {
   private final QueryUnitRequest request;
   private TaskAttemptContext context;
   private List<Fetcher> fetcherRunners;
-  private LogicalNodeTree plan;
+  private LogicalPlanTree plan;
   private LogicalNode root;
   private final Map<String, TableDesc> descs = Maps.newHashMap();
   private PhysicalExec executor;
@@ -156,7 +156,7 @@ public class Task {
     this.reporter = new Reporter(taskId, masterProxy);
     this.reporter.startCommunicationThread();
 
-    plan = CoreGsonHelper.fromJson(request.getSerializedPlan(), LogicalNodeTree.class);
+    plan = CoreGsonHelper.fromJson(request.getSerializedPlan(), LogicalPlanTree.class);
     root = CoreGsonHelper.fromJson(request.getSerializedRoot(), LogicalNode.class);
     LogicalNode [] scanNode = PlannerUtil.findAllNodes(plan, root, NodeType.SCAN);
     for (LogicalNode node : scanNode) {

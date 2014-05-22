@@ -32,22 +32,11 @@ import org.apache.tajo.util.TUtil;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 
-public class LogicalNodeTree extends SimpleTree<Integer, LogicalNodeEdge> implements GsonObject {
-  @Expose private Integer rootPid = null;
+public class LogicalPlanTree extends SimpleTree<Integer, LogicalNodeEdge> implements GsonObject,
+    Cloneable {
   @Expose private Map<Integer, LogicalNode> nodeMap = TUtil.newHashMap();
-
-  public void setRoot(LogicalNode node) {
-    this.rootPid = node.getPID();
-    // TODO: remove the ancestor node of root
-  }
-
-  public LogicalNode getRoot() {
-    if (rootPid == null) {
-      throw new NullPointerException("Root pid should be not null");
-    }
-    return nodeMap.get(rootPid);
-  }
 
   public void addChild(LogicalNode child, LogicalNode parent) {
     nodeMap.put(child.getPID(), child);
@@ -260,6 +249,31 @@ public class LogicalNodeTree extends SimpleTree<Integer, LogicalNodeEdge> implem
 
   @Override
   public String toJson() {
-    return CoreGsonHelper.toJson(this, LogicalNodeTree.class);
+    return CoreGsonHelper.toJson(this, LogicalPlanTree.class);
+  }
+
+  @Override
+  public Object clone() throws CloneNotSupportedException {
+    LogicalPlanTree clone = new LogicalPlanTree();
+    for (LogicalNode eachNode : nodeMap.values()) {
+      if (directedEdges.containsKey(eachNode.getPID())) {
+        for (Entry<Integer, LogicalNodeEdge> e : directedEdges.get(eachNode.getPID()).entrySet()) {
+          LogicalNode child = (LogicalNode) eachNode.clone();
+          LogicalNode parent = (LogicalNode) nodeMap.get(e.getKey()).clone();
+          switch (e.getValue().getEdgeType()) {
+            case ORDERED_LEFT:
+              clone.setLeftChild(child, parent);
+              break;
+            case ORDERED_RIGHT:
+              clone.setRightChild(child, parent);
+              break;
+            case UNORDERED:
+              clone.setChild(child, parent);
+              break;
+          }
+        }
+      }
+    }
+    return clone;
   }
 }

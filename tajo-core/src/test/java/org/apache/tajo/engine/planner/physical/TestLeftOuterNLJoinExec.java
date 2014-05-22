@@ -266,7 +266,7 @@ public class TestLeftOuterNLJoinExec {
 
 
     PhysicalPlanner phyPlanner = new PhysicalPlannerImpl(conf, sm);
-    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getLogicalNodeTree(), root);
+    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getLogicalPlanTree(), root);
 
     //maybe plan results with hash join exec algorithm usage. Must convert from HashLeftOuterJoinExec into NLLeftOuterJoinExec
     ProjectionExec proj = (ProjectionExec) exec;
@@ -308,7 +308,7 @@ public class TestLeftOuterNLJoinExec {
     LogicalNode root = plan.getRootBlock().getRoot();
 
     PhysicalPlanner phyPlanner = new PhysicalPlannerImpl(conf, sm);
-    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getLogicalNodeTree(), root);
+    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getLogicalPlanTree(), root);
     
     //maybe plan results with hash join exec algorithm usage. Must convert from HashLeftOuterJoinExec into NLLeftOuterJoinExec
     ProjectionExec proj = (ProjectionExec) exec;
@@ -352,7 +352,7 @@ public class TestLeftOuterNLJoinExec {
     LogicalNode root = plan.getRootBlock().getRoot();
 
     PhysicalPlanner phyPlanner = new PhysicalPlannerImpl(conf, sm);
-    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getLogicalNodeTree(), root);
+    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getLogicalPlanTree(), root);
     
     //maybe plan results with hash join exec algorithm usage. Must convert from HashLeftOuterJoinExec into NLLeftOuterJoinExec
     ProjectionExec proj = (ProjectionExec) exec;
@@ -397,7 +397,7 @@ public class TestLeftOuterNLJoinExec {
     LogicalNode root = plan.getRootBlock().getRoot();
 
     PhysicalPlanner phyPlanner = new PhysicalPlannerImpl(conf, sm);
-    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getLogicalNodeTree(), root);
+    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getLogicalPlanTree(), root);
     
     //maybe plan results with hash join exec algorithm usage. Must convert from HashLeftOuterJoinExec into NLLeftOuterJoinExec
     ProjectionExec proj = (ProjectionExec) exec;
@@ -441,7 +441,7 @@ public class TestLeftOuterNLJoinExec {
     LogicalNode root = plan.getRootBlock().getRoot();
 
     PhysicalPlanner phyPlanner = new PhysicalPlannerImpl(conf, sm);
-    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getLogicalNodeTree(), root);
+    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getLogicalPlanTree(), root);
     
     //maybe plan results with hash join exec algorithm usage. Must convert from HashLeftOuterJoinExec into NLLeftOuterJoinExec
     ProjectionExec proj = (ProjectionExec) exec;

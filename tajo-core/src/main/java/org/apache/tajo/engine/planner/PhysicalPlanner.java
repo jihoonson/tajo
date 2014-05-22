@@ -31,7 +31,7 @@ import org.apache.tajo.exception.InternalException;
  */
 public interface PhysicalPlanner {
   public PhysicalExec createPlan(TaskAttemptContext context,
-                                 LogicalNodeTree logicalPlan,
+                                 LogicalPlanTree logicalPlan,
                                  LogicalNode root)
       throws InternalException;
 }

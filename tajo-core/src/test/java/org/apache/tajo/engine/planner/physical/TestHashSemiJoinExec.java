@@ -166,7 +166,7 @@ public class TestHashSemiJoinExec {
     LogicalNode rootNode = plan.getRootBlock().getRoot();
 
     PhysicalPlanner phyPlanner = new PhysicalPlannerImpl(conf, sm);
-    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getLogicalNodeTree(), rootNode);
+    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getLogicalPlanTree(), rootNode);
 
     // replace an equal join with an hash anti join.
     if (exec instanceof MergeJoinExec) {
