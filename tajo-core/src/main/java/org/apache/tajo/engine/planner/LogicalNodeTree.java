@@ -22,8 +22,8 @@ import com.google.common.base.Preconditions;
 import com.google.gson.annotations.Expose;
 import org.apache.tajo.engine.json.CoreGsonHelper;
 import org.apache.tajo.engine.planner.graph.SimpleTree;
+import org.apache.tajo.engine.planner.logical.ArityClass;
 import org.apache.tajo.engine.planner.logical.LogicalNode;
-import org.apache.tajo.engine.planner.logical.LogicalNode.ArityClass;
 import org.apache.tajo.engine.planner.logical.LogicalNode.EdgeType;
 import org.apache.tajo.engine.planner.logical.LogicalNode.LogicalNodeEdge;
 import org.apache.tajo.engine.planner.logical.LogicalNodeVisitor;
@@ -34,7 +34,20 @@ import java.util.List;
 import java.util.Map;
 
 public class LogicalNodeTree extends SimpleTree<Integer, LogicalNodeEdge> implements GsonObject {
+  @Expose private Integer rootPid = null;
   @Expose private Map<Integer, LogicalNode> nodeMap = TUtil.newHashMap();
+
+  public void setRoot(LogicalNode node) {
+    this.rootPid = node.getPID();
+    // TODO: remove the ancestor node of root
+  }
+
+  public LogicalNode getRoot() {
+    if (rootPid == null) {
+      throw new NullPointerException("Root pid should be not null");
+    }
+    return nodeMap.get(rootPid);
+  }
 
   public void addChild(LogicalNode child, LogicalNode parent) {
     nodeMap.put(child.getPID(), child);
@@ -225,7 +238,9 @@ public class LogicalNodeTree extends SimpleTree<Integer, LogicalNodeEdge> implem
 
   public void preOrder(LogicalNodeVisitor visitor, LogicalNode current) {
     visitor.visit(current);
-    if (childAvailable(current)) {
+    if (ArityClass.getArityClassByNodeType(current.getType()) == ArityClass.UNARY) {
+      preOrder(visitor, getChild(current));
+    } else if (ArityClass.getArityClassByNodeType(current.getType()) == ArityClass.BINARY) {
       for (LogicalNode child : getChildsInOrder(current)) {
         preOrder(visitor, child);
       }
@@ -233,7 +248,9 @@ public class LogicalNodeTree extends SimpleTree<Integer, LogicalNodeEdge> implem
   }
 
   public void postOrder(LogicalNodeVisitor visitor, LogicalNode current) {
-    if (childAvailable(current)) {
+    if (ArityClass.getArityClassByNodeType(current.getType()) == ArityClass.UNARY) {
+      postOrder(visitor, getChild(current));
+    } else if (ArityClass.getArityClassByNodeType(current.getType()) == ArityClass.BINARY) {
       for (LogicalNode child : getChildsInOrder(current)) {
         postOrder(visitor, child);
       }
@@ -244,47 +261,5 @@ public class LogicalNodeTree extends SimpleTree<Integer, LogicalNodeEdge> implem
   @Override
   public String toJson() {
     return CoreGsonHelper.toJson(this, LogicalNodeTree.class);
-  }
-
-  public static ArityClass getArityClass(LogicalNodeTree plan, LogicalNode node) {
-    int childCount = plan.getChildCount(node.getPID());
-    if (childCount == 1) return ArityClass.UNARY;
-    else if (childCount == 2) return ArityClass.BINARY;
-    else if (childCount == 3) return ArityClass.NARY;
-    else return ArityClass.NULLARY;
-  }
-
-  private static boolean childAvailable(LogicalNode node) {
-    switch (node.getType()) {
-      case ROOT:
-      case PROJECTION:
-      case LIMIT:
-      case SORT:
-      case HAVING:
-      case GROUP_BY:
-      case SELECTION:
-      case JOIN:
-      case UNION:
-      case INTERSECT:
-      case EXCEPT:
-      case TABLE_SUBQUERY:
-      case STORE:
-      case INSERT:
-      case DISTINCT_GROUP_BY:
-      case CREATE_TABLE:
-        return true;
-      case EXPRS:
-      case SCAN:
-      case PARTITIONS_SCAN:
-      case BST_INDEX_SCAN:
-      case CREATE_DATABASE:
-      case DROP_DATABASE:
-      case DROP_TABLE:
-      case ALTER_TABLESPACE:
-      case ALTER_TABLE:
-        return false;
-      default:
-        return false;
-    }
   }
 }

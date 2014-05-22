@@ -30,7 +30,6 @@ import org.apache.tajo.catalog.proto.CatalogProtos;
 import org.apache.tajo.common.TajoDataTypes.DataType;
 import org.apache.tajo.engine.eval.*;
 import org.apache.tajo.engine.planner.logical.*;
-import org.apache.tajo.engine.planner.logical.LogicalNode.ArityClass;
 import org.apache.tajo.engine.utils.SchemaUtil;
 import org.apache.tajo.exception.UnsupportedException;
 import org.apache.tajo.storage.TupleComparator;
@@ -243,7 +242,7 @@ public class PlannerUtil {
       LogicalNode left = null;
       LogicalNode right = null;
       LogicalNodeTree nodeTree = plan.getLogicalNodeTree();
-      ArityClass arityClass = LogicalNodeTree.getArityClass(nodeTree, node);
+      ArityClass arityClass = ArityClass.getArityClassByNodeType(node.getType());
 
       switch (arityClass) {
         case UNARY:

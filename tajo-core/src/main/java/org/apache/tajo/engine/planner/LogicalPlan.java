@@ -31,7 +31,6 @@ import org.apache.tajo.engine.exception.VerifyException;
 import org.apache.tajo.engine.planner.graph.DirectedGraphCursor;
 import org.apache.tajo.engine.planner.graph.SimpleDirectedGraph;
 import org.apache.tajo.engine.planner.logical.LogicalNode;
-import org.apache.tajo.engine.planner.logical.LogicalNode.ArityClass;
 import org.apache.tajo.engine.planner.logical.LogicalRootNode;
 import org.apache.tajo.engine.planner.logical.NodeType;
 import org.apache.tajo.engine.planner.logical.RelationNode;
