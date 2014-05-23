@@ -29,10 +29,7 @@ import org.apache.tajo.catalog.TableDesc;
 import org.apache.tajo.catalog.partition.PartitionMethodDesc;
 import org.apache.tajo.conf.TajoConf;
 import org.apache.tajo.engine.eval.*;
-import org.apache.tajo.engine.planner.BasicLogicalPlanVisitor;
-import org.apache.tajo.engine.planner.LogicalPlan;
-import org.apache.tajo.engine.planner.PlannerUtil;
-import org.apache.tajo.engine.planner.PlanningException;
+import org.apache.tajo.engine.planner.*;
 import org.apache.tajo.engine.planner.logical.*;
 import org.apache.tajo.engine.utils.TupleUtil;
 import org.apache.tajo.storage.Tuple;
@@ -88,7 +85,7 @@ public class PartitionedTableRewriter implements RewriteRule {
         }
       }
       if (containsPartitionedTables) {
-        rewriter.visit(block, plan, block, block.getRoot(), new Stack<LogicalNode>());
+        rewriter.visit(block, plan, block, plan.getPlanTree(), block.getRoot(), new Stack<LogicalNode>());
       }
     }
     return plan;
@@ -344,7 +341,8 @@ public class PartitionedTableRewriter implements RewriteRule {
 
   private final class Rewriter extends BasicLogicalPlanVisitor<Object, Object> {
     @Override
-    public Object visitScan(Object object, LogicalPlan plan, LogicalPlan.QueryBlock block, ScanNode scanNode,
+    public Object visitScan(Object object, LogicalPlan plan, LogicalPlan.QueryBlock block,
+                            LogicalPlanTree planTree, ScanNode scanNode,
                             Stack<LogicalNode> stack) throws PlanningException {
 
       TableDesc table = scanNode.getTableDesc();

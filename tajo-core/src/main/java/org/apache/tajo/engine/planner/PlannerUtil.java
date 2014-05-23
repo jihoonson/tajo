@@ -146,7 +146,7 @@ public class PlannerUtil {
   public static Collection<String> getRelationLineageWithinQueryBlock(LogicalPlan plan, LogicalNode from)
       throws PlanningException {
     RelationFinderVisitor visitor = new RelationFinderVisitor();
-    visitor.visit(null, plan, null, from, new Stack<LogicalNode>());
+    visitor.visit(null, plan, null, plan.getPlanTree(), from, new Stack<LogicalNode>());
     return visitor.getFoundRelations();
   }
 
@@ -210,7 +210,7 @@ public class PlannerUtil {
   public static void replaceNode(LogicalPlan plan, LogicalNode startNode, LogicalNode oldNode, LogicalNode newNode) {
     LogicalNodeReplaceVisitor replacer = new LogicalNodeReplaceVisitor(plan.getPlanTree(), oldNode, newNode);
     try {
-      replacer.visit(new ReplacerContext(), plan, null, startNode, new Stack<LogicalNode>());
+      replacer.visit(new ReplacerContext(), plan, null, plan.getPlanTree(), startNode, new Stack<LogicalNode>());
     } catch (PlanningException e) {
       e.printStackTrace();
     }
@@ -810,12 +810,12 @@ public class PlannerUtil {
    * @param node The LogicalNode instance to be started
    * @return A pretty print explain string
    */
-  public static String buildExplainString(LogicalNode node) {
+  public static String buildExplainString(LogicalPlanTree planTree, LogicalNode node) {
     ExplainLogicalPlanVisitor explain = new ExplainLogicalPlanVisitor();
 
     StringBuilder explains = new StringBuilder();
     try {
-      ExplainLogicalPlanVisitor.Context explainContext = explain.getBlockPlanStrings(null, node);
+      ExplainLogicalPlanVisitor.Context explainContext = explain.getBlockPlanStrings(null, planTree, node);
       while (!explainContext.explains.empty()) {
         explains.append(
             ExplainLogicalPlanVisitor.printDepthString(explainContext.getMaxDepth(), explainContext.explains.pop()));

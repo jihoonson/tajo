@@ -205,42 +205,42 @@ public class LogicalPlan {
     return planTree;
   }
 
-//  public void setChild(LogicalNode child, LogicalNode parent) {
-//    planTree.setChild(child, parent);
-//  }
-//
-//  public void setChild(LogicalNode left, LogicalNode right, LogicalNode parent) {
-//    planTree.setLeftChild(left, parent);
-//    planTree.setRightChild(right, parent);
-//  }
-//
-//  public void setLeftChild(LogicalNode child, LogicalNode parent) {
-//    planTree.setLeftChild(child, parent);
-//  }
-//
-//  public void setRightChild(LogicalNode child, LogicalNode parent) {
-//    planTree.setRightChild(child, parent);
-//  }
-//
-//  public <NODE extends LogicalNode> NODE getParent(LogicalNode child) {
-//    return planTree.getParent(child);
-//  }
-//
-//  public int getChildCount(LogicalNode parent) {
-//    return planTree.getChildCount(parent.getPID());
-//  }
-//
-//  public <NODE extends LogicalNode> NODE getChild(LogicalNode parent) {
-//    return planTree.getChild(parent);
-//  }
-//
-//  public <NODE extends LogicalNode> NODE getLeftChild(LogicalNode parent) {
-//    return planTree.getLeftChild(parent);
-//  }
-//
-//  public <NODE extends LogicalNode> NODE getRightChild(LogicalNode parent) {
-//    return planTree.getRightChild(parent);
-//  }
+  public void setChild(LogicalNode child, LogicalNode parent) {
+    planTree.setChild(child, parent);
+  }
+
+  public void setChild(LogicalNode left, LogicalNode right, LogicalNode parent) {
+    planTree.setLeftChild(left, parent);
+    planTree.setRightChild(right, parent);
+  }
+
+  public void setLeftChild(LogicalNode child, LogicalNode parent) {
+    planTree.setLeftChild(child, parent);
+  }
+
+  public void setRightChild(LogicalNode child, LogicalNode parent) {
+    planTree.setRightChild(child, parent);
+  }
+
+  public <NODE extends LogicalNode> NODE getParent(LogicalNode child) {
+    return planTree.getParent(child);
+  }
+
+  public int getChildCount(LogicalNode parent) {
+    return planTree.getChildCount(parent.getPID());
+  }
+
+  public <NODE extends LogicalNode> NODE getChild(LogicalNode parent) {
+    return planTree.getChild(parent);
+  }
+
+  public <NODE extends LogicalNode> NODE getLeftChild(LogicalNode parent) {
+    return planTree.getLeftChild(parent);
+  }
+
+  public <NODE extends LogicalNode> NODE getRightChild(LogicalNode parent) {
+    return planTree.getRightChild(parent);
+  }
 
   public QueryBlock getRootBlock() {
     return queryBlocks.get(ROOT_BLOCK);
@@ -551,7 +551,8 @@ public class LogicalPlan {
 
     StringBuilder explains = new StringBuilder();
     try {
-      ExplainLogicalPlanVisitor.Context explainContext = explain.getBlockPlanStrings(this, getRootBlock().getRoot());
+      ExplainLogicalPlanVisitor.Context explainContext = explain.getBlockPlanStrings(this, this.getPlanTree(),
+          getRootBlock().getRoot());
       while(!explainContext.explains.empty()) {
         explains.append(
             ExplainLogicalPlanVisitor.printDepthString(explainContext.getMaxDepth(), explainContext.explains.pop()));

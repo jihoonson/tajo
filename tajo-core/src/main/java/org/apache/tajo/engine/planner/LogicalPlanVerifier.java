@@ -80,8 +80,9 @@ public class LogicalPlanVerifier extends BasicLogicalPlanVisitor<LogicalPlanVeri
 
   @Override
   public LogicalNode visitProjection(Context state, LogicalPlan plan, LogicalPlan.QueryBlock block,
-                                     ProjectionNode node, Stack<LogicalNode> stack) throws PlanningException {
-    super.visitProjection(state, plan, block, node, stack);
+                                     LogicalPlanTree planTree, ProjectionNode node, Stack<LogicalNode> stack)
+      throws PlanningException {
+    super.visitProjection(state, plan, block, planTree, node, stack);
 
     for (Target target : node.getTargets()) {
       ExprsVerifier.verify(state.state, node, target.getEvalTree());
@@ -94,8 +95,9 @@ public class LogicalPlanVerifier extends BasicLogicalPlanVisitor<LogicalPlanVeri
 
   @Override
   public LogicalNode visitLimit(Context context, LogicalPlan plan, LogicalPlan.QueryBlock block,
-                                LimitNode node, Stack<LogicalNode> stack) throws PlanningException {
-    super.visitLimit(context, plan, block, node, stack);
+                                LogicalPlanTree planTree, LimitNode node, Stack<LogicalNode> stack)
+      throws PlanningException {
+    super.visitLimit(context, plan, block, planTree, node, stack);
 
     if (node.getFetchFirstNum() < 0) {
       context.state.addVerification("LIMIT must not be negative");
@@ -106,8 +108,9 @@ public class LogicalPlanVerifier extends BasicLogicalPlanVisitor<LogicalPlanVeri
 
   @Override
   public LogicalNode visitGroupBy(Context context, LogicalPlan plan, LogicalPlan.QueryBlock block,
-                                  GroupbyNode node, Stack<LogicalNode> stack) throws PlanningException {
-    super.visitGroupBy(context, plan, block, node, stack);
+                                  LogicalPlanTree planTree, GroupbyNode node, Stack<LogicalNode> stack)
+      throws PlanningException {
+    super.visitGroupBy(context, plan, block, planTree, node, stack);
 
     verifyProjectableOutputSchema(node);
     return node;
@@ -115,17 +118,19 @@ public class LogicalPlanVerifier extends BasicLogicalPlanVisitor<LogicalPlanVeri
 
   @Override
   public LogicalNode visitFilter(Context context, LogicalPlan plan, LogicalPlan.QueryBlock block,
-                                 SelectionNode node, Stack<LogicalNode> stack) throws PlanningException {
-    visit(context, plan, block, plan.getChild(node), stack);
+                                 LogicalPlanTree planTree, SelectionNode node, Stack<LogicalNode> stack)
+      throws PlanningException {
+    visit(context, plan, block, planTree, plan.getChild(node), stack);
     ExprsVerifier.verify(context.state, node, node.getQual());
     return node;
   }
 
   @Override
-  public LogicalNode visitJoin(Context context, LogicalPlan plan, LogicalPlan.QueryBlock block, JoinNode node,
+  public LogicalNode visitJoin(Context context, LogicalPlan plan, LogicalPlan.QueryBlock block,
+                               LogicalPlanTree planTree, JoinNode node,
                                Stack<LogicalNode> stack) throws PlanningException {
-    visit(context, plan, block, plan.getLeftChild(node), stack);
-    visit(context, plan, block, plan.getRightChild(node), stack);
+    visit(context, plan, block, planTree, plan.getLeftChild(node), stack);
+    visit(context, plan, block, planTree, plan.getRightChild(node), stack);
 
     if (node.hasJoinQual()) {
       ExprsVerifier.verify(context.state, node, node.getJoinQual());
@@ -161,30 +166,34 @@ public class LogicalPlanVerifier extends BasicLogicalPlanVisitor<LogicalPlanVeri
 
   @Override
   public LogicalNode visitUnion(Context context, LogicalPlan plan, LogicalPlan.QueryBlock block,
-                                UnionNode node, Stack<LogicalNode> stack) throws PlanningException {
-    super.visitUnion(context, plan, block, node, stack);
+                                LogicalPlanTree planTree, UnionNode node, Stack<LogicalNode> stack)
+      throws PlanningException {
+    super.visitUnion(context, plan, block, planTree, node, stack);
     verifySetStatement(context.state, plan, node);
     return node;
   }
 
   @Override
   public LogicalNode visitExcept(Context context, LogicalPlan plan, LogicalPlan.QueryBlock block,
-                                 ExceptNode node, Stack<LogicalNode> stack) throws PlanningException {
-    super.visitExcept(context, plan, block, node, stack);
+                                 LogicalPlanTree planTree, ExceptNode node, Stack<LogicalNode> stack)
+      throws PlanningException {
+    super.visitExcept(context, plan, block, planTree, node, stack);
     verifySetStatement(context.state, plan, node);
     return node;
   }
 
   @Override
   public LogicalNode visitIntersect(Context context, LogicalPlan plan, LogicalPlan.QueryBlock block,
-                                    IntersectNode node, Stack<LogicalNode> stack) throws PlanningException {
-    super.visitIntersect(context, plan, block, node, stack);
+                                    LogicalPlanTree planTree, IntersectNode node, Stack<LogicalNode> stack)
+      throws PlanningException {
+    super.visitIntersect(context, plan, block, planTree, node, stack);
     verifySetStatement(context.state, plan, node);
     return node;
   }
 
   @Override
-  public LogicalNode visitScan(Context context, LogicalPlan plan, LogicalPlan.QueryBlock block, ScanNode node,
+  public LogicalNode visitScan(Context context, LogicalPlan plan, LogicalPlan.QueryBlock block,
+                               LogicalPlanTree planTree, ScanNode node,
                                Stack<LogicalNode> stack) throws PlanningException {
     if (node.hasTargets()) {
       for (Target target : node.getTargets()) {
@@ -203,15 +212,17 @@ public class LogicalPlanVerifier extends BasicLogicalPlanVisitor<LogicalPlanVeri
 
   @Override
   public LogicalNode visitStoreTable(Context context, LogicalPlan plan, LogicalPlan.QueryBlock block,
-                                     StoreTableNode node, Stack<LogicalNode> stack) throws PlanningException {
-    super.visitStoreTable(context, plan, block, node, stack);
+                                     LogicalPlanTree planTree, StoreTableNode node, Stack<LogicalNode> stack)
+      throws PlanningException {
+    super.visitStoreTable(context, plan, block, planTree, node, stack);
     return node;
   }
 
   @Override
   public LogicalNode visitInsert(Context context, LogicalPlan plan, LogicalPlan.QueryBlock block,
-                                 InsertNode node, Stack<LogicalNode> stack) throws PlanningException {
-    super.visitInsert(context, plan, block, node, stack);
+                                 LogicalPlanTree planTree, InsertNode node, Stack<LogicalNode> stack)
+      throws PlanningException {
+    super.visitInsert(context, plan, block, planTree, node, stack);
     return node;
   }
 
@@ -234,15 +245,16 @@ public class LogicalPlanVerifier extends BasicLogicalPlanVisitor<LogicalPlanVeri
 
   @Override
   public LogicalNode visitCreateTable(Context context, LogicalPlan plan, LogicalPlan.QueryBlock block,
-                                      CreateTableNode node, Stack<LogicalNode> stack) throws PlanningException {
-    super.visitCreateTable(context, plan, block, node, stack);
+                                      LogicalPlanTree planTree, CreateTableNode node, Stack<LogicalNode> stack)
+      throws PlanningException {
+    super.visitCreateTable(context, plan, block, planTree, node, stack);
     // here, we don't need check table existence because this check is performed in PreLogicalPlanVerifier.
     return node;
   }
 
   @Override
   public LogicalNode visitDropTable(Context context, LogicalPlan plan, LogicalPlan.QueryBlock block,
-                                    DropTableNode node, Stack<LogicalNode> stack) {
+                                    LogicalPlanTree planTree, DropTableNode node, Stack<LogicalNode> stack) {
     // here, we don't need check table existence because this check is performed in PreLogicalPlanVerifier.
     return node;
   }

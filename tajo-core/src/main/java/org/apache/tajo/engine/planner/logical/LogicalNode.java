@@ -122,9 +122,9 @@ public abstract class LogicalNode implements Cloneable, GsonObject {
 
   public abstract PlanString getPlanString();
 
-  public String toString() {
-    return PlannerUtil.buildExplainString(this);
-  }
+//  public String toString() {
+//    return PlannerUtil.buildExplainString(this);
+//  }
 
   public static enum EdgeType {
     ORDERED_LEFT,
@@ -133,9 +133,9 @@ public abstract class LogicalNode implements Cloneable, GsonObject {
   }
 
   public static class LogicalNodeEdge {
-    private int parentPid;
-    private int childPid;
-    private EdgeType edgeType;
+    @Expose private int parentPid;
+    @Expose private int childPid;
+    @Expose private EdgeType edgeType;
 
     public LogicalNodeEdge(int parentPid, int childPid, EdgeType edgeType) {
       this.parentPid = parentPid;

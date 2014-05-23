@@ -203,7 +203,7 @@ public class GlobalEngine extends AbstractService {
       responseBuilder.setResultCode(ClientProtos.ResultCode.OK);
 
     } else if (plan.isExplain()) { // explain query
-      String explainStr = PlannerUtil.buildExplainString(plan.getRootBlock().getRoot());
+      String explainStr = PlannerUtil.buildExplainString(plan.getPlanTree(), plan.getRootBlock().getRoot());
       Schema schema = new Schema();
       schema.addColumn("explain", TajoDataTypes.Type.TEXT);
       RowStoreUtil.RowStoreEncoder encoder = RowStoreUtil.createEncoder(schema);

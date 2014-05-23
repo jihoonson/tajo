@@ -57,7 +57,7 @@ public class CoreGsonHelper {
     adapters.put(AggFunction.class, new FunctionAdapter());
     adapters.put(Datum.class, new DatumAdapter());
     adapters.put(DataType.class, new DataTypeAdapter());
-    adapters.put(LogicalPlanTree.class, new LogicalNodeTreeAdapter());
+//    adapters.put(LogicalPlanTree.class, new LogicalNodeTreeAdapter());
 
     return adapters;
 	}

@@ -65,10 +65,11 @@ public class ExplainLogicalPlanVisitor extends BasicLogicalPlanVisitor<ExplainLo
     }
   }
 
-  public Context getBlockPlanStrings(@Nullable LogicalPlan plan, LogicalNode node) throws PlanningException {
+  public Context getBlockPlanStrings(@Nullable LogicalPlan plan,
+                                     LogicalPlanTree planTree, LogicalNode node) throws PlanningException {
     Stack<LogicalNode> stack = new Stack<LogicalNode>();
     Context explainContext = new Context();
-    visit(explainContext, plan, null, plan.getPlanTree(), node, stack);
+    visit(explainContext, plan, null, planTree, node, stack);
     return explainContext;
   }
 

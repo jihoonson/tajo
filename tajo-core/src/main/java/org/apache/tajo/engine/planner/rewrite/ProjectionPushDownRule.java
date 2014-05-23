@@ -69,7 +69,7 @@ public class ProjectionPushDownRule extends
 
     Stack<LogicalNode> stack = new Stack<LogicalNode>();
     Context context = new Context(plan);
-    visit(context, plan, topmostBlock, topmostBlock.getRoot(), stack);
+    visit(context, plan, topmostBlock, plan.getPlanTree(), topmostBlock.getRoot(), stack);
 
     return plan;
   }
@@ -384,9 +384,10 @@ public class ProjectionPushDownRule extends
   }
 
   @Override
-  public LogicalNode visitRoot(Context context, LogicalPlan plan, LogicalPlan.QueryBlock block, LogicalRootNode node,
-                          Stack<LogicalNode> stack) throws PlanningException {
-    LogicalNode child = super.visitRoot(context, plan, block, node, stack);
+  public LogicalNode visitRoot(Context context, LogicalPlan plan, LogicalPlan.QueryBlock block,
+                               LogicalPlanTree planTree, LogicalRootNode node,
+                               Stack<LogicalNode> stack) throws PlanningException {
+    LogicalNode child = super.visitRoot(context, plan, block, planTree, node, stack);
     node.setInSchema(child.getOutSchema());
     node.setOutSchema(child.getOutSchema());
     return node;
@@ -394,7 +395,8 @@ public class ProjectionPushDownRule extends
 
   @Override
   public LogicalNode visitProjection(Context context, LogicalPlan plan, LogicalPlan.QueryBlock block,
-                                     ProjectionNode node, Stack<LogicalNode> stack) throws PlanningException {
+                                     LogicalPlanTree planTree, ProjectionNode node, Stack<LogicalNode> stack)
+      throws PlanningException {
     Context newContext = new Context(context);
     Target [] targets = node.getTargets();
     int targetNum = targets.length;
@@ -403,7 +405,7 @@ public class ProjectionPushDownRule extends
       referenceNames[i] = newContext.addExpr(targets[i]);
     }
 
-    LogicalNode child = super.visitProjection(newContext, plan, block, node, stack);
+    LogicalNode child = super.visitProjection(newContext, plan, block, planTree, node, stack);
 
     node.setInSchema(child.getOutSchema());
 
@@ -474,9 +476,10 @@ public class ProjectionPushDownRule extends
     }
   }
 
-  public LogicalNode visitLimit(Context context, LogicalPlan plan, LogicalPlan.QueryBlock block, LimitNode node,
-                           Stack<LogicalNode> stack) throws PlanningException {
-    LogicalNode child = super.visitLimit(context, plan, block, node, stack);
+  public LogicalNode visitLimit(Context context, LogicalPlan plan, LogicalPlan.QueryBlock block,
+                                LogicalPlanTree planTree, LimitNode node,
+                                Stack<LogicalNode> stack) throws PlanningException {
+    LogicalNode child = super.visitLimit(context, plan, block, planTree, node, stack);
 
     node.setInSchema(child.getOutSchema());
     node.setOutSchema(child.getOutSchema());
@@ -485,7 +488,8 @@ public class ProjectionPushDownRule extends
 
   @Override
   public LogicalNode visitSort(Context context, LogicalPlan plan, LogicalPlan.QueryBlock block,
-                               SortNode node, Stack<LogicalNode> stack) throws PlanningException {
+                               LogicalPlanTree planTree, SortNode node, Stack<LogicalNode> stack)
+      throws PlanningException {
     Context newContext = new Context(context);
 
     final int sortKeyNum = node.getSortKeys().length;
@@ -495,7 +499,7 @@ public class ProjectionPushDownRule extends
       keyNames[i] = newContext.addExpr(new FieldEval(sortSpec.getSortKey()));
     }
 
-    LogicalNode child = super.visitSort(newContext, plan, block, node, stack);
+    LogicalNode child = super.visitSort(newContext, plan, block, planTree, node, stack);
 
     // it rewrite sortkeys. This rewrite sets right column names and eliminates duplicated sort keys.
     List<SortSpec> sortSpecs = new ArrayList<SortSpec>();
@@ -526,13 +530,14 @@ public class ProjectionPushDownRule extends
   }
 
   @Override
-  public LogicalNode visitHaving(Context context, LogicalPlan plan, LogicalPlan.QueryBlock block, HavingNode node,
-                            Stack<LogicalNode> stack) throws PlanningException {
+  public LogicalNode visitHaving(Context context, LogicalPlan plan, LogicalPlan.QueryBlock block,
+                                 LogicalPlanTree planTree, HavingNode node,
+                                 Stack<LogicalNode> stack) throws PlanningException {
     Context newContext = new Context(context);
     String referenceName = newContext.targetListMgr.add(node.getQual());
     newContext.addNecessaryReferences(node.getQual());
 
-    LogicalNode child = super.visitHaving(newContext, plan, block, node, stack);
+    LogicalNode child = super.visitHaving(newContext, plan, block, planTree, node, stack);
 
     node.setInSchema(child.getOutSchema());
     node.setOutSchema(child.getOutSchema());
@@ -548,8 +553,9 @@ public class ProjectionPushDownRule extends
     return node;
   }
 
-  public LogicalNode visitGroupBy(Context context, LogicalPlan plan, LogicalPlan.QueryBlock block, GroupbyNode node,
-                             Stack<LogicalNode> stack) throws PlanningException {
+  public LogicalNode visitGroupBy(Context context, LogicalPlan plan, LogicalPlan.QueryBlock block,
+                                  LogicalPlanTree planTree, GroupbyNode node,
+                                  Stack<LogicalNode> stack) throws PlanningException {
     Context newContext = new Context(context);
 
     // Getting grouping key names
@@ -579,7 +585,7 @@ public class ProjectionPushDownRule extends
     }
 
     // visit a child node
-    LogicalNode child = super.visitGroupBy(newContext, plan, block, node, stack);
+    LogicalNode child = super.visitGroupBy(newContext, plan, block, planTree, node, stack);
 
     node.setInSchema(child.getOutSchema());
 
@@ -670,12 +676,13 @@ public class ProjectionPushDownRule extends
   }
 
   public LogicalNode visitFilter(Context context, LogicalPlan plan, LogicalPlan.QueryBlock block,
-                                 SelectionNode node, Stack<LogicalNode> stack) throws PlanningException {
+                                 LogicalPlanTree planTree, SelectionNode node, Stack<LogicalNode> stack)
+      throws PlanningException {
     Context newContext = new Context(context);
     String referenceName = newContext.targetListMgr.add(node.getQual());
     newContext.addNecessaryReferences(node.getQual());
 
-    LogicalNode child = super.visitFilter(newContext, plan, block, node, stack);
+    LogicalNode child = super.visitFilter(newContext, plan, block, planTree, node, stack);
 
     node.setInSchema(child.getOutSchema());
     node.setOutSchema(child.getOutSchema());
@@ -691,8 +698,9 @@ public class ProjectionPushDownRule extends
     return node;
   }
 
-  public LogicalNode visitJoin(Context context, LogicalPlan plan, LogicalPlan.QueryBlock block, JoinNode node,
-                          Stack<LogicalNode> stack) throws PlanningException {
+  public LogicalNode visitJoin(Context context, LogicalPlan plan, LogicalPlan.QueryBlock block,
+                               LogicalPlanTree planTree, JoinNode node,
+                               Stack<LogicalNode> stack) throws PlanningException {
     Context newContext = new Context(context);
 
     String joinQualReference = null;
@@ -714,8 +722,8 @@ public class ProjectionPushDownRule extends
     stack.push(node);
 //    LogicalNode left = visit(newContext, plan, block, node.getLeftChild(), stack);
 //    LogicalNode right = visit(newContext, plan, block, node.getRightChild(), stack);
-    LogicalNode left = visit(newContext, plan, block, plan.getLeftChild(node), stack);
-    LogicalNode right = visit(newContext, plan, block, plan.getRightChild(node), stack);
+    LogicalNode left = visit(newContext, plan, block, planTree, plan.getLeftChild(node), stack);
+    LogicalNode right = visit(newContext, plan, block, planTree, plan.getRightChild(node), stack);
     stack.pop();
 
     Schema merged = SchemaUtil.merge(left.getOutSchema(), right.getOutSchema());
@@ -844,8 +852,9 @@ public class ProjectionPushDownRule extends
   }
 
   @Override
-  public LogicalNode visitUnion(Context context, LogicalPlan plan, LogicalPlan.QueryBlock block, UnionNode node,
-                           Stack<LogicalNode> stack) throws PlanningException {
+  public LogicalNode visitUnion(Context context, LogicalPlan plan, LogicalPlan.QueryBlock block,
+                                LogicalPlanTree planTree, UnionNode node,
+                                Stack<LogicalNode> stack) throws PlanningException {
 
 //    LogicalPlan.QueryBlock leftBlock = plan.getBlock(node.getLeftChild());
 //    LogicalPlan.QueryBlock rightBlock = plan.getBlock(node.getRightChild());
@@ -858,14 +867,15 @@ public class ProjectionPushDownRule extends
         rightBlock.getName()));
 
     stack.push(node);
-    visit(leftContext, plan, leftBlock, leftBlock.getRoot(), new Stack<LogicalNode>());
-    visit(rightContext, plan, rightBlock, rightBlock.getRoot(), new Stack<LogicalNode>());
+    visit(leftContext, plan, leftBlock, planTree, leftBlock.getRoot(), new Stack<LogicalNode>());
+    visit(rightContext, plan, rightBlock, planTree, rightBlock.getRoot(), new Stack<LogicalNode>());
     stack.pop();
     return node;
   }
 
-  public LogicalNode visitScan(Context context, LogicalPlan plan, LogicalPlan.QueryBlock block, ScanNode node,
-                          Stack<LogicalNode> stack) throws PlanningException {
+  public LogicalNode visitScan(Context context, LogicalPlan plan, LogicalPlan.QueryBlock block,
+                               LogicalPlanTree planTree, ScanNode node,
+                               Stack<LogicalNode> stack) throws PlanningException {
 
     Context newContext = new Context(context);
 
@@ -898,8 +908,8 @@ public class ProjectionPushDownRule extends
 
   @Override
   public LogicalNode visitPartitionedTableScan(Context context, LogicalPlan plan, LogicalPlan.QueryBlock block,
-                                               PartitionedTableScanNode node, Stack<LogicalNode> stack)
-      throws PlanningException {
+                                               LogicalPlanTree planTree, PartitionedTableScanNode node,
+                                               Stack<LogicalNode> stack) throws PlanningException {
 
     Context newContext = new Context(context);
 
@@ -932,10 +942,11 @@ public class ProjectionPushDownRule extends
 
   @Override
   public LogicalNode visitTableSubQuery(Context upperContext, LogicalPlan plan, LogicalPlan.QueryBlock block,
-                                   TableSubQueryNode node, Stack<LogicalNode> stack) throws PlanningException {
+                                        LogicalPlanTree planTree, TableSubQueryNode node, Stack<LogicalNode> stack)
+      throws PlanningException {
     Context childContext = new Context(plan, upperContext.requiredSet);
     stack.push(node);
-    LogicalNode child = super.visitTableSubQuery(childContext, plan, block, node, stack);
+    LogicalNode child = super.visitTableSubQuery(childContext, plan, block, planTree, node, stack);
     node.setSubQuery(child);
     stack.pop();
 
@@ -969,11 +980,12 @@ public class ProjectionPushDownRule extends
   }
 
   @Override
-  public LogicalNode visitInsert(Context context, LogicalPlan plan, LogicalPlan.QueryBlock block, InsertNode node,
-                            Stack<LogicalNode> stack) throws PlanningException {
+  public LogicalNode visitInsert(Context context, LogicalPlan plan, LogicalPlan.QueryBlock block,
+                                 LogicalPlanTree planTree, InsertNode node,
+                                 Stack<LogicalNode> stack) throws PlanningException {
     stack.push(node);
 //    visit(context, plan, block, node.getChild(), stack);
-    visit(context, plan, block, plan.getChild(node), stack);
+    visit(context, plan, block, planTree, plan.getChild(node), stack);
     stack.pop();
     return node;
   }

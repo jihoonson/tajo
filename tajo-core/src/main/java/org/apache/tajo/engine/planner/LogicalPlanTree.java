@@ -274,7 +274,7 @@ public class LogicalPlanTree extends SimpleTree<Integer, LogicalNodeEdge>
       Integer cloneChild = cloneNodeMap.get(eachEdge.getChildPid());
       Integer cloneParent = cloneNodeMap.get(eachEdge.getParentPid());
       clone.addEdge(cloneChild, cloneParent,
-          new LogicalNodeEdge(cloneChild, cloneParent, eachEdge.getEdgeType()));
+          new LogicalNodeEdge(cloneParent, cloneChild, eachEdge.getEdgeType()));
     }
     return clone;
   }
