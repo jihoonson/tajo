@@ -576,7 +576,7 @@ public class SubQuery implements EventHandler<SubQueryEvent> {
     CatalogProtos.StoreType storeType = CatalogProtos.StoreType.CSV; // default setting
 
     // if store plan (i.e., CREATE or INSERT OVERWRITE)
-    StoreTableNode storeTableNode = PlannerUtil.findTopNode(masterPlan.getLogicalPlan().getLogicalNodeTree(),
+    StoreTableNode storeTableNode = PlannerUtil.findTopNode(masterPlan.getLogicalPlan().getPlanTree(),
         getBlock().getRoot(), NodeType.STORE);
     if (storeTableNode != null) {
       storeType = storeTableNode.getStorageType();
@@ -719,7 +719,7 @@ public class SubQuery implements EventHandler<SubQueryEvent> {
 
       GroupbyNode grpNode = null;
       if (parent != null) {
-        grpNode = PlannerUtil.findMostBottomNode(masterPlan.getLogicalPlan().getLogicalNodeTree(),
+        grpNode = PlannerUtil.findMostBottomNode(masterPlan.getLogicalPlan().getPlanTree(),
             parent.getRoot(), NodeType.GROUP_BY);
       }
 

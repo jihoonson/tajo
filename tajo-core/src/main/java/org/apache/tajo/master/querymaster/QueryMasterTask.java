@@ -334,7 +334,7 @@ public class QueryMasterTask extends CompositeService {
       hookManager.doHooks(queryContext, plan);
 
       for (LogicalPlan.QueryBlock block : plan.getQueryBlocks()) {
-        LogicalNode[] scanNodes = PlannerUtil.findAllNodes(masterPlan.getLogicalPlan().getLogicalNodeTree(),
+        LogicalNode[] scanNodes = PlannerUtil.findAllNodes(plan.getPlanTree(),
             block.getRoot(), NodeType.SCAN);
         if (scanNodes != null) {
           for (LogicalNode eachScanNode : scanNodes) {
@@ -343,7 +343,7 @@ public class QueryMasterTask extends CompositeService {
           }
         }
 
-        scanNodes = PlannerUtil.findAllNodes(masterPlan.getLogicalPlan().getLogicalNodeTree(),
+        scanNodes = PlannerUtil.findAllNodes(plan.getPlanTree(),
             block.getRoot(), NodeType.PARTITIONS_SCAN);
         if (scanNodes != null) {
           for (LogicalNode eachScanNode : scanNodes) {

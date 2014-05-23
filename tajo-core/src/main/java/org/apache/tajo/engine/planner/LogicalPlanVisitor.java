@@ -23,72 +23,73 @@ import org.apache.tajo.engine.planner.logical.*;
 import java.util.Stack;
 
 public interface LogicalPlanVisitor<CONTEXT, RESULT> {
-  RESULT visitRoot(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, LogicalRootNode node,
-                   Stack<LogicalNode> stack) throws PlanningException;
+  RESULT visitRoot(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, LogicalPlanTree planTree,
+                   LogicalRootNode node, Stack<LogicalNode> stack) throws PlanningException;
 
-  RESULT visitProjection(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, ProjectionNode node,
-                         Stack<LogicalNode> stack) throws PlanningException;
+  RESULT visitProjection(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, LogicalPlanTree planTree,
+                         ProjectionNode node, Stack<LogicalNode> stack) throws PlanningException;
 
-  RESULT visitLimit(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, LimitNode node,
-                    Stack<LogicalNode> stack) throws PlanningException;
+  RESULT visitLimit(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, LogicalPlanTree planTree,
+                    LimitNode node, Stack<LogicalNode> stack) throws PlanningException;
 
-  RESULT visitSort(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, SortNode node,
-                   Stack<LogicalNode> stack) throws PlanningException;
+  RESULT visitSort(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, LogicalPlanTree planTree,
+                   SortNode node, Stack<LogicalNode> stack) throws PlanningException;
 
-  RESULT visitHaving(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, HavingNode node,
-                      Stack<LogicalNode> stack) throws PlanningException;
+  RESULT visitHaving(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, LogicalPlanTree planTree,
+                     HavingNode node, Stack<LogicalNode> stack) throws PlanningException;
 
-  RESULT visitGroupBy(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, GroupbyNode node,
-                      Stack<LogicalNode> stack) throws PlanningException;
+  RESULT visitGroupBy(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, LogicalPlanTree planTree,
+                      GroupbyNode node, Stack<LogicalNode> stack) throws PlanningException;
 
-  RESULT visitDistinct(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, DistinctGroupbyNode node,
-                                Stack<LogicalNode> stack) throws PlanningException;
+  RESULT visitDistinct(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, LogicalPlanTree planTree,
+                       DistinctGroupbyNode node, Stack<LogicalNode> stack) throws PlanningException;
 
-  RESULT visitFilter(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, SelectionNode node,
-                     Stack<LogicalNode> stack) throws PlanningException;
+  RESULT visitFilter(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, LogicalPlanTree planTree,
+                     SelectionNode node, Stack<LogicalNode> stack) throws PlanningException;
 
-  RESULT visitJoin(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, JoinNode node,
-                   Stack<LogicalNode> stack) throws PlanningException;
+  RESULT visitJoin(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, LogicalPlanTree planTree,
+                   JoinNode node, Stack<LogicalNode> stack) throws PlanningException;
 
-  RESULT visitUnion(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, UnionNode node,
-                    Stack<LogicalNode> stack) throws PlanningException;
+  RESULT visitUnion(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, LogicalPlanTree planTree,
+                    UnionNode node, Stack<LogicalNode> stack) throws PlanningException;
 
-  RESULT visitExcept(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, ExceptNode node,
-                     Stack<LogicalNode> stack) throws PlanningException;
+  RESULT visitExcept(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, LogicalPlanTree planTree,
+                     ExceptNode node, Stack<LogicalNode> stack) throws PlanningException;
 
-  RESULT visitIntersect(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, IntersectNode node,
-                        Stack<LogicalNode> stack) throws PlanningException;
+  RESULT visitIntersect(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, LogicalPlanTree planTree,
+                        IntersectNode node, Stack<LogicalNode> stack) throws PlanningException;
 
-  RESULT visitTableSubQuery(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, TableSubQueryNode node,
-                            Stack<LogicalNode> stack) throws PlanningException;
+  RESULT visitTableSubQuery(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, LogicalPlanTree planTree,
+                            TableSubQueryNode node, Stack<LogicalNode> stack) throws PlanningException;
 
-  RESULT visitScan(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, ScanNode node,
-                   Stack<LogicalNode> stack) throws PlanningException;
+  RESULT visitScan(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, LogicalPlanTree planTree,
+                   ScanNode node, Stack<LogicalNode> stack) throws PlanningException;
 
   RESULT visitPartitionedTableScan(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block,
-                                   PartitionedTableScanNode node, Stack<LogicalNode> stack) throws PlanningException;
+                                   LogicalPlanTree planTree, PartitionedTableScanNode node, Stack<LogicalNode> stack)
+      throws PlanningException;
 
-  RESULT visitStoreTable(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, StoreTableNode node,
-                         Stack<LogicalNode> stack) throws PlanningException;
+  RESULT visitStoreTable(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, LogicalPlanTree planTree,
+                         StoreTableNode node, Stack<LogicalNode> stack) throws PlanningException;
 
-  RESULT visitInsert(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, InsertNode node,
-                     Stack<LogicalNode> stack) throws PlanningException;
+  RESULT visitInsert(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, LogicalPlanTree planTree,
+                     InsertNode node, Stack<LogicalNode> stack) throws PlanningException;
 
-  RESULT visitCreateDatabase(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, CreateDatabaseNode node,
-                          Stack<LogicalNode> stack) throws PlanningException;
+  RESULT visitCreateDatabase(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, LogicalPlanTree planTree,
+                             CreateDatabaseNode node, Stack<LogicalNode> stack) throws PlanningException;
 
-  RESULT visitDropDatabase(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, DropDatabaseNode node,
-                             Stack<LogicalNode> stack) throws PlanningException;
+  RESULT visitDropDatabase(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, LogicalPlanTree planTree,
+                           DropDatabaseNode node, Stack<LogicalNode> stack) throws PlanningException;
 
-  RESULT visitCreateTable(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, CreateTableNode node,
-                          Stack<LogicalNode> stack) throws PlanningException;
+  RESULT visitCreateTable(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, LogicalPlanTree planTree,
+                          CreateTableNode node, Stack<LogicalNode> stack) throws PlanningException;
 
-  RESULT visitDropTable(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, DropTableNode node,
-                        Stack<LogicalNode> stack) throws PlanningException;
+  RESULT visitDropTable(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, LogicalPlanTree planTree,
+                        DropTableNode node, Stack<LogicalNode> stack) throws PlanningException;
 
-  RESULT visitAlterTablespace(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, AlterTablespaceNode node,
-                          Stack<LogicalNode> stack) throws PlanningException;
+  RESULT visitAlterTablespace(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, LogicalPlanTree planTree,
+                              AlterTablespaceNode node, Stack<LogicalNode> stack) throws PlanningException;
 
-  RESULT visitAlterTable(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, AlterTableNode node,
-                         Stack<LogicalNode> stack) throws PlanningException;
+  RESULT visitAlterTable(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, LogicalPlanTree planTree,
+                         AlterTableNode node, Stack<LogicalNode> stack) throws PlanningException;
 }

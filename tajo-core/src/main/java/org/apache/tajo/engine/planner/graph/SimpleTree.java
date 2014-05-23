@@ -19,16 +19,25 @@
 package org.apache.tajo.engine.planner.graph;
 
 import com.google.common.base.Preconditions;
+import com.google.gson.annotations.Expose;
 import org.apache.tajo.exception.UnsupportedException;
 
 import java.util.List;
 
 public class SimpleTree<V,E> extends SimpleDirectedGraph<V,E> {
+  @Expose protected V root;
+
+  public V getRoot() {
+    return root;
+  }
 
   @Override
   public void addEdge(V tail, V head, E edge) {
     if (directedEdges.containsKey(tail)) {
       Preconditions.checkState(getParentCount(tail) == 0);
+    }
+    if (root == null || tail.equals(root)) {
+      root = head;
     }
     super.addEdge(tail, head, edge);
   }

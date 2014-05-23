@@ -89,11 +89,11 @@ public class LogicalOptimizer {
       FoundJoinOrder order = joinOrderAlgorithm.findBestOrder(plan, block,
           joinGraphContext.joinGraph, joinGraphContext.relationsForProduct);
       JoinNode newJoinNode = order.getOrderedJoin();
-      JoinNode old = PlannerUtil.findTopNode(plan.getLogicalNodeTree(), block.getRoot(), NodeType.JOIN);
+      JoinNode old = PlannerUtil.findTopNode(plan.getPlanTree(), block.getRoot(), NodeType.JOIN);
 
       JoinTargetCollector collector = new JoinTargetCollector();
       Set<Target> targets = new LinkedHashSet<Target>();
-      collector.visitJoin(targets, plan, block, old, new Stack<LogicalNode>());
+      collector.visitJoin(targets, plan, block, plan.getPlanTree(), old, new Stack<LogicalNode>());
 
       if (targets.size() == 0) {
         newJoinNode.setTargets(PlannerUtil.schemaToTargets(old.getOutSchema()));
@@ -110,10 +110,11 @@ public class LogicalOptimizer {
 
   private static class JoinTargetCollector extends BasicLogicalPlanVisitor<Set<Target>, LogicalNode> {
     @Override
-    public LogicalNode visitJoin(Set<Target> ctx, LogicalPlan plan, LogicalPlan.QueryBlock block, JoinNode node,
+    public LogicalNode visitJoin(Set<Target> ctx, LogicalPlan plan, LogicalPlan.QueryBlock block,
+                                 LogicalPlanTree planTree, JoinNode node,
                                  Stack<LogicalNode> stack)
         throws PlanningException {
-      super.visitJoin(ctx, plan, block, node, stack);
+      super.visitJoin(ctx, plan, block, planTree, node, stack);
 
       if (node.hasTargets()) {
         for (Target target : node.getTargets()) {
@@ -150,22 +151,23 @@ public class LogicalOptimizer {
     }
 
     public LogicalNode visitFilter(JoinGraphContext context, LogicalPlan plan, LogicalPlan.QueryBlock block,
-                                   SelectionNode node, Stack<LogicalNode> stack) throws PlanningException {
-      super.visitFilter(context, plan, block, node, stack);
+                                   LogicalPlanTree planTree, SelectionNode node, Stack<LogicalNode> stack)
+        throws PlanningException {
+      super.visitFilter(context, plan, block, planTree, node, stack);
       context.quals.addAll(Lists.newArrayList(AlgebraicUtil.toConjunctiveNormalFormArray(node.getQual())));
       return node;
     }
 
     @Override
     public LogicalNode visitJoin(JoinGraphContext joinGraphContext, LogicalPlan plan, LogicalPlan.QueryBlock block,
-                                 JoinNode joinNode, Stack<LogicalNode> stack)
+                                 LogicalPlanTree planTree, JoinNode joinNode, Stack<LogicalNode> stack)
         throws PlanningException {
-      super.visitJoin(joinGraphContext, plan, block, joinNode, stack);
+      super.visitJoin(joinGraphContext, plan, block, planTree, joinNode, stack);
       if (joinNode.hasJoinQual()) {
         joinGraphContext.joinGraph.addJoin(plan, block, joinNode);
       } else {
-        LogicalNode leftChild = plan.getLogicalNodeTree().getLeftChild(joinNode);
-        LogicalNode rightChild = plan.getLogicalNodeTree().getRightChild(joinNode);
+        LogicalNode leftChild = plan.getPlanTree().getLeftChild(joinNode);
+        LogicalNode rightChild = plan.getPlanTree().getRightChild(joinNode);
         if (leftChild instanceof RelationNode) {
           RelationNode rel = (RelationNode) leftChild;
           joinGraphContext.relationsForProduct.add(rel.getCanonicalName());
@@ -196,14 +198,15 @@ public class LogicalOptimizer {
     }
 
     @Override
-    public LogicalNode visitJoin(StringBuilder sb, LogicalPlan plan, LogicalPlan.QueryBlock block, JoinNode joinNode,
+    public LogicalNode visitJoin(StringBuilder sb, LogicalPlan plan, LogicalPlan.QueryBlock block,
+                                 LogicalPlanTree planTree, JoinNode joinNode,
                                  Stack<LogicalNode> stack)
         throws PlanningException {
       stack.push(joinNode);
       sb.append("(");
-      visit(sb, plan, block, plan.getLogicalNodeTree().getLeftChild(joinNode), stack);
+      visit(sb, plan, block, planTree, planTree.getLeftChild(joinNode), stack);
       sb.append(" ").append(getJoinNotation(joinNode.getJoinType())).append(" ");
-      visit(sb, plan, block, plan.getLogicalNodeTree().getRightChild(joinNode), stack);
+      visit(sb, plan, block, planTree, planTree.getRightChild(joinNode), stack);
       sb.append(")");
       stack.pop();
       return joinNode;
@@ -225,7 +228,7 @@ public class LogicalOptimizer {
 
     @Override
     public LogicalNode visitTableSubQuery(StringBuilder sb, LogicalPlan plan, LogicalPlan.QueryBlock block,
-                                          TableSubQueryNode node, Stack<LogicalNode> stack) {
+                                          LogicalPlanTree planTree, TableSubQueryNode node, Stack<LogicalNode> stack) {
       sb.append(node.getTableName());
       return node;
     }
@@ -256,9 +259,9 @@ public class LogicalOptimizer {
 
     @Override
     public LogicalNode visitJoin(CostContext joinGraphContext, LogicalPlan plan, LogicalPlan.QueryBlock block,
-                                 JoinNode joinNode, Stack<LogicalNode> stack)
+                                 LogicalPlanTree planTree, JoinNode joinNode, Stack<LogicalNode> stack)
         throws PlanningException {
-      super.visitJoin(joinGraphContext, plan, block, joinNode, stack);
+      super.visitJoin(joinGraphContext, plan, block, planTree, joinNode, stack);
 
       double filterFactor = 1;
       if (joinNode.hasJoinQual()) {
@@ -266,13 +269,13 @@ public class LogicalOptimizer {
         filterFactor = Math.pow(GreedyHeuristicJoinOrderAlgorithm.DEFAULT_SELECTION_FACTOR, quals.length);
       }
 
-      if (plan.getLogicalNodeTree().getLeftChild(joinNode) instanceof RelationNode) {
-        joinGraphContext.accumulatedCost = getCost(plan, plan.getLeftChild(joinNode))
-            * getCost(plan, plan.getRightChild(joinNode))
+      if (plan.getPlanTree().getLeftChild(joinNode) instanceof RelationNode) {
+        joinGraphContext.accumulatedCost = getCost(plan, planTree.getLeftChild(joinNode))
+            * getCost(plan, planTree.getRightChild(joinNode))
             * filterFactor;
       } else {
         joinGraphContext.accumulatedCost = joinGraphContext.accumulatedCost +
-            (joinGraphContext.accumulatedCost * getCost(plan, plan.getRightChild(joinNode))
+            (joinGraphContext.accumulatedCost * getCost(plan, planTree.getRightChild(joinNode))
                 * filterFactor);
       }
 

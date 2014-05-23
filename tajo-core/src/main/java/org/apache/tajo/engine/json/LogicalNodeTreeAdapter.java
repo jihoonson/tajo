@@ -18,21 +18,21 @@
 package org.apache.tajo.engine.json;
 
 import com.google.gson.*;
-import org.apache.tajo.engine.planner.LogicalNodeTree;
+import org.apache.tajo.engine.planner.LogicalPlanTree;
 import org.apache.tajo.json.GsonSerDerAdapter;
 
 import java.lang.reflect.Type;
 
-public class LogicalNodeTreeAdapter implements GsonSerDerAdapter<LogicalNodeTree> {
+public class LogicalNodeTreeAdapter implements GsonSerDerAdapter<LogicalPlanTree> {
 
   @Override
-  public LogicalNodeTree deserialize(JsonElement json, Type typeOfT, JsonDeserializationContext context)
+  public LogicalPlanTree deserialize(JsonElement json, Type typeOfT, JsonDeserializationContext context)
       throws JsonParseException {
-    return context.deserialize(json, LogicalNodeTree.class);
+    return context.deserialize(json, LogicalPlanTree.class);
   }
 
   @Override
-  public JsonElement serialize(LogicalNodeTree src, Type typeOfSrc, JsonSerializationContext context) {
+  public JsonElement serialize(LogicalPlanTree src, Type typeOfSrc, JsonSerializationContext context) {
     return context.serialize(src);
   }
 }

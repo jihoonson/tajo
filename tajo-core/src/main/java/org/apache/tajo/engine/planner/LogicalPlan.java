@@ -18,7 +18,9 @@
 
 package org.apache.tajo.engine.planner;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
+import com.google.gson.annotations.Expose;
 import org.apache.commons.lang.ObjectUtils;
 import org.apache.tajo.algebra.*;
 import org.apache.tajo.annotation.NotThreadSafe;
@@ -31,7 +33,6 @@ import org.apache.tajo.engine.exception.VerifyException;
 import org.apache.tajo.engine.planner.graph.DirectedGraphCursor;
 import org.apache.tajo.engine.planner.graph.SimpleDirectedGraph;
 import org.apache.tajo.engine.planner.logical.LogicalNode;
-import org.apache.tajo.engine.planner.logical.LogicalNode.ArityClass;
 import org.apache.tajo.engine.planner.logical.LogicalRootNode;
 import org.apache.tajo.engine.planner.logical.NodeType;
 import org.apache.tajo.engine.planner.logical.RelationNode;
@@ -52,17 +53,17 @@ public class LogicalPlan {
   public static final String ROOT_BLOCK = VIRTUAL_TABLE_PREFIX + "ROOT";
   public static final String NONAME_BLOCK_PREFIX = VIRTUAL_TABLE_PREFIX + "QB_";
   private static final int NO_SEQUENCE_PID = -1;
-  private int nextPid = 0;
   private Integer noNameBlockId = 0;
   private Integer noNameColumnId = 0;
+  private PidFactory pidFactory = new PidFactory();
 
   /** a map from between a block name to a block plan */
   private Map<String, QueryBlock> queryBlocks = new LinkedHashMap<String, QueryBlock>();
-  private Map<Integer, LogicalNode> nodeMap = new HashMap<Integer, LogicalNode>();
+//  private Map<Integer, LogicalNode> nodeMap = new HashMap<Integer, LogicalNode>();
   private Map<Integer, QueryBlock> queryBlockByPID = new HashMap<Integer, QueryBlock>();
   private Map<String, String> exprToBlockNameMap = TUtil.newHashMap();
   private SimpleDirectedGraph<String, BlockEdge> queryBlockGraph = new SimpleDirectedGraph<String, BlockEdge>();
-  private LogicalNodeTree logicalNodeTree = new LogicalNodeTree();
+  private LogicalPlanTree planTree = new LogicalPlanTree(pidFactory);
 
   /** planning and optimization log */
   private List<String> planingHistory = Lists.newArrayList();
@@ -128,7 +129,11 @@ public class LogicalPlan {
   }
 
   public int newPID() {
-    return nextPid++;
+    return pidFactory.newPid();
+  }
+
+  public PidFactory getPidFactory() {
+    return pidFactory;
   }
 
   public QueryBlock newQueryBlock() {
@@ -196,46 +201,46 @@ public class LogicalPlan {
     return prefix;
   }
 
-  public LogicalNodeTree getLogicalNodeTree() {
-    return logicalNodeTree;
+  public LogicalPlanTree getPlanTree() {
+    return planTree;
   }
 
-  public void setChild(LogicalNode child, LogicalNode parent) {
-    logicalNodeTree.setChild(child, parent);
-  }
-
-  public void setChild(LogicalNode left, LogicalNode right, LogicalNode parent) {
-    logicalNodeTree.setLeftChild(left, parent);
-    logicalNodeTree.setRightChild(right, parent);
-  }
-
-  public void setLeftChild(LogicalNode child, LogicalNode parent) {
-    logicalNodeTree.setLeftChild(child, parent);
-  }
-
-  public void setRightChild(LogicalNode child, LogicalNode parent) {
-    logicalNodeTree.setRightChild(child, parent);
-  }
-
-  public <NODE extends LogicalNode> NODE getParent(LogicalNode child) {
-    return logicalNodeTree.getParent(child);
-  }
-
-  public int getChildCount(LogicalNode parent) {
-    return logicalNodeTree.getChildCount(parent.getPID());
-  }
-
-  public <NODE extends LogicalNode> NODE getChild(LogicalNode parent) {
-    return logicalNodeTree.getChild(parent);
-  }
-
-  public <NODE extends LogicalNode> NODE getLeftChild(LogicalNode parent) {
-    return logicalNodeTree.getLeftChild(parent);
-  }
-
-  public <NODE extends LogicalNode> NODE getRightChild(LogicalNode parent) {
-    return logicalNodeTree.getRightChild(parent);
-  }
+//  public void setChild(LogicalNode child, LogicalNode parent) {
+//    planTree.setChild(child, parent);
+//  }
+//
+//  public void setChild(LogicalNode left, LogicalNode right, LogicalNode parent) {
+//    planTree.setLeftChild(left, parent);
+//    planTree.setRightChild(right, parent);
+//  }
+//
+//  public void setLeftChild(LogicalNode child, LogicalNode parent) {
+//    planTree.setLeftChild(child, parent);
+//  }
+//
+//  public void setRightChild(LogicalNode child, LogicalNode parent) {
+//    planTree.setRightChild(child, parent);
+//  }
+//
+//  public <NODE extends LogicalNode> NODE getParent(LogicalNode child) {
+//    return planTree.getParent(child);
+//  }
+//
+//  public int getChildCount(LogicalNode parent) {
+//    return planTree.getChildCount(parent.getPID());
+//  }
+//
+//  public <NODE extends LogicalNode> NODE getChild(LogicalNode parent) {
+//    return planTree.getChild(parent);
+//  }
+//
+//  public <NODE extends LogicalNode> NODE getLeftChild(LogicalNode parent) {
+//    return planTree.getLeftChild(parent);
+//  }
+//
+//  public <NODE extends LogicalNode> NODE getRightChild(LogicalNode parent) {
+//    return planTree.getRightChild(parent);
+//  }
 
   public QueryBlock getRootBlock() {
     return queryBlocks.get(ROOT_BLOCK);
@@ -571,6 +576,18 @@ public class LogicalPlan {
     return getQueryGraphAsString();
   }
 
+  public static class PidFactory {
+    @Expose private int nextPid = -1;
+
+    @VisibleForTesting
+    public PidFactory() {
+    }
+
+    public int newPid() {
+      return ++nextPid;
+    }
+  }
+
   ///////////////////////////////////////////////////////////////////////////
   //                             Query Block
   ///////////////////////////////////////////////////////////////////////////
@@ -656,7 +673,7 @@ public class LogicalPlan {
       this.rootNode = blockRoot;
       if (blockRoot instanceof LogicalRootNode) {
         LogicalRootNode rootNode = (LogicalRootNode) blockRoot;
-        rootType = logicalNodeTree.getChild(rootNode).getType();
+        rootType = planTree.getChild(rootNode).getType();
       }
     }
 
@@ -772,7 +789,7 @@ public class LogicalPlan {
 
     public void registerNode(LogicalNode node) {
       // id -> node
-      nodeMap.put(node.getPID(), node);
+//      nodeMap.put(node.getPID(), node);
 
       // So, this is only for filter, groupby, sort, limit, projection, which exists once at a query block.
       nodeTypeToNodeMap.put(node.getType(), node);

@@ -22,8 +22,6 @@
 package org.apache.tajo.engine.planner.logical;
 
 
-import org.apache.tajo.engine.planner.AlterTablespaceNode;
-
 /**
  * This indicates a logical node type.
  */

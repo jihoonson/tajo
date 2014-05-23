@@ -16,15 +16,13 @@
  * limitations under the License.
  */
 
-package org.apache.tajo.engine.planner;
+package org.apache.tajo.engine.planner.logical;
 
 
 import com.google.common.base.Objects;
 import com.google.gson.annotations.Expose;
 import org.apache.tajo.algebra.AlterTablespaceSetType;
-import org.apache.tajo.engine.planner.logical.LogicalNode;
-import org.apache.tajo.engine.planner.logical.LogicalNodeVisitor;
-import org.apache.tajo.engine.planner.logical.NodeType;
+import org.apache.tajo.engine.planner.PlanString;
 
 public class AlterTablespaceNode extends LogicalNode implements Cloneable {
 

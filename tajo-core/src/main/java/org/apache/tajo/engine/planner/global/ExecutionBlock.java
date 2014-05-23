@@ -15,7 +15,7 @@
 package org.apache.tajo.engine.planner.global;
 
 import org.apache.tajo.ExecutionBlockId;
-import org.apache.tajo.engine.planner.LogicalNodeTree;
+import org.apache.tajo.engine.planner.LogicalPlanTree;
 import org.apache.tajo.engine.planner.enforce.Enforcer;
 import org.apache.tajo.engine.planner.logical.*;
 
@@ -30,7 +30,7 @@ import java.util.*;
  */
 public class ExecutionBlock {
   private ExecutionBlockId executionBlockId;
-  private LogicalNodeTree plan = null;
+  private LogicalPlanTree plan = null;
   private LogicalNode root = null;
   private StoreTableNode store = null;
   private List<ScanNode> scanlist = new ArrayList<ScanNode>();
@@ -49,7 +49,7 @@ public class ExecutionBlock {
     return executionBlockId;
   }
 
-  public void setPlan(LogicalNodeTree plan, LogicalNode root) {
+  public void setPlan(LogicalPlanTree plan, LogicalNode root) {
     hasJoinPlan = false;
     hasUnionPlan = false;
     this.scanlist.clear();
@@ -82,7 +82,7 @@ public class ExecutionBlock {
   }
 
 
-  public LogicalNodeTree getPlan() {
+  public LogicalPlanTree getPlan() {
     return plan;
   }
 

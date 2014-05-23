@@ -16,22 +16,10 @@
  * limitations under the License.
  */
 
-/**
- * 
- */
-package org.apache.tajo.engine.planner;
+package org.apache.tajo.exception;
 
-import org.apache.tajo.worker.TaskAttemptContext;
-import org.apache.tajo.engine.planner.logical.LogicalNode;
-import org.apache.tajo.engine.planner.physical.PhysicalExec;
-import org.apache.tajo.exception.InternalException;
-
-/**
- * This class generates a physical execution plan.
- */
-public interface PhysicalPlanner {
-  public PhysicalExec createPlan(TaskAttemptContext context,
-                                 LogicalPlanTree logicalPlan,
-                                 LogicalNode root)
-      throws InternalException;
+public class ValueOutOfRangeException extends RuntimeException {
+  public ValueOutOfRangeException(String message) {
+    super(message);
+  }
 }

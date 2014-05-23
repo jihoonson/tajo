@@ -30,7 +30,6 @@ import org.apache.tajo.catalog.proto.CatalogProtos;
 import org.apache.tajo.common.TajoDataTypes.DataType;
 import org.apache.tajo.engine.eval.*;
 import org.apache.tajo.engine.planner.logical.*;
-import org.apache.tajo.engine.planner.logical.LogicalNode.ArityClass;
 import org.apache.tajo.engine.utils.SchemaUtil;
 import org.apache.tajo.exception.UnsupportedException;
 import org.apache.tajo.storage.TupleComparator;
@@ -80,7 +79,7 @@ public class PlannerUtil {
     boolean noWhere = !plan.getRootBlock().hasNode(NodeType.SELECTION);
     boolean noJoin = !plan.getRootBlock().hasNode(NodeType.JOIN);
     boolean singleRelation = plan.getRootBlock().hasNode(NodeType.SCAN)
-        && PlannerUtil.getRelationLineage(plan.getLogicalNodeTree(), plan.getRootBlock().getRoot()).length == 1;
+        && PlannerUtil.getRelationLineage(plan.getPlanTree(), plan.getRootBlock().getRoot()).length == 1;
 
     boolean noComplexComputation = false;
     if (singleRelation) {
@@ -126,7 +125,7 @@ public class PlannerUtil {
    * @param from The LogicalNode to start visiting LogicalNodes.
    * @return an array of all descendant RelationNode of LogicalNode.
    */
-  public static String[] getRelationLineage(LogicalNodeTree tree, LogicalNode from) {
+  public static String[] getRelationLineage(LogicalPlanTree tree, LogicalNode from) {
     LogicalNode[] scans = findAllNodes(tree, from, NodeType.SCAN, NodeType.PARTITIONS_SCAN);
     String[] tableNames = new String[scans.length];
     ScanNode scan;
@@ -159,10 +158,11 @@ public class PlannerUtil {
     }
 
     @Override
-    public LogicalNode visit(Object context, LogicalPlan plan, @Nullable LogicalPlan.QueryBlock block, LogicalNode node,
+    public LogicalNode visit(Object context, LogicalPlan plan, @Nullable LogicalPlan.QueryBlock block,
+                             LogicalPlanTree planTree, LogicalNode node,
                              Stack<LogicalNode> stack) throws PlanningException {
       if (node.getType() != NodeType.TABLE_SUBQUERY) {
-        super.visit(context, plan, block, node, stack);
+        super.visit(context, plan, block, planTree, node, stack);
       }
 
       if (node instanceof RelationNode) {
@@ -208,7 +208,7 @@ public class PlannerUtil {
 //  }
 
   public static void replaceNode(LogicalPlan plan, LogicalNode startNode, LogicalNode oldNode, LogicalNode newNode) {
-    LogicalNodeReplaceVisitor replacer = new LogicalNodeReplaceVisitor(plan.getLogicalNodeTree(), oldNode, newNode);
+    LogicalNodeReplaceVisitor replacer = new LogicalNodeReplaceVisitor(plan.getPlanTree(), oldNode, newNode);
     try {
       replacer.visit(new ReplacerContext(), plan, null, startNode, new Stack<LogicalNode>());
     } catch (PlanningException e) {
@@ -224,7 +224,7 @@ public class PlannerUtil {
     private LogicalNode target;
     private LogicalNode tobeReplaced;
 
-    public LogicalNodeReplaceVisitor(LogicalNodeTree plan, LogicalNode target, LogicalNode tobeReplaced) {
+    public LogicalNodeReplaceVisitor(LogicalPlanTree plan, LogicalNode target, LogicalNode tobeReplaced) {
       this.target = target;
       this.tobeReplaced = tobeReplaced;
     }
@@ -232,48 +232,49 @@ public class PlannerUtil {
     /**
      * If this node can have child, it returns TRUE. Otherwise, it returns FALSE.
      */
-    private static boolean checkIfVisitable(LogicalNodeTree plan, LogicalNode node) {
+    private static boolean checkIfVisitable(LogicalPlanTree plan, LogicalNode node) {
 //      return node instanceof UnaryNode || node instanceof BinaryNode;
       return plan.getChildCount(node.getPID()) > 0;
     }
 
     @Override
     public LogicalNode visit(ReplacerContext context, LogicalPlan plan, @Nullable LogicalPlan.QueryBlock block,
-                             LogicalNode node, Stack<LogicalNode> stack) throws PlanningException {
+                             LogicalPlanTree planTree, LogicalNode node, Stack<LogicalNode> stack)
+        throws PlanningException {
       LogicalNode left = null;
       LogicalNode right = null;
-      LogicalNodeTree nodeTree = plan.getLogicalNodeTree();
-      ArityClass arityClass = LogicalNodeTree.getArityClass(nodeTree, node);
+//      LogicalPlanTree nodeTree = plan.getPlanTree();
+      ArityClass arityClass = ArityClass.getArityClassByNodeType(node.getType());
 
       switch (arityClass) {
         case UNARY:
-          if (nodeTree.getChild(node).deepEquals(target)) {
-            nodeTree.setChild(tobeReplaced, node);
+          if (planTree.getChild(node).deepEquals(target)) {
+            planTree.setChild(tobeReplaced, node);
             left = tobeReplaced;
             context.updateSchemaFlag = true;
-          } else if (checkIfVisitable(nodeTree, nodeTree.getChild(node))) {
-            left = visit(context, plan, null, nodeTree.getChild(node), stack);
+          } else if (checkIfVisitable(planTree, planTree.getChild(node))) {
+            left = visit(context, plan, null, planTree, planTree.getChild(node), stack);
           }
           break;
         case BINARY:
-          if (nodeTree.getLeftChild(node).deepEquals(target)) {
-            nodeTree.setLeftChild(tobeReplaced, node);
+          if (planTree.getLeftChild(node).deepEquals(target)) {
+            planTree.setLeftChild(tobeReplaced, node);
             left = tobeReplaced;
             context.updateSchemaFlag = true;
-          } else if (checkIfVisitable(nodeTree, nodeTree.getLeftChild(node))) {
-            left = visit(context, plan, null, nodeTree.getLeftChild(node), stack);
+          } else if (checkIfVisitable(planTree, planTree.getLeftChild(node))) {
+            left = visit(context, plan, null, planTree, planTree.getLeftChild(node), stack);
           } else {
-            left = nodeTree.getLeftChild(node);
+            left = planTree.getLeftChild(node);
           }
 
-          if (nodeTree.getRightChild(node).deepEquals(target)) {
-            nodeTree.setRightChild(tobeReplaced, node);
+          if (planTree.getRightChild(node).deepEquals(target)) {
+            planTree.setRightChild(tobeReplaced, node);
             right = tobeReplaced;
             context.updateSchemaFlag = true;
-          } else if (checkIfVisitable(nodeTree, nodeTree.getRightChild(node))) {
-            right = visit(context, plan, null, nodeTree.getRightChild(node), stack);
+          } else if (checkIfVisitable(planTree, planTree.getRightChild(node))) {
+            right = visit(context, plan, null, planTree, planTree.getRightChild(node), stack);
           } else {
-            right = nodeTree.getRightChild(node);
+            right = planTree.getRightChild(node);
           }
           break;
         case NARY:
@@ -332,14 +333,15 @@ public class PlannerUtil {
     }
 
     @Override
-    public LogicalNode visitScan(ReplacerContext context, LogicalPlan plan, LogicalPlan.QueryBlock block, ScanNode node,
+    public LogicalNode visitScan(ReplacerContext context, LogicalPlan plan, LogicalPlan.QueryBlock block,
+                                 LogicalPlanTree planTree, ScanNode node,
                                  Stack<LogicalNode> stack) throws PlanningException {
       return node;
     }
 
     @Override
     public LogicalNode visitPartitionedTableScan(ReplacerContext context, LogicalPlan plan, LogicalPlan.
-        QueryBlock block, PartitionedTableScanNode node, Stack<LogicalNode> stack)
+        QueryBlock block, LogicalPlanTree planTree, PartitionedTableScanNode node, Stack<LogicalNode> stack)
 
         throws PlanningException {
       return node;
@@ -365,7 +367,7 @@ public class PlannerUtil {
    * @param type to find
    * @return a found logical node
    */
-  public static <T extends LogicalNode> T findTopNode(LogicalNodeTree tree, LogicalNode node, NodeType type) {
+  public static <T extends LogicalNode> T findTopNode(LogicalPlanTree tree, LogicalNode node, NodeType type) {
     Preconditions.checkNotNull(node);
     Preconditions.checkNotNull(type);
 
@@ -386,7 +388,7 @@ public class PlannerUtil {
    * @param type to find
    * @return a found logical node
    */
-  public static <T extends LogicalNode> T findMostBottomNode(LogicalNodeTree tree, LogicalNode node, NodeType type) {
+  public static <T extends LogicalNode> T findMostBottomNode(LogicalPlanTree tree, LogicalNode node, NodeType type) {
     Preconditions.checkNotNull(node);
     Preconditions.checkNotNull(type);
 
@@ -407,7 +409,7 @@ public class PlannerUtil {
    * @param type to find
    * @return a found logical node
    */
-  public static LogicalNode[] findAllNodes(LogicalNodeTree tree, LogicalNode node, NodeType... type) {
+  public static LogicalNode[] findAllNodes(LogicalPlanTree tree, LogicalNode node, NodeType... type) {
     Preconditions.checkNotNull(node);
     Preconditions.checkNotNull(type);
 
@@ -429,7 +431,7 @@ public class PlannerUtil {
    * @param type to find
    * @return the parent node of a found logical node
    */
-  public static <T extends LogicalNode> T findTopParentNode(LogicalNodeTree tree, LogicalNode node, NodeType type) {
+  public static <T extends LogicalNode> T findTopParentNode(LogicalPlanTree tree, LogicalNode node, NodeType type) {
     Preconditions.checkNotNull(node);
     Preconditions.checkNotNull(type);
 
@@ -484,9 +486,9 @@ public class PlannerUtil {
   private static class ParentNodeFinder implements LogicalNodeVisitor {
     private List<LogicalNode> list = new ArrayList<LogicalNode>();
     private NodeType tofind;
-    private LogicalNodeTree plan;
+    private LogicalPlanTree plan;
 
-    public ParentNodeFinder(LogicalNodeTree plan, NodeType type) {
+    public ParentNodeFinder(LogicalPlanTree plan, NodeType type) {
       this.plan = plan;
       this.tofind = type;
     }

@@ -130,16 +130,16 @@ public class TestPlannerUtil {
     ScanNode rightNode = plan.getRightChild(joinNode);
     assertEquals("default.dept", rightNode.getTableName());
     
-    LogicalNode node = PlannerUtil.findTopNode(plan.getLogicalNodeTree(), root, NodeType.ROOT);
+    LogicalNode node = PlannerUtil.findTopNode(plan.getPlanTree(), root, NodeType.ROOT);
     assertEquals(NodeType.ROOT, node.getType());
     
-    node = PlannerUtil.findTopNode(plan.getLogicalNodeTree(), root, NodeType.PROJECTION);
+    node = PlannerUtil.findTopNode(plan.getPlanTree(), root, NodeType.PROJECTION);
     assertEquals(NodeType.PROJECTION, node.getType());
     
-    node = PlannerUtil.findTopNode(plan.getLogicalNodeTree(), root, NodeType.JOIN);
+    node = PlannerUtil.findTopNode(plan.getPlanTree(), root, NodeType.JOIN);
     assertEquals(NodeType.JOIN, node.getType());
     
-    node = PlannerUtil.findTopNode(plan.getLogicalNodeTree(), root, NodeType.SCAN);
+    node = PlannerUtil.findTopNode(plan.getPlanTree(), root, NodeType.SCAN);
     assertEquals(NodeType.SCAN, node.getType());
   }
 

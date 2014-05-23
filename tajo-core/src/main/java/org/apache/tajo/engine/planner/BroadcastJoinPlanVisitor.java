@@ -29,11 +29,12 @@ public class BroadcastJoinPlanVisitor extends BasicLogicalPlanVisitor<GlobalPlan
 
   @Override
   public LogicalNode visitJoin(GlobalPlanner.GlobalPlanContext context, LogicalPlan plan, LogicalPlan.QueryBlock block,
-                               JoinNode node, Stack<LogicalNode> stack) throws PlanningException {
+                               LogicalPlanTree planTree, JoinNode node, Stack<LogicalNode> stack)
+      throws PlanningException {
 //    LogicalNode leftChild = node.getLeftChild();
 //    LogicalNode rightChild = node.getRightChild();
-    LogicalNode leftChild = plan.getLeftChild(node);
-    LogicalNode rightChild = plan.getRightChild(node);
+    LogicalNode leftChild = planTree.getLeftChild(node);
+    LogicalNode rightChild = planTree.getRightChild(node);
 
     if (isScanNode(leftChild) && isScanNode(rightChild)) {
       node.setCandidateBroadcast(true);
@@ -43,11 +44,11 @@ public class BroadcastJoinPlanVisitor extends BasicLogicalPlanVisitor<GlobalPlan
     }
 
     if(!isScanNode(leftChild)) {
-      visit(context, plan, block, leftChild, stack);
+      visit(context, plan, block, planTree, leftChild, stack);
     }
 
     if(!isScanNode(rightChild)) {
-      visit(context, plan, block, rightChild, stack);
+      visit(context, plan, block, planTree, rightChild, stack);
     }
 
     if(isBroadcastCandidateNode(leftChild) && isBroadcastCandidateNode(rightChild)) {

@@ -42,88 +42,88 @@ public class BasicLogicalPlanVisitor<CONTEXT, RESULT> implements LogicalPlanVisi
 
   public CONTEXT visit(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block)
       throws PlanningException {
-    visit(context, plan, block, block.getRoot(), new Stack<LogicalNode>());
+    visit(context, plan, block, plan.getPlanTree(), block.getRoot(), new Stack<LogicalNode>());
     return context;
   }
 
   /**
    * visit visits each logicalNode recursively.
    */
-  public RESULT visit(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, LogicalNode node,
-                      Stack<LogicalNode> stack)
+  public RESULT visit(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block,
+                      LogicalPlanTree planTree, LogicalNode node, Stack<LogicalNode> stack)
       throws PlanningException {
     RESULT current;
     switch (node.getType()) {
       case ROOT:
-        current = visitRoot(context, plan, block, (LogicalRootNode) node, stack);
+        current = visitRoot(context, plan, block, planTree, (LogicalRootNode) node, stack);
         break;
       case EXPRS:
         return null;
       case PROJECTION:
-        current = visitProjection(context, plan, block, (ProjectionNode) node, stack);
+        current = visitProjection(context, plan, block, planTree, (ProjectionNode) node, stack);
         break;
       case LIMIT:
-        current = visitLimit(context, plan, block, (LimitNode) node, stack);
+        current = visitLimit(context, plan, block, planTree, (LimitNode) node, stack);
         break;
       case SORT:
-        current = visitSort(context, plan, block, (SortNode) node, stack);
+        current = visitSort(context, plan, block, planTree, (SortNode) node, stack);
         break;
       case HAVING:
-        current = visitHaving(context, plan, block, (HavingNode) node, stack);
+        current = visitHaving(context, plan, block, planTree, (HavingNode) node, stack);
         break;
       case GROUP_BY:
-        current = visitGroupBy(context, plan, block, (GroupbyNode) node, stack);
+        current = visitGroupBy(context, plan, block, planTree, (GroupbyNode) node, stack);
         break;
       case DISTINCT_GROUP_BY:
-        current = visitDistinct(context, plan, block, (DistinctGroupbyNode) node, stack);
+        current = visitDistinct(context, plan, block, planTree, (DistinctGroupbyNode) node, stack);
         break;
       case SELECTION:
-        current = visitFilter(context, plan, block, (SelectionNode) node, stack);
+        current = visitFilter(context, plan, block, planTree, (SelectionNode) node, stack);
         break;
       case JOIN:
-        current = visitJoin(context, plan, block, (JoinNode) node, stack);
+        current = visitJoin(context, plan, block, planTree, (JoinNode) node, stack);
         break;
       case UNION:
-        current = visitUnion(context, plan, block, (UnionNode) node, stack);
+        current = visitUnion(context, plan, block, planTree, (UnionNode) node, stack);
         break;
       case EXCEPT:
-        current = visitExcept(context, plan, block, (ExceptNode) node, stack);
+        current = visitExcept(context, plan, block, planTree, (ExceptNode) node, stack);
         break;
       case INTERSECT:
-        current = visitIntersect(context, plan, block, (IntersectNode) node, stack);
+        current = visitIntersect(context, plan, block, planTree, (IntersectNode) node, stack);
         break;
       case TABLE_SUBQUERY:
-        current = visitTableSubQuery(context, plan, block, (TableSubQueryNode) node, stack);
+        current = visitTableSubQuery(context, plan, block, planTree, (TableSubQueryNode) node, stack);
         break;
       case SCAN:
-        current = visitScan(context, plan, block, (ScanNode) node, stack);
+        current = visitScan(context, plan, block, planTree, (ScanNode) node, stack);
         break;
       case PARTITIONS_SCAN:
-        current = visitPartitionedTableScan(context, plan, block, (PartitionedTableScanNode) node, stack);
+        current = visitPartitionedTableScan(context, plan, block, planTree, (PartitionedTableScanNode) node, stack);
         break;
       case STORE:
-        current = visitStoreTable(context, plan, block, (StoreTableNode) node, stack);
+        current = visitStoreTable(context, plan, block, planTree, (StoreTableNode) node, stack);
         break;
       case INSERT:
-        current = visitInsert(context, plan, block, (InsertNode) node, stack);
+        current = visitInsert(context, plan, block, planTree, (InsertNode) node, stack);
         break;
       case CREATE_DATABASE:
-        current = visitCreateDatabase(context, plan, block, (CreateDatabaseNode) node, stack);
+        current = visitCreateDatabase(context, plan, block, planTree, (CreateDatabaseNode) node, stack);
         break;
       case DROP_DATABASE:
-        current = visitDropDatabase(context, plan, block, (DropDatabaseNode) node, stack);
+        current = visitDropDatabase(context, plan, block, planTree, (DropDatabaseNode) node, stack);
         break;
       case CREATE_TABLE:
-        current = visitCreateTable(context, plan, block, (CreateTableNode) node, stack);
+        current = visitCreateTable(context, plan, block, planTree, (CreateTableNode) node, stack);
         break;
       case DROP_TABLE:
-        current = visitDropTable(context, plan, block, (DropTableNode) node, stack);
+        current = visitDropTable(context, plan, block, planTree, (DropTableNode) node, stack);
         break;
       case ALTER_TABLESPACE:
-        current = visitAlterTablespace(context, plan, block, (AlterTablespaceNode) node, stack);
+        current = visitAlterTablespace(context, plan, block, planTree, (AlterTablespaceNode) node, stack);
         break;
       case ALTER_TABLE:
-        current = visitAlterTable(context, plan, block, (AlterTableNode) node, stack);
+        current = visitAlterTable(context, plan, block, planTree, (AlterTableNode) node, stack);
         break;
       default:
         throw new PlanningException("Unknown logical node type: " + node.getType());
@@ -133,200 +133,205 @@ public class BasicLogicalPlanVisitor<CONTEXT, RESULT> implements LogicalPlanVisi
   }
 
   @Override
-  public RESULT visitRoot(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, LogicalRootNode node,
-                          Stack<LogicalNode> stack) throws PlanningException {
+  public RESULT visitRoot(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, LogicalPlanTree planTree,
+                          LogicalRootNode node, Stack<LogicalNode> stack) throws PlanningException {
     stack.push(node);
-    RESULT result = visit(context, plan, block, plan.getLogicalNodeTree().getChild(node), stack);
+    RESULT result = visit(context, plan, block, planTree, planTree.getChild(node), stack);
     stack.pop();
     return result;
   }
 
   @Override
-  public RESULT visitProjection(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, ProjectionNode node,
-                                Stack<LogicalNode> stack)
+  public RESULT visitProjection(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, LogicalPlanTree planTree,
+                                ProjectionNode node, Stack<LogicalNode> stack)
       throws PlanningException {
     stack.push(node);
-    RESULT result = visit(context, plan, block, plan.getLogicalNodeTree().getChild(node), stack);
+    RESULT result = visit(context, plan, block, planTree, planTree.getChild(node), stack);
     stack.pop();
     return result;
   }
 
   @Override
-  public RESULT visitLimit(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, LimitNode node,
-                           Stack<LogicalNode> stack) throws PlanningException {
+  public RESULT visitLimit(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, LogicalPlanTree planTree,
+                           LimitNode node, Stack<LogicalNode> stack) throws PlanningException {
     stack.push(node);
-    RESULT result = visit(context, plan, block, plan.getLogicalNodeTree().getChild(node), stack);
+    RESULT result = visit(context, plan, block, planTree, planTree.getChild(node), stack);
     stack.pop();
     return result;
   }
 
   @Override
-  public RESULT visitSort(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, SortNode node,
-                          Stack<LogicalNode> stack) throws PlanningException {
+  public RESULT visitSort(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, LogicalPlanTree planTree,
+                          SortNode node, Stack<LogicalNode> stack) throws PlanningException {
     stack.push(node);
-    RESULT result = visit(context, plan, block, plan.getLogicalNodeTree().getChild(node), stack);
+    RESULT result = visit(context, plan, block, planTree, planTree.getChild(node), stack);
     stack.pop();
     return result;
   }
 
   @Override
-  public RESULT visitHaving(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, HavingNode node,
-                            Stack<LogicalNode> stack) throws PlanningException {
+  public RESULT visitHaving(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, LogicalPlanTree planTree,
+                            HavingNode node, Stack<LogicalNode> stack) throws PlanningException {
     stack.push(node);
-    RESULT result = visit(context, plan, block, plan.getLogicalNodeTree().getChild(node), stack);
+    RESULT result = visit(context, plan, block, planTree, planTree.getChild(node), stack);
     stack.pop();
     return result;
   }
 
   @Override
-  public RESULT visitGroupBy(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, GroupbyNode node,
-                             Stack<LogicalNode> stack) throws PlanningException {
+  public RESULT visitGroupBy(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, LogicalPlanTree planTree,
+                             GroupbyNode node, Stack<LogicalNode> stack) throws PlanningException {
     stack.push(node);
-    RESULT result = visit(context, plan, block, plan.getLogicalNodeTree().getChild(node), stack);
+    RESULT result = visit(context, plan, block, planTree, planTree.getChild(node), stack);
     stack.pop();
     return result;
   }
 
   @Override
-  public RESULT visitDistinct(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, DistinctGroupbyNode node,
-                             Stack<LogicalNode> stack) throws PlanningException {
+  public RESULT visitDistinct(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, LogicalPlanTree planTree,
+                              DistinctGroupbyNode node, Stack<LogicalNode> stack) throws PlanningException {
     stack.push(node);
-    RESULT result = visit(context, plan, block, plan.getChild(node), stack);
+    RESULT result = visit(context, plan, block, planTree, planTree.getChild(node), stack);
     stack.pop();
     return result;
   }
 
   @Override
-  public RESULT visitFilter(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, SelectionNode node,
-                            Stack<LogicalNode> stack) throws PlanningException {
+  public RESULT visitFilter(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, LogicalPlanTree planTree,
+                            SelectionNode node, Stack<LogicalNode> stack) throws PlanningException {
     stack.push(node);
-    RESULT result = visit(context, plan, block, plan.getLogicalNodeTree().getChild(node), stack);
+    RESULT result = visit(context, plan, block, planTree, planTree.getChild(node), stack);
     stack.pop();
     return result;
   }
 
   @Override
-  public RESULT visitJoin(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, JoinNode node,
-                          Stack<LogicalNode> stack) throws PlanningException {
+  public RESULT visitJoin(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, LogicalPlanTree planTree,
+                          JoinNode node, Stack<LogicalNode> stack) throws PlanningException {
     stack.push(node);
-    RESULT result = visit(context, plan, block, plan.getLogicalNodeTree().getLeftChild(node), stack);
-    visit(context, plan, block, plan.getLogicalNodeTree().getRightChild(node), stack);
+    RESULT result = visit(context, plan, block, planTree, planTree.getLeftChild(node), stack);
+    visit(context, plan, block, planTree, planTree.getRightChild(node), stack);
     stack.pop();
     return result;
   }
 
   @Override
-  public RESULT visitUnion(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, UnionNode node,
-                           Stack<LogicalNode> stack) throws PlanningException {
+  public RESULT visitUnion(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, LogicalPlanTree planTree,
+                           UnionNode node, Stack<LogicalNode> stack) throws PlanningException {
     stack.push(node);
-    LogicalPlan.QueryBlock leftBlock = plan.getBlock(plan.getLogicalNodeTree().getLeftChild(node));
-    RESULT result = visit(context, plan, leftBlock, leftBlock.getRoot(), stack);
-    LogicalPlan.QueryBlock rightBlock = plan.getBlock(plan.getLogicalNodeTree().getRightChild(node));
-    visit(context, plan, rightBlock, rightBlock.getRoot(), stack);
+    LogicalPlan.QueryBlock leftBlock = plan.getBlock(planTree.getLeftChild(node));
+    RESULT result = visit(context, plan, leftBlock, planTree, leftBlock.getRoot(), stack);
+    LogicalPlan.QueryBlock rightBlock = plan.getBlock(planTree.getRightChild(node));
+    visit(context, plan, rightBlock, planTree, rightBlock.getRoot(), stack);
     stack.pop();
     return result;
   }
 
   @Override
-  public RESULT visitExcept(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, ExceptNode node,
-                            Stack<LogicalNode> stack) throws PlanningException {
+  public RESULT visitExcept(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, LogicalPlanTree planTree,
+                            ExceptNode node, Stack<LogicalNode> stack) throws PlanningException {
     stack.push(node);
-    RESULT result = visit(context, plan, block, plan.getLogicalNodeTree().getLeftChild(node), stack);
-    visit(context, plan, block, plan.getLogicalNodeTree().getRightChild(node), stack);
+    RESULT result = visit(context, plan, block, planTree, planTree.getLeftChild(node), stack);
+    visit(context, plan, block, planTree, planTree.getRightChild(node), stack);
     stack.pop();
     return result;
   }
 
   @Override
-  public RESULT visitIntersect(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, IntersectNode node,
-                               Stack<LogicalNode> stack) throws PlanningException {
+  public RESULT visitIntersect(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, LogicalPlanTree planTree,
+                               IntersectNode node, Stack<LogicalNode> stack) throws PlanningException {
     stack.push(node);
-    RESULT result = visit(context, plan, block, plan.getLogicalNodeTree().getLeftChild(node), stack);
-    visit(context, plan, block, plan.getLogicalNodeTree().getRightChild(node), stack);
+    RESULT result = visit(context, plan, block, planTree, planTree.getLeftChild(node), stack);
+    visit(context, plan, block, planTree, planTree.getRightChild(node), stack);
     stack.pop();
     return result;
   }
 
   @Override
   public RESULT visitTableSubQuery(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block,
-                                   TableSubQueryNode node, Stack<LogicalNode> stack) throws PlanningException {
+                                   LogicalPlanTree planTree, TableSubQueryNode node, Stack<LogicalNode> stack)
+      throws PlanningException {
     stack.push(node);
     LogicalPlan.QueryBlock childBlock = plan.getBlock(node.getSubQuery());
-    RESULT result = visit(context, plan, childBlock, childBlock.getRoot(), new Stack<LogicalNode>());
+    RESULT result = visit(context, plan, childBlock, planTree, childBlock.getRoot(), new Stack<LogicalNode>());
     stack.pop();
     return result;
   }
 
   @Override
-  public RESULT visitScan(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, ScanNode node,
-                          Stack<LogicalNode> stack) throws PlanningException {
+  public RESULT visitScan(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, LogicalPlanTree planTree,
+                          ScanNode node, Stack<LogicalNode> stack) throws PlanningException {
     return null;
   }
 
   @Override
   public RESULT visitPartitionedTableScan(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block,
-                                          PartitionedTableScanNode node, Stack<LogicalNode> stack)
-      throws PlanningException {
+                                          LogicalPlanTree planTree, PartitionedTableScanNode node,
+                                          Stack<LogicalNode> stack) throws PlanningException {
     return null;
   }
 
   @Override
-  public RESULT visitStoreTable(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, StoreTableNode node,
-                                Stack<LogicalNode> stack) throws PlanningException {
+  public RESULT visitStoreTable(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, LogicalPlanTree planTree,
+                                StoreTableNode node, Stack<LogicalNode> stack) throws PlanningException {
     stack.push(node);
-    RESULT result = visit(context, plan, block, plan.getLogicalNodeTree().getChild(node), stack);
+    RESULT result = visit(context, plan, block, planTree, planTree.getChild(node), stack);
     stack.pop();
     return result;
   }
 
   @Override
-  public RESULT visitInsert(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, InsertNode node,
-                            Stack<LogicalNode> stack) throws PlanningException {
+  public RESULT visitInsert(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, LogicalPlanTree planTree,
+                            InsertNode node, Stack<LogicalNode> stack) throws PlanningException {
     stack.push(node);
-    RESULT result = visit(context, plan, block, plan.getLogicalNodeTree().getChild(node), stack);
+    RESULT result = visit(context, plan, block, planTree, planTree.getChild(node), stack);
     stack.pop();
     return result;
   }
 
   @Override
   public RESULT visitCreateDatabase(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block,
-                                    CreateDatabaseNode node, Stack<LogicalNode> stack) throws PlanningException {
+                                    LogicalPlanTree planTree, CreateDatabaseNode node, Stack<LogicalNode> stack)
+      throws PlanningException {
     return null;
   }
 
   @Override
-  public RESULT visitDropDatabase(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, DropDatabaseNode node, Stack<LogicalNode> stack) throws PlanningException {
+  public RESULT visitDropDatabase(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block,
+                                  LogicalPlanTree planTree, DropDatabaseNode node, Stack<LogicalNode> stack)
+      throws PlanningException {
     return null;
   }
 
   @Override
-  public RESULT visitCreateTable(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, CreateTableNode node,
-                                 Stack<LogicalNode> stack) throws PlanningException {
+  public RESULT visitCreateTable(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, LogicalPlanTree planTree,
+                                 CreateTableNode node, Stack<LogicalNode> stack) throws PlanningException {
     RESULT result = null;
     stack.push(node);
 //    if (node.hasSubQuery()) {
-    if (plan.getLogicalNodeTree().hasChild(node)) {
-      result = visit(context, plan, block, plan.getLogicalNodeTree().getChild(node), stack);
+    if (planTree.hasChild(node)) {
+      result = visit(context, plan, block, planTree, planTree.getChild(node), stack);
     }
     stack.pop();
     return result;
   }
 
   @Override
-  public RESULT visitDropTable(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, DropTableNode node,
-                               Stack<LogicalNode> stack) {
+  public RESULT visitDropTable(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, LogicalPlanTree planTree,
+                               DropTableNode node, Stack<LogicalNode> stack) {
     return null;
   }
 
   @Override
   public RESULT visitAlterTablespace(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block,
-                                     AlterTablespaceNode node, Stack<LogicalNode> stack) throws PlanningException {
+                                     LogicalPlanTree planTree, AlterTablespaceNode node, Stack<LogicalNode> stack)
+      throws PlanningException {
     return null;
   }
 
   @Override
-  public RESULT visitAlterTable(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, AlterTableNode node,
-                                 Stack<LogicalNode> stack) {
+  public RESULT visitAlterTable(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, LogicalPlanTree planTree,
+                                AlterTableNode node, Stack<LogicalNode> stack) {
         return null;
     }
 }

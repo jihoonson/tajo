@@ -146,7 +146,7 @@ public class TestProgressExternalSortExec {
     LogicalNode rootNode = plan.getRootBlock().getRoot();
 
     PhysicalPlanner phyPlanner = new PhysicalPlannerImpl(conf, sm);
-    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getLogicalNodeTree(), rootNode);
+    PhysicalExec exec = phyPlanner.createPlan(ctx, plan.getPlanTree(), rootNode);
 
     ProjectionExec proj = (ProjectionExec) exec;
 
