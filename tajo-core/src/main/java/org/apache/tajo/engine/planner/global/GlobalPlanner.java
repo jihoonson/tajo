@@ -138,6 +138,10 @@ public class GlobalPlanner {
         masterPlan.getLogicalPlan(), masterPlan.getLogicalPlan().getRootBlock(), inputPlan, new Stack<LogicalNode>());
     ExecutionBlock childExecBlock = globalPlanContext.execBlockMap.get(lastNode.getPID());
 
+    // find and annotate aside columns
+    DataChannelAnnotator annotator = new DataChannelAnnotator(masterPlan);
+    annotator.visit(new Stack<ExecutionBlock>(), childExecBlock);
+
     ExecutionBlock terminalBlock;
     // TODO - consider two terminal types: specified output or not
     if (childExecBlock.getPlan() != null) {

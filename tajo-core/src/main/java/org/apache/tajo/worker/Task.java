@@ -346,6 +346,16 @@ public class Task {
       } while (it.hasNext());
     }
 
+    it = context.getAsideFileOutputs();
+    if (it.hasNext()) {
+      do {
+        Entry<Integer,String> entry = it.next();
+        ShuffleFileOutput.Builder part = ShuffleFileOutput.newBuilder();
+        part.setPartId(entry.getKey());
+        builder.addAsideFileOutputs(part.build());
+      } while (it.hasNext());
+    }
+
     return builder.build();
   }
 

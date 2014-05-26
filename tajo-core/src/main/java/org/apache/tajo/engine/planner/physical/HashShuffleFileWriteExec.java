@@ -27,6 +27,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.RawLocalFileSystem;
 import org.apache.tajo.catalog.CatalogUtil;
 import org.apache.tajo.catalog.Column;
+import org.apache.tajo.catalog.Schema;
 import org.apache.tajo.catalog.TableMeta;
 import org.apache.tajo.catalog.statistics.StatisticsUtil;
 import org.apache.tajo.catalog.statistics.TableStats;
@@ -35,10 +36,7 @@ import org.apache.tajo.storage.*;
 import org.apache.tajo.worker.TaskAttemptContext;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
  * <code>HashShuffleFileWriteExec</code> is a physical executor to store intermediate data into a number of
@@ -53,9 +51,14 @@ public final class HashShuffleFileWriteExec extends UnaryPhysicalExec {
   private Map<Integer, Appender> appenderMap = new HashMap<Integer, Appender>();
   private final int numShuffleOutputs;
   private final int [] shuffleKeyIds;
+  private final Set<Integer> putAsideColumnIdxs;
+  private Map<Integer, Appender> putAsideAppenderMap = new HashMap<Integer, Appender>();
+  private final Schema asideSchema;
+  private final Schema coreSchema;
   
   public HashShuffleFileWriteExec(TaskAttemptContext context, final AbstractStorageManager sm,
-                                  final ShuffleFileWriteNode plan, final PhysicalExec child) throws IOException {
+                                  final ShuffleFileWriteNode plan, final PhysicalExec child,
+                                  final List<Integer> putAsideColumnIdxs) throws IOException {
     super(context, plan.getInSchema(), plan.getOutSchema(), child);
     Preconditions.checkArgument(plan.hasShuffleKeys());
     this.plan = plan;
@@ -74,6 +77,20 @@ public final class HashShuffleFileWriteExec extends UnaryPhysicalExec {
     }
     this.partitioner = new HashPartitioner(shuffleKeyIds, numShuffleOutputs);
     storeTablePath = new Path(context.getWorkDir(), "output");
+    this.putAsideColumnIdxs = new HashSet<Integer>();
+    for (Integer asideColIdx : putAsideColumnIdxs) {
+      this.putAsideColumnIdxs.add(asideColIdx);
+    }
+    this.asideSchema = new Schema();
+    this.coreSchema = new Schema();
+    List<Column> columns = getSchema().getColumns();
+    for (i = 0; i < outColumnNum; i++) {
+      if (putAsideColumnIdxs.contains(i)) {
+        asideSchema.addColumn(columns.get(i));
+      } else {
+        coreSchema.addColumn(columns.get(i));
+      }
+    }
   }
 
   @Override
@@ -94,7 +111,8 @@ public final class HashShuffleFileWriteExec extends UnaryPhysicalExec {
         FileStatus status = fs.getFileStatus(dataFile);
         LOG.info("File size: " + status.getLen());
       }
-      appender = StorageManagerFactory.getStorageManager(context.getConf()).getAppender(meta, outSchema, dataFile);
+//      appender = StorageManagerFactory.getStorageManager(context.getConf()).getAppender(meta, outSchema, dataFile);
+      appender = StorageManagerFactory.getStorageManager(context.getConf()).getAppender(meta, coreSchema, dataFile);
       appender.enableStats();
       appender.init();
       appenderMap.put(partId, appender);
@@ -105,8 +123,48 @@ public final class HashShuffleFileWriteExec extends UnaryPhysicalExec {
     return appender;
   }
 
+  private Appender getPutAsideAppender(int partId) throws IOException {
+    Appender appender = putAsideAppenderMap.get(partId);
+
+    if (appender == null) {
+      Path dataFile = getAsideDataFile(partId);
+      FileSystem fs = dataFile.getFileSystem(context.getConf());
+      if (fs.exists(dataFile)) {
+        LOG.info("File " + dataFile + " already exists!");
+        FileStatus status = fs.getFileStatus(dataFile);
+        LOG.info("File size: " + status.getLen());
+      }
+      appender = StorageManagerFactory.getStorageManager(context.getConf()).getAppender(meta, asideSchema, dataFile);
+      appender.enableStats();
+      appender.init();
+      putAsideAppenderMap.put(partId, appender);
+    } else {
+      appender = putAsideAppenderMap.get(partId);
+    }
+
+    return appender;
+  }
+
+  private Path getAsideDataFile(int partId) {
+    return StorageUtil.concatPath(storeTablePath, "aside_"+partId);
+  }
+
   private Path getDataFile(int partId) {
     return StorageUtil.concatPath(storeTablePath, ""+partId);
+  }
+
+  private Tuple[] split(Tuple tuple) {
+    Tuple core = new VTuple(coreSchema.size());
+    Tuple aside = new VTuple(asideSchema.size());
+    int coreIdx = 0, asideIdx = 0;
+    for (int i = 0; i < outColumnNum; i++) {
+      if (putAsideColumnIdxs.contains(i)) {
+        aside.put(asideIdx++, tuple.get(i));
+      } else {
+        core.put(coreIdx++, tuple.get(i));
+      }
+    }
+    return new Tuple[] {core, aside};
   }
 
   @Override
@@ -116,8 +174,14 @@ public final class HashShuffleFileWriteExec extends UnaryPhysicalExec {
     int partId;
     while ((tuple = child.next()) != null) {
       partId = partitioner.getPartition(tuple);
+      Tuple[] splittedTuple = split(tuple);
+      // core
       appender = getAppender(partId);
-      appender.addTuple(tuple);
+      appender.addTuple(splittedTuple[0]);
+
+      // split
+      appender = getPutAsideAppender(partId);
+      appender.addTuple(splittedTuple[1]);
     }
     
     List<TableStats> statSet = new ArrayList<TableStats>();
@@ -129,6 +193,16 @@ public final class HashShuffleFileWriteExec extends UnaryPhysicalExec {
       statSet.add(app.getStats());
       if (app.getStats().getNumRows() > 0) {
         context.addShuffleFileOutput(partNum, getDataFile(partNum).getName());
+      }
+    }
+
+    for (Map.Entry<Integer, Appender> entry : putAsideAppenderMap.entrySet()) {
+      int partNum = entry.getKey();
+      Appender app = entry.getValue();
+      app.flush();
+      app.close();
+      if (app.getStats().getNumRows() > 0) {
+        context.addAsideFileOutput(partNum, getDataFile(partNum).getName());
       }
     }
     
@@ -150,6 +224,10 @@ public final class HashShuffleFileWriteExec extends UnaryPhysicalExec {
     if (appenderMap != null) {
       appenderMap.clear();
       appenderMap = null;
+    }
+    if (putAsideAppenderMap != null) {
+      putAsideAppenderMap.clear();;
+      putAsideAppenderMap = null;
     }
 
     partitioner = null;

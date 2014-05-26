@@ -52,6 +52,7 @@ import org.apache.tajo.util.TUtil;
 import org.apache.tajo.worker.TaskAttemptContext;
 
 import java.io.IOException;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Stack;
 
@@ -112,7 +113,8 @@ public class PhysicalPlannerImpl implements PhysicalPlanner {
     shuffleFileWriteNode.setShuffle(channel.getShuffleType(), channel.getShuffleKeys(), channel.getShuffleOutputNum());
     shuffleFileWriteNode.setChild(plan);
 
-    PhysicalExec outExecPlan = createShuffleFileWritePlan(context, shuffleFileWriteNode, execPlan);
+    PhysicalExec outExecPlan = createShuffleFileWritePlan(context, shuffleFileWriteNode, execPlan,
+        channel.getAsideColumnIdxs());
     return outExecPlan;
   }
 
@@ -723,10 +725,13 @@ public class PhysicalPlannerImpl implements PhysicalPlanner {
    * Create a shuffle file write executor to store intermediate data into local disks.
    */
   public PhysicalExec createShuffleFileWritePlan(TaskAttemptContext ctx,
-                                                 ShuffleFileWriteNode plan, PhysicalExec subOp) throws IOException {
+                                                 ShuffleFileWriteNode plan,
+                                                 PhysicalExec subOp,
+                                                 List<Integer> asideColumnIdxs) throws IOException {
     switch (plan.getShuffleType()) {
     case HASH_SHUFFLE:
-      return new HashShuffleFileWriteExec(ctx, sm, plan, subOp);
+      // TODO: Add putAsideColumns
+      return new HashShuffleFileWriteExec(ctx, sm, plan, subOp, asideColumnIdxs);
 
     case RANGE_SHUFFLE:
       SortExec sortExec = PhysicalPlanUtil.findExecutor(subOp, SortExec.class);

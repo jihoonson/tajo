@@ -36,6 +36,9 @@ public class ExecutionBlock {
 
   private boolean hasJoinPlan;
   private boolean hasUnionPlan;
+  private boolean hasLimitPlan;
+  private boolean hasSortPlan;
+  private boolean hasAggPlan;
 
   private Set<String> broadcasted = new HashSet<String>();
 
@@ -50,6 +53,9 @@ public class ExecutionBlock {
   public void setPlan(LogicalNode plan) {
     hasJoinPlan = false;
     hasUnionPlan = false;
+    hasLimitPlan = false;
+    hasSortPlan = false;
+    hasAggPlan = false;
     this.scanlist.clear();
     this.plan = plan;
 
@@ -64,6 +70,13 @@ public class ExecutionBlock {
       node = s.remove(s.size()-1);
       if (node instanceof UnaryNode) {
         UnaryNode unary = (UnaryNode) node;
+        if (unary.getType() == NodeType.LIMIT) {
+          hasLimitPlan = true;
+        } else if (unary.getType() == NodeType.SORT) {
+          hasSortPlan = true;
+        } else if (unary.getType() == NodeType.GROUP_BY) {
+          hasAggPlan = true;
+        }
         s.add(s.size(), unary.getChild());
       } else if (node instanceof BinaryNode) {
         BinaryNode binary = (BinaryNode) node;
@@ -123,5 +136,17 @@ public class ExecutionBlock {
 
   public String toString() {
     return executionBlockId.toString();
+  }
+
+  public boolean hasLimit() {
+    return hasLimitPlan;
+  }
+
+  public boolean hasSort() {
+    return hasSortPlan;
+  }
+
+  public boolean hasAgg() {
+    return hasAggPlan;
   }
 }

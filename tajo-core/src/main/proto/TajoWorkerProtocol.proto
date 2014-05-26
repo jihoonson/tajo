@@ -53,6 +53,7 @@ message TaskCompletionReport {
   optional TableStatsProto inputStats = 3;
   optional TableStatsProto resultStats = 4;
   repeated ShuffleFileOutput shuffleFileOutputs = 5;
+  repeated ShuffleFileOutput asideFileOutputs = 6;
 }
 
 message TaskFatalErrorReport {
@@ -166,6 +167,7 @@ message DataChannelProto {
   optional int32 numOutputs = 9 [default = 1];
 
   optional StoreType storeType = 10 [default = CSV];
+  repeated int32 asideColumnIdxs = 11;
 }
 
 message RunExecutionBlockRequestProto {

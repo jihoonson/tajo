@@ -25,6 +25,9 @@ import org.apache.tajo.catalog.Schema;
 import org.apache.tajo.engine.utils.SchemaUtil;
 import org.apache.tajo.util.TUtil;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import static org.apache.tajo.catalog.proto.CatalogProtos.StoreType;
 import static org.apache.tajo.ipc.TajoWorkerProtocol.*;
 
@@ -39,6 +42,8 @@ public class DataChannel {
   private Schema schema;
 
   private StoreType storeType = StoreType.RAW;
+
+  private List<Integer> asideColumnIdxs;
 
   public DataChannel(ExecutionBlockId srcId, ExecutionBlockId targetId) {
     this.srcId = srcId;
@@ -83,6 +88,9 @@ public class DataChannel {
     if (proto.hasStoreType()) {
       this.storeType = proto.getStoreType();
     }
+
+    asideColumnIdxs = new ArrayList<Integer>();
+    asideColumnIdxs.addAll(proto.getAsideColumnIdxsList());
   }
 
   public ExecutionBlockId getSrcId() {
@@ -150,6 +158,14 @@ public class DataChannel {
     return storeType;
   }
 
+  public void setAsideColumnIdxs(List<Integer> asideColumnIdxs) {
+    this.asideColumnIdxs = asideColumnIdxs;
+  }
+
+  public List<Integer> getAsideColumnIdxs() {
+    return this.asideColumnIdxs;
+  }
+
   public DataChannelProto getProto() {
     DataChannelProto.Builder builder = DataChannelProto.newBuilder();
     builder.setSrcId(srcId.getProto());
@@ -172,6 +188,10 @@ public class DataChannel {
 
     if(storeType != null){
       builder.setStoreType(storeType);
+    }
+
+    if (asideColumnIdxs != null) {
+      builder.addAllAsideColumnIdxs(asideColumnIdxs);
     }
     return builder.build();
   }

@@ -62,6 +62,7 @@ public class TaskAttemptContext {
 
   /** a map of shuffled file outputs */
   private Map<Integer, String> shuffleFileOutputs;
+  private Map<Integer, String> asideFileOutputs;
   private File fetchIn;
   private boolean stopped = false;
   private boolean interQuery = false;
@@ -89,6 +90,7 @@ public class TaskAttemptContext {
 
     this.workDir = workDir;
     this.shuffleFileOutputs = Maps.newHashMap();
+    this.asideFileOutputs = Maps.newHashMap();
 
     state = TaskAttemptState.TA_PENDING;
   }
@@ -185,9 +187,17 @@ public class TaskAttemptContext {
   public void addShuffleFileOutput(int partId, String fileName) {
     shuffleFileOutputs.put(partId, fileName);
   }
+
+  public void addAsideFileOutput(int partId, String fileName) {
+    asideFileOutputs.put(partId, fileName);
+  }
   
   public Iterator<Entry<Integer,String>> getShuffleFileOutputs() {
     return shuffleFileOutputs.entrySet().iterator();
+  }
+
+  public Iterator<Entry<Integer,String>> getAsideFileOutputs() {
+    return asideFileOutputs.entrySet().iterator();
   }
   
   public void updateAssignedFragments(String tableId, Fragment[] fragments) {
