@@ -1,0 +1,1 @@
+select l_linenumber, sum(l_quantity) from lineitem, orders where l_orderkey = o_orderkey and o_totalprice > 1 group by l_linenumber

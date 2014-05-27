@@ -140,7 +140,7 @@ public class GlobalPlanner {
 
     // find and annotate aside columns
     DataChannelAnnotator annotator = new DataChannelAnnotator(masterPlan);
-    annotator.visit(new Stack<ExecutionBlock>(), childExecBlock);
+    masterPlan.annotateDataChannels(annotator, childExecBlock);
 
     ExecutionBlock terminalBlock;
     // TODO - consider two terminal types: specified output or not
@@ -295,6 +295,7 @@ public class GlobalPlanner {
       if (rightDesc.getStats().getNumBytes() < broadcastThreshold) {
         rightBroadcasted = true;
       }
+      leftBroadcasted = rightBroadcasted = false;
 
       if (leftBroadcasted || rightBroadcasted) {
         currentBlock = masterPlan.newExecutionBlock();

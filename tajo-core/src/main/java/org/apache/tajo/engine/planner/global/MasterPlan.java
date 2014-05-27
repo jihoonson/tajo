@@ -202,6 +202,10 @@ public class MasterPlan {
     return getChild(executionBlock.getId(), idx);
   }
 
+  public void annotateDataChannels(DataChannelAnnotator annotator, ExecutionBlock root) {
+    execBlockGraph.accept(root.getId(), annotator);
+  }
+
   @Override
   public String toString() {
     StringBuilder sb = new StringBuilder();

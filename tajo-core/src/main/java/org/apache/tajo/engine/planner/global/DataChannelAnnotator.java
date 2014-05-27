@@ -18,14 +18,17 @@
 
 package org.apache.tajo.engine.planner.global;
 
+import org.apache.tajo.ExecutionBlockId;
 import org.apache.tajo.catalog.Column;
 import org.apache.tajo.catalog.Schema;
 import org.apache.tajo.catalog.SortSpec;
+import org.apache.tajo.engine.eval.AggregationFunctionCallEval;
 import org.apache.tajo.engine.eval.BasicEvalNodeVisitor;
 import org.apache.tajo.engine.eval.EvalNode;
 import org.apache.tajo.engine.eval.FieldEval;
 import org.apache.tajo.engine.planner.BasicLogicalPlanVisitor;
 import org.apache.tajo.engine.planner.LogicalPlan;
+import org.apache.tajo.engine.planner.LogicalPlan.QueryBlock;
 import org.apache.tajo.engine.planner.PlanningException;
 import org.apache.tajo.engine.planner.Target;
 import org.apache.tajo.engine.planner.graph.DirectedGraphVisitor;
@@ -33,7 +36,7 @@ import org.apache.tajo.engine.planner.logical.*;
 
 import java.util.*;
 
-public class DataChannelAnnotator implements DirectedGraphVisitor<ExecutionBlock> {
+public class DataChannelAnnotator implements DirectedGraphVisitor<ExecutionBlockId> {
   private final MasterPlan masterPlan;
 
   public DataChannelAnnotator(MasterPlan masterPlan) {
@@ -41,29 +44,131 @@ public class DataChannelAnnotator implements DirectedGraphVisitor<ExecutionBlock
   }
 
   @Override
-  public void visit(Stack<ExecutionBlock> stack, ExecutionBlock current) {
-    ExecutionBlock parent = stack.peek();
-    if (parent.hasJoin() || (parent.hasLimit() && parent.hasSort()) || parent.hasAgg()) {
-      DataChannel channel = masterPlan.getChannel(current, parent);
-      List<Integer> asideColumnIdxs = new ArrayList<Integer>();
+  public void visit(Stack<ExecutionBlockId> stack, ExecutionBlockId currentId) {
+    if (!stack.isEmpty()) {
+      ExecutionBlockId parentId = stack.peek();
+      ExecutionBlock parent = masterPlan.getExecBlock(parentId);
+      ExecutionBlock current = masterPlan.getExecBlock(currentId);
 
-      // get aside column indexes
-      ColumnExtractorContext context = new ColumnExtractorContext();
-      CoreSchemaExtractor extractor = new CoreSchemaExtractor();
       try {
-        extractor.visit(context, null, null, current.getPlan(), new Stack<LogicalNode>());
+        // require late shuffle?
+        PreprocessContext context = preprocess(masterPlan.getLogicalPlan(), parent);
 
-        // parent's input schema
-        Schema channelSchema = channel.getSchema();
-        for (Column column : channelSchema.getColumns()) {
-          if (!context.columns.contains(column)) {
-            asideColumnIdxs.add(channelSchema.getColumnId(column.getQualifiedName()));
-          }
-        }
-        channel.setAsideColumnIdxs(asideColumnIdxs);
+        // if it requires late shuffle, extract columns for late shuffle
       } catch (PlanningException e) {
         throw new RuntimeException(e);
       }
+
+
+
+
+
+
+
+      if (parent.hasJoin() || (parent.hasLimit() && parent.hasSort()) || parent.hasAgg()) {
+        DataChannel channel = masterPlan.getChannel(current, parent);
+        List<Integer> asideColumnIdxs = new ArrayList<Integer>();
+
+        // get aside column indexes
+        ColumnExtractorContext context = new ColumnExtractorContext();
+        CoreSchemaExtractor extractor = new CoreSchemaExtractor();
+        try {
+          extractor.visit(context, null, null, current.getPlan(), new Stack<LogicalNode>());
+
+          // parent's input schema
+          Schema channelSchema = channel.getSchema();
+          for (Column column : channelSchema.getColumns()) {
+            if (!context.columns.contains(column)) {
+              asideColumnIdxs.add(channelSchema.getColumnId(column.getQualifiedName()));
+            }
+          }
+          channel.setAsideColumnIdxs(asideColumnIdxs);
+        } catch (PlanningException e) {
+          throw new RuntimeException(e);
+        }
+      }
+    }
+  }
+
+  private PreprocessContext preprocess(LogicalPlan logicalPlan, ExecutionBlock executionBlock)
+      throws PlanningException {
+    // are there any nodes after a selectable node?
+    // selectable nodes include join, sort with limit, scan, and having.
+
+    GlobalPlanPreprocessor preprocessor = new GlobalPlanPreprocessor();
+    PreprocessContext context = new PreprocessContext();
+    preprocessor.visit(context, logicalPlan, null, executionBlock.getPlan(), new Stack<LogicalNode>());
+    return context;
+  }
+
+  static class PreprocessContext {
+    boolean hasSort = false;
+    boolean requireLateShuffle = false;
+    LogicalNode lastSelectableNode;
+    LogicalNode lateShuffleRequireNode;
+  }
+
+  static class GlobalPlanPreprocessor extends BasicLogicalPlanVisitor<PreprocessContext, LogicalNode> {
+
+    @Override
+    public LogicalNode visit(PreprocessContext context, LogicalPlan plan, LogicalPlan.QueryBlock block, LogicalNode node,
+                        Stack<LogicalNode> stack)
+        throws PlanningException {
+      if (context.lastSelectableNode != null) {
+        context.lateShuffleRequireNode = node;
+        context.requireLateShuffle = true;
+      }
+      return super.visit(context, plan, block, node, stack);
+    }
+
+    @Override
+    public LogicalNode visitHaving(PreprocessContext context, LogicalPlan plan, LogicalPlan.QueryBlock block, HavingNode node,
+                                   Stack<LogicalNode> stack) throws PlanningException {
+      stack.push(node);
+
+      if (context.lastSelectableNode == null) {
+        context.lastSelectableNode = node;
+      }
+
+      LogicalNode result = visit(context, plan, block, node.getChild(), stack);
+      stack.pop();
+      return result;
+    }
+
+    @Override
+    public LogicalNode visitJoin(PreprocessContext context, LogicalPlan plan, LogicalPlan.QueryBlock block, JoinNode node,
+                                 Stack<LogicalNode> stack) throws PlanningException {
+      stack.push(node);
+
+      if (context.lastSelectableNode == null) {
+        context.lastSelectableNode = node;
+      }
+
+      LogicalNode result = visit(context, plan, block, node.getLeftChild(), stack);
+      visit(context, plan, block, node.getRightChild(), stack);
+      stack.pop();
+      return result;
+    }
+
+    @Override
+    public LogicalNode visitScan(PreprocessContext context, LogicalPlan plan, LogicalPlan.QueryBlock block, ScanNode node,
+                                 Stack<LogicalNode> stack) throws PlanningException {
+      if (context.lastSelectableNode == null) {
+        context.lastSelectableNode = node;
+      }
+      return null;
+    }
+
+    @Override
+    public LogicalNode visitLimit(PreprocessContext context, LogicalPlan plan, LogicalPlan.QueryBlock block,
+                                  LimitNode node, Stack<LogicalNode> stack) throws PlanningException {
+      stack.push(node);
+      if (context.hasSort && context.lastSelectableNode == null) {
+        context.lastSelectableNode = node;
+      }
+      LogicalNode result = visit(context, plan, block, node.getChild(), stack);
+      stack.pop();
+      return result;
     }
   }
 
@@ -109,8 +214,13 @@ public class DataChannelAnnotator implements DirectedGraphVisitor<ExecutionBlock
       for (Column column : node.getGroupingColumns()) {
         context.addColumn(column);
       }
-      for (Target target : node.getTargets()) {
-        context.addColumn(target.getNamedColumn());
+
+//      for (Target target : node.getTargets()) {
+//        context.addColumn(target.getNamedColumn());
+//      }
+      for (AggregationFunctionCallEval eval : node.getAggFunctions()) {
+        ColumnExtractor columnExtractor = new ColumnExtractor();
+        columnExtractor.visitChild(context, eval, new Stack<EvalNode>());
       }
 
       LogicalNode result = visit(context, plan, block, node.getChild(), stack);
@@ -153,8 +263,10 @@ public class DataChannelAnnotator implements DirectedGraphVisitor<ExecutionBlock
                                  Stack<LogicalNode> stack) throws PlanningException {
       stack.push(node);
 
-      ColumnExtractor columnExtractor = new ColumnExtractor();
-      columnExtractor.visitChild(context, node.getJoinQual(), new Stack<EvalNode>());
+      if (node.hasJoinQual()) {
+        ColumnExtractor columnExtractor = new ColumnExtractor();
+        columnExtractor.visitChild(context, node.getJoinQual(), new Stack<EvalNode>());
+      }
 
       for (Target target : node.getTargets()) {
         context.addColumn(target.getNamedColumn());
@@ -164,6 +276,16 @@ public class DataChannelAnnotator implements DirectedGraphVisitor<ExecutionBlock
       visit(context, plan, block, node.getRightChild(), stack);
       stack.pop();
       return result;
+    }
+
+    @Override
+    public LogicalNode visitScan(ColumnExtractorContext context, LogicalPlan plan, LogicalPlan.QueryBlock block, ScanNode node,
+                                 Stack<LogicalNode> stack) throws PlanningException {
+      if (node.hasQual()) {
+        ColumnExtractor columnExtractor = new ColumnExtractor();
+        columnExtractor.visitChild(context, node.getQual(), new Stack<EvalNode>());
+      }
+      return null;
     }
   }
 
