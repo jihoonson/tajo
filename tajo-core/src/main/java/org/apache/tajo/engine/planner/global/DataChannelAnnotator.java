@@ -28,7 +28,6 @@ import org.apache.tajo.engine.eval.EvalNode;
 import org.apache.tajo.engine.eval.FieldEval;
 import org.apache.tajo.engine.planner.BasicLogicalPlanVisitor;
 import org.apache.tajo.engine.planner.LogicalPlan;
-import org.apache.tajo.engine.planner.LogicalPlan.QueryBlock;
 import org.apache.tajo.engine.planner.PlanningException;
 import org.apache.tajo.engine.planner.Target;
 import org.apache.tajo.engine.planner.graph.DirectedGraphVisitor;
@@ -52,40 +51,32 @@ public class DataChannelAnnotator implements DirectedGraphVisitor<ExecutionBlock
 
       try {
         // require late shuffle?
-        PreprocessContext context = preprocess(masterPlan.getLogicalPlan(), parent);
+        PreprocessContext preprocessContext = preprocess(masterPlan.getLogicalPlan(), parent);
 
         // if it requires late shuffle, extract columns for late shuffle
-      } catch (PlanningException e) {
-        throw new RuntimeException(e);
-      }
+        if (preprocessContext.requireLateShuffle) {
+          ColumnExtractorContext extractorContext = new ColumnExtractorContext();
+          RequireColumnExtractor extractor = new RequireColumnExtractor();
+          extractor.visit(extractorContext, null, null, preprocessContext.lastSelectableNode, new Stack<LogicalNode>());
+          Set<Column> requireColumnsForSelectablePlan = extractorContext.columns;
+          extractorContext = new ColumnExtractorContext();
+          extractorContext.tranverseEndNode = preprocessContext.lastSelectableNode;
+          extractor.visit(extractorContext, null, null, parent.getPlan(), new Stack<LogicalNode>());
+          Set<Column> requireColumnsAfterSelectablePlan = extractorContext.columns;
 
-
-
-
-
-
-
-      if (parent.hasJoin() || (parent.hasLimit() && parent.hasSort()) || parent.hasAgg()) {
-        DataChannel channel = masterPlan.getChannel(current, parent);
-        List<Integer> asideColumnIdxs = new ArrayList<Integer>();
-
-        // get aside column indexes
-        ColumnExtractorContext context = new ColumnExtractorContext();
-        CoreSchemaExtractor extractor = new CoreSchemaExtractor();
-        try {
-          extractor.visit(context, null, null, current.getPlan(), new Stack<LogicalNode>());
-
-          // parent's input schema
+          List<Integer> asideColumnIdxs = new ArrayList<Integer>();
+          DataChannel channel = masterPlan.getChannel(current, parent);
           Schema channelSchema = channel.getSchema();
           for (Column column : channelSchema.getColumns()) {
-            if (!context.columns.contains(column)) {
+            if (!requireColumnsForSelectablePlan.contains(column) &&
+                requireColumnsAfterSelectablePlan.contains(column)) {
               asideColumnIdxs.add(channelSchema.getColumnId(column.getQualifiedName()));
             }
           }
           channel.setAsideColumnIdxs(asideColumnIdxs);
-        } catch (PlanningException e) {
-          throw new RuntimeException(e);
         }
+      } catch (PlanningException e) {
+        throw new RuntimeException(e);
       }
     }
   }
@@ -97,6 +88,7 @@ public class DataChannelAnnotator implements DirectedGraphVisitor<ExecutionBlock
 
     GlobalPlanPreprocessor preprocessor = new GlobalPlanPreprocessor();
     PreprocessContext context = new PreprocessContext();
+    context.hasSort = executionBlock.hasSort();
     preprocessor.visit(context, logicalPlan, null, executionBlock.getPlan(), new Stack<LogicalNode>());
     return context;
   }
@@ -105,7 +97,6 @@ public class DataChannelAnnotator implements DirectedGraphVisitor<ExecutionBlock
     boolean hasSort = false;
     boolean requireLateShuffle = false;
     LogicalNode lastSelectableNode;
-    LogicalNode lateShuffleRequireNode;
   }
 
   static class GlobalPlanPreprocessor extends BasicLogicalPlanVisitor<PreprocessContext, LogicalNode> {
@@ -115,7 +106,6 @@ public class DataChannelAnnotator implements DirectedGraphVisitor<ExecutionBlock
                         Stack<LogicalNode> stack)
         throws PlanningException {
       if (context.lastSelectableNode != null) {
-        context.lateShuffleRequireNode = node;
         context.requireLateShuffle = true;
       }
       return super.visit(context, plan, block, node, stack);
@@ -174,12 +164,24 @@ public class DataChannelAnnotator implements DirectedGraphVisitor<ExecutionBlock
 
   static class ColumnExtractorContext {
     Set<Column> columns = new HashSet<Column>();
+    LogicalNode tranverseEndNode;
     public void addColumn(Column column) {
       this.columns.add(column);
     }
   }
 
-  static class CoreSchemaExtractor extends BasicLogicalPlanVisitor<ColumnExtractorContext, LogicalNode> {
+  static class RequireColumnExtractor extends BasicLogicalPlanVisitor<ColumnExtractorContext, LogicalNode> {
+
+    @Override
+    public LogicalNode visit(ColumnExtractorContext context, LogicalPlan plan, LogicalPlan.QueryBlock block, LogicalNode node,
+                             Stack<LogicalNode> stack)
+        throws PlanningException {
+      if (context.tranverseEndNode == null || !node.equals(context.tranverseEndNode)) {
+        return super.visit(context, plan, block, node, stack);
+      } else {
+        return null;
+      }
+    }
 
     @Override
     public LogicalNode visitSort(ColumnExtractorContext context, LogicalPlan plan, LogicalPlan.QueryBlock block, SortNode node,
@@ -268,9 +270,10 @@ public class DataChannelAnnotator implements DirectedGraphVisitor<ExecutionBlock
         columnExtractor.visitChild(context, node.getJoinQual(), new Stack<EvalNode>());
       }
 
-      for (Target target : node.getTargets()) {
-        context.addColumn(target.getNamedColumn());
-      }
+      // TODO: handle target
+//      for (Target target : node.getTargets()) {
+//        context.addColumn(target.getNamedColumn());
+//      }
 
       LogicalNode result = visit(context, plan, block, node.getLeftChild(), stack);
       visit(context, plan, block, node.getRightChild(), stack);
