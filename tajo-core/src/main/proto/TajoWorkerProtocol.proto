@@ -74,6 +74,7 @@ message QueryUnitRequestProto {
     optional KeyValueSetProto queryContext = 9;
     optional DataChannelProto dataChannel = 10;
     optional EnforcerProto enforcer = 11;
+  optional FetchProto asideFetches = 12;
 }
 
 message FetchProto {
