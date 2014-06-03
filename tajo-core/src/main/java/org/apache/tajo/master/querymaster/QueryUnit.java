@@ -69,6 +69,7 @@ public class QueryUnit implements EventHandler<TaskEvent> {
   private int totalFragmentNum;
 
   private List<ShuffleFileOutput> shuffleFileOutputs;
+  private List<ShuffleFileOutput> asideFileOutputs;
 	private TableStats stats;
   private final boolean isLeafTask;
   private List<IntermediateEntry> intermediateData;
@@ -356,6 +357,10 @@ public class QueryUnit implements EventHandler<TaskEvent> {
 	public void setShuffleFileOutputs(List<ShuffleFileOutput> partitions) {
 	  this.shuffleFileOutputs = Collections.unmodifiableList(partitions);
 	}
+
+  public void setAsideFileOutputs(List<ShuffleFileOutput> partitions) {
+    this.asideFileOutputs = Collections.unmodifiableList(partitions);
+  }
 	
 	public TableStats getStats() {
 	  return this.stats;

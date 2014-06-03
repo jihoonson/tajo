@@ -284,6 +284,9 @@ public class QueryUnitAttempt implements EventHandler<TaskAttemptEvent> {
         partitions.add(entry);
       }
     }
+    if (report.getAsideFileOutputsCount() > 0) {
+      this.getQueryUnit().setAsideFileOutputs(report.getAsideFileOutputsList());
+    }
     this.getQueryUnit().setIntermediateData(partitions);
 
     if (report.hasInputStats()) {

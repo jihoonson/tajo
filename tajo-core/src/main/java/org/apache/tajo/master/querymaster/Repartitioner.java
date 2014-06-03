@@ -290,6 +290,7 @@ public class Repartitioner {
           requests = mergeShuffleRequest(execBlock.getId(), partitionId, HASH_SHUFFLE,
               grouppedPartitions.get(execBlock.getId().toString()));
       } else {
+        // TODO: why return?
         return;
       }
       fetches.put(execBlock.getId().toString(), Lists.newArrayList(requests));

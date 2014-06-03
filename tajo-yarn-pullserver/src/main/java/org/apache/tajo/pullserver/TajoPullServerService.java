@@ -423,6 +423,7 @@ public class TajoPullServerService extends AbstractService {
 
         // if a subquery requires a hash shuffle
       } else if (shuffleType.equals("h")) {
+        // TODO: paths for aside files
         for (String ta : taskIds) {
           Path path = localFS.makeQualified(
               lDirAlloc.getLocalPathToRead(queryBaseDir + "/" + sid + "/" +

@@ -35,6 +35,8 @@ import java.io.RandomAccessFile;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.channels.FileChannel;
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.jboss.netty.channel.Channels.pipeline;
 
@@ -126,9 +128,12 @@ public class Fetcher {
     LOG.info("Fetch: " + uri);
     request.setHeader(HttpHeaders.Names.CONNECTION, HttpHeaders.Values.CLOSE);
     request.setHeader(HttpHeaders.Names.ACCEPT_ENCODING, HttpHeaders.Values.GZIP);
+    // TODO: add rid list to header(content?)
+    List<Integer> rids = new ArrayList<Integer>();
+
+    request.setHeader("Rid-List", rids);
 
 
-    // Send the HTTP request.
     ChannelFuture channelFuture = channel.write(request);
 
     // Wait for the server to close the connection.
