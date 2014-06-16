@@ -92,4 +92,7 @@ public interface LogicalPlanVisitor<CONTEXT, RESULT> {
 
   RESULT visitAlterTable(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, LogicalPlanTree planTree,
                          AlterTableNode node, Stack<LogicalNode> stack) throws PlanningException;
+
+  RESULT visitTruncateTable(CONTEXT context, LogicalPlan plan, LogicalPlan.QueryBlock block, LogicalPlanTree planTree,
+                            TruncateTableNode node, Stack<LogicalNode> stack) throws PlanningException;
 }

@@ -40,10 +40,7 @@ import org.apache.tajo.conf.TajoConf;
 import org.apache.tajo.engine.json.CoreGsonHelper;
 import org.apache.tajo.engine.planner.LogicalPlanTree;
 import org.apache.tajo.engine.planner.PlannerUtil;
-import org.apache.tajo.engine.planner.logical.LogicalNode;
-import org.apache.tajo.engine.planner.logical.NodeType;
-import org.apache.tajo.engine.planner.logical.ScanNode;
-import org.apache.tajo.engine.planner.logical.SortNode;
+import org.apache.tajo.engine.planner.logical.*;
 import org.apache.tajo.engine.planner.physical.PhysicalExec;
 import org.apache.tajo.engine.query.QueryContext;
 import org.apache.tajo.engine.query.QueryUnitRequest;
@@ -154,9 +151,19 @@ public class Task {
     plan = CoreGsonHelper.fromJson(request.getSerializedPlan(), LogicalPlanTree.class);
     root = CoreGsonHelper.fromJson(request.getSerializedRoot(), LogicalNode.class);
     LogicalNode [] scanNode = PlannerUtil.findAllNodes(plan, root, NodeType.SCAN);
-    for (LogicalNode node : scanNode) {
-      ScanNode scan = (ScanNode)node;
-      descs.put(scan.getCanonicalName(), scan.getTableDesc());
+    if (scanNode != null) {
+      for (LogicalNode node : scanNode) {
+        ScanNode scan = (ScanNode) node;
+        descs.put(scan.getCanonicalName(), scan.getTableDesc());
+      }
+    }
+
+    LogicalNode [] partitionScanNode = PlannerUtil.findAllNodes(plan, root, NodeType.PARTITIONS_SCAN);
+    if (partitionScanNode != null) {
+      for (LogicalNode node : partitionScanNode) {
+        PartitionedTableScanNode scan = (PartitionedTableScanNode) node;
+        descs.put(scan.getCanonicalName(), scan.getTableDesc());
+      }
     }
 
     interQuery = request.getProto().getInterQuery();
@@ -377,17 +384,15 @@ public class Task {
         context.setProgress(FETCHER_PROGRESS);
       }
 
-      if (context.getFragmentSize() > 0) {
-        this.executor = taskRunnerContext.getTQueryEngine().
-            createPlan(context, plan, root);
-        this.executor.init();
+      this.executor = taskRunnerContext.getTQueryEngine().
+          createPlan(context, plan, root);
+      this.executor.init();
 
-        while(!killed && executor.next() != null) {
-        }
-        this.executor.close();
-        reloadInputStats();
-        this.executor = null;
+      while(!killed && executor.next() != null) {
       }
+      this.executor.close();
+      reloadInputStats();
+      this.executor = null;
     } catch (Exception e) {
       error = e ;
       LOG.error(e.getMessage(), e);

@@ -18,6 +18,7 @@
 
 package org.apache.tajo.engine.planner;
 
+import org.apache.tajo.engine.planner.LogicalPlan.QueryBlock;
 import org.apache.tajo.engine.planner.logical.*;
 
 import java.util.Stack;
@@ -124,6 +125,9 @@ public class BasicLogicalPlanVisitor<CONTEXT, RESULT> implements LogicalPlanVisi
         break;
       case ALTER_TABLE:
         current = visitAlterTable(context, plan, block, planTree, (AlterTableNode) node, stack);
+        break;
+      case TRUNCATE_TABLE:
+        current = visitTruncateTable(context, plan, block, planTree, (TruncateTableNode) node, stack);
         break;
       default:
         throw new PlanningException("Unknown logical node type: " + node.getType());
@@ -334,4 +338,10 @@ public class BasicLogicalPlanVisitor<CONTEXT, RESULT> implements LogicalPlanVisi
                                 AlterTableNode node, Stack<LogicalNode> stack) {
         return null;
     }
+
+  @Override
+  public RESULT visitTruncateTable(CONTEXT context, LogicalPlan plan, QueryBlock block, LogicalPlanTree planTree,
+                                   TruncateTableNode node, Stack<LogicalNode> stack) throws PlanningException {
+    return null;
+  }
 }

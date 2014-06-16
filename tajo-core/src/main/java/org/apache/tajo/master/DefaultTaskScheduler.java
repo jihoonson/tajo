@@ -191,7 +191,6 @@ public class DefaultTaskScheduler extends AbstractTaskScheduler {
           scheduledObjectNum++;
           if (castEvent.hasRightFragments()) {
             task.addFragments(castEvent.getRightFragments());
-            //scheduledObjectNum += castEvent.getRightFragments().size();
           }
           subQuery.getEventHandler().handle(new TaskEvent(task.getId(), TaskEventType.T_SCHEDULE));
         } else {
@@ -823,7 +822,7 @@ public class DefaultTaskScheduler extends AbstractTaskScheduler {
               host, container.getTaskPort()));
           assignedRequest.add(attemptId);
 
-          scheduledObjectNum -= task.getAllFragments().size();
+          scheduledObjectNum--;
           taskRequest.getCallback().run(taskAssign.getProto());
         } else {
           throw new RuntimeException("Illegal State!!!!!!!!!!!!!!!!!!!!!");
