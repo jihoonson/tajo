@@ -197,6 +197,12 @@ message TableStatsProto {
   repeated ColumnStatsProto colStat = 8;
 }
 
+message BlockStatsProto {
+  required string blockId = 1;
+  required bytes minValue = 2;
+  required bytes maxValue = 3;
+}
+
 message ColumnStatsProto {
   required ColumnProto column = 1;
   optional int64 numDistVal = 2;
