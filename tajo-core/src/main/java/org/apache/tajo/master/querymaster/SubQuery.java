@@ -1043,26 +1043,26 @@ public class SubQuery implements EventHandler<SubQueryEvent> {
         subQuery.completedTaskCount++;
 
         if (taskEvent.getState() == TaskState.SUCCEEDED) {
-//          if (task.isLeafTask()) {
-//            subQuery.succeededObjectCount += task.getTotalFragmentNum();
-//          } else {
-//            subQuery.succeededObjectCount++;
-//          }
-          subQuery.succeededObjectCount++;
+          if (task.isLeafTask()) {
+            subQuery.succeededObjectCount += task.getTotalFragmentNum();
+          } else {
+            subQuery.succeededObjectCount++;
+          }
+//          subQuery.succeededObjectCount++;
         } else if (task.getState() == TaskState.KILLED) {
-//          if (task.isLeafTask()) {
-//            subQuery.killedObjectCount += task.getTotalFragmentNum();
-//          } else {
-//            subQuery.killedObjectCount++;
-//          }
-          subQuery.killedObjectCount++;
+          if (task.isLeafTask()) {
+            subQuery.killedObjectCount += task.getTotalFragmentNum();
+          } else {
+            subQuery.killedObjectCount++;
+          }
+//          subQuery.killedObjectCount++;
         } else if (task.getState() == TaskState.FAILED) {
-//          if (task.isLeafTask()) {
-//            subQuery.failedObjectCount+= task.getTotalFragmentNum();
-//          } else {
-//            subQuery.failedObjectCount++;
-//          }
-          subQuery.failedObjectCount++;
+          if (task.isLeafTask()) {
+            subQuery.failedObjectCount+= task.getTotalFragmentNum();
+          } else {
+            subQuery.failedObjectCount++;
+          }
+//          subQuery.failedObjectCount++;
           // if at least one task is failed, try to kill all tasks.
           subQuery.eventHandler.handle(new SubQueryEvent(subQuery.getId(), SubQueryEventType.SQ_KILL));
         }
