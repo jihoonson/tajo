@@ -36,6 +36,9 @@ public class ExecutionBlock {
   private List<ScanNode> scanlist = new ArrayList<ScanNode>();
   private Enforcer enforcer = new Enforcer();
 
+  // Actual ScanNode's ExecutionBlockId -> Delegated ScanNode's ExecutionBlockId.
+  private Map<ExecutionBlockId, ExecutionBlockId> unionScanMap = new HashMap<ExecutionBlockId, ExecutionBlockId>();
+
   private boolean hasJoinPlan;
   private boolean hasUnionPlan;
 
@@ -81,6 +84,13 @@ public class ExecutionBlock {
     }
   }
 
+  public void addUnionScan(ExecutionBlockId realScanEbId, ExecutionBlockId delegatedScanEbId) {
+    unionScanMap.put(realScanEbId, delegatedScanEbId);
+  }
+
+  public Map<ExecutionBlockId, ExecutionBlockId> getUnionScanMap() {
+    return unionScanMap;
+  }
 
   public LogicalPlanTree getPlan() {
     return plan;

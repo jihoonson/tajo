@@ -28,6 +28,7 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.yarn.event.EventHandler;
 import org.apache.hadoop.yarn.state.*;
+import org.apache.tajo.ExecutionBlockId;
 import org.apache.tajo.QueryIdFactory;
 import org.apache.tajo.QueryUnitAttemptId;
 import org.apache.tajo.QueryUnitId;
@@ -666,6 +667,7 @@ public class QueryUnit implements EventHandler<TaskEvent> {
   }
 
   public static class IntermediateEntry {
+    ExecutionBlockId ebId;
     int taskId;
     int attemptId;
     int partId;
@@ -676,6 +678,14 @@ public class QueryUnit implements EventHandler<TaskEvent> {
       this.attemptId = attemptId;
       this.partId = partId;
       this.host = host;
+    }
+
+    public ExecutionBlockId getEbId() {
+      return ebId;
+    }
+
+    public void setEbId(ExecutionBlockId ebId) {
+      this.ebId = ebId;
     }
 
     public int getTaskId() {
@@ -696,7 +706,7 @@ public class QueryUnit implements EventHandler<TaskEvent> {
 
     @Override
     public int hashCode() {
-      return Objects.hashCode(taskId, partId, attemptId, host);
+      return Objects.hashCode(ebId, taskId, partId, attemptId, host);
     }
   }
 }
