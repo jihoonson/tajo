@@ -199,8 +199,7 @@ message TableStatsProto {
 
 message BlockStatsProto {
   required string blockId = 1;
-  required bytes minValue = 2;
-  required bytes maxValue = 3;
+  repeated ColumnStatsProto colStats = 2;
 }
 
 message ColumnStatsProto {
