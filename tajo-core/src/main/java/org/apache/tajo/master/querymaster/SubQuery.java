@@ -87,6 +87,7 @@ public class SubQuery implements EventHandler<SubQueryEvent> {
   private TableMeta meta;
   private TableStats resultStatistics;
   private TableStats inputStatistics;
+  private TableStats[] blockStatistics;
   private EventHandler<Event> eventHandler;
   private final AbstractStorageManager sm;
   private AbstractTaskScheduler taskScheduler;
@@ -434,6 +435,10 @@ public class SubQuery implements EventHandler<SubQueryEvent> {
     return inputStatistics;
   }
 
+  public TableStats[] getBlockStats() {
+    return blockStatistics;
+  }
+
   public List<String> getDiagnostics() {
     readLock.lock();
     try {
@@ -540,6 +545,18 @@ public class SubQuery implements EventHandler<SubQueryEvent> {
     return new TableStats[]{inputStats, resultStats};
   }
 
+  private TableStats[] retrieveBlockStats() {
+    List<TableStats> inputStatsList = Lists.newArrayList();
+    for (QueryUnit unit : getQueryUnits()) {
+      if (unit.getLastAttempt().getInputStats() != null) {
+        inputStatsList.add(unit.getLastAttempt().getInputStats());
+      } else {
+        throw new RuntimeException("Input stat is null");
+      }
+    }
+    return inputStatsList.toArray(new TableStats[inputStatsList.size()]);
+  }
+
   private void stopScheduler() {
     // If there are launched TaskRunners, send the 'shouldDie' message to all r
     // via received task requests.
@@ -584,6 +601,7 @@ public class SubQuery implements EventHandler<SubQueryEvent> {
     meta = CatalogUtil.newTableMeta(storeType, new KeyValueSet());
     inputStatistics = statsArray[0];
     resultStatistics = statsArray[1];
+    blockStatistics = retrieveBlockStats();
   }
 
   @Override

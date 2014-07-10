@@ -73,6 +73,9 @@ public abstract class FileScanner implements Scanner {
         tableStats.addColumnStat(columnStats);
       }
     }
+
+    tableStats.setBlockId(fragment.getTableName() + "_" + fragment.getStartKey() + "_"
+        + fragment.getEndKey());
   }
 
   @Override

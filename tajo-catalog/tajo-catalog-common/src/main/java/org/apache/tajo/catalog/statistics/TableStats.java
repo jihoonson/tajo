@@ -45,6 +45,7 @@ public class TableStats implements ProtoObject<TableStatsProto>, Cloneable, Gson
   @Expose private Long avgRows = null; // optional
   @Expose private Long readBytes = null; //optional
   @Expose private List<ColumnStats> columnStatses = null; // repeated
+  @Expose private String blockId = null; // optional
 
   public TableStats() {
     reset();
@@ -58,6 +59,7 @@ public class TableStats implements ProtoObject<TableStatsProto>, Cloneable, Gson
     avgRows = 0l;
     readBytes = 0l;
     columnStatses = TUtil.newList();
+    blockId = null;
   }
 
   public TableStats(CatalogProtos.TableStatsProto proto) {
@@ -91,6 +93,10 @@ public class TableStats implements ProtoObject<TableStatsProto>, Cloneable, Gson
         continue;
       }
       columnStatses.add(new ColumnStats(colProto));
+    }
+
+    if (proto.hasBlockId()) {
+      this.blockId = blockId;
     }
   }
 
@@ -154,6 +160,14 @@ public class TableStats implements ProtoObject<TableStatsProto>, Cloneable, Gson
     this.columnStatses.add(columnStats);
   }
 
+  public String getBlockId() {
+    return this.blockId;
+  }
+
+  public void setBlockId(String blockId) {
+    this.blockId = blockId;
+  }
+
   public boolean equals(Object obj) {
     if (obj instanceof TableStats) {
       TableStats other = (TableStats) obj;
@@ -165,6 +179,7 @@ public class TableStats implements ProtoObject<TableStatsProto>, Cloneable, Gson
       eq = eq && TUtil.checkEquals(this.avgRows, other.avgRows);
       eq = eq && TUtil.checkEquals(this.readBytes, other.readBytes);
       eq = eq && TUtil.checkEquals(this.columnStatses, other.columnStatses);
+      eq = eq && TUtil.checkEquals(this.blockId, other.blockId);
       return eq;
     } else {
       return false;
@@ -173,7 +188,7 @@ public class TableStats implements ProtoObject<TableStatsProto>, Cloneable, Gson
 
   public int hashCode() {
     return Objects.hashCode(numRows, numBytes,
-        numBlocks, numShuffleOutputs, columnStatses);
+        numBlocks, numShuffleOutputs, columnStatses, blockId);
   }
 
   public Object clone() throws CloneNotSupportedException {
@@ -187,6 +202,7 @@ public class TableStats implements ProtoObject<TableStatsProto>, Cloneable, Gson
     stat.readBytes = readBytes != null ? readBytes : null;
 
     stat.columnStatses = new ArrayList<ColumnStats>(this.columnStatses);
+    stat.blockId = this.blockId == null? null : new String(this.blockId);
 
     return stat;
   }
@@ -214,6 +230,7 @@ public class TableStats implements ProtoObject<TableStatsProto>, Cloneable, Gson
     if (stat.readBytes != null) {
       readBytes += stat.readBytes;
     }
+    this.blockId = null;
   }
 
   public void setValues(TableStats stat) {
@@ -227,6 +244,7 @@ public class TableStats implements ProtoObject<TableStatsProto>, Cloneable, Gson
     numShuffleOutputs = stat.numShuffleOutputs != null ? stat.numShuffleOutputs : 0;
     avgRows = stat.avgRows != null ? stat.avgRows : 0;
     readBytes = stat.readBytes != null ? stat.readBytes : 0;
+    blockId = stat.blockId != null ? stat.blockId : null;
   }
 
   public String toString() {
@@ -266,6 +284,9 @@ public class TableStats implements ProtoObject<TableStatsProto>, Cloneable, Gson
       for (ColumnStats colStat : columnStatses) {
         builder.addColStat(colStat.getProto());
       }
+    }
+    if (this.blockId != null) {
+      builder.setBlockId(this.blockId);
     }
     return builder.build();
   }

@@ -197,6 +197,7 @@ message TableStatsProto {
   optional int64 avgRows = 6;
   optional int64 readBytes = 7;
   repeated ColumnStatsProto colStat = 8;
+  optional string blockId = 9;
 }
 
 message ColumnStatsProto {
