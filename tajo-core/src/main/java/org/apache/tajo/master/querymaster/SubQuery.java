@@ -87,7 +87,7 @@ public class SubQuery implements EventHandler<SubQueryEvent> {
   private TableMeta meta;
   private TableStats resultStatistics;
   private TableStats inputStatistics;
-  private TableStats[] blockStatistics;
+  private TableStats[] resultBlockStatistics;
   private EventHandler<Event> eventHandler;
   private final AbstractStorageManager sm;
   private AbstractTaskScheduler taskScheduler;
@@ -369,6 +369,10 @@ public class SubQuery implements EventHandler<SubQueryEvent> {
   public void complete() {
     cleanup();
     finalizeStats();
+    if (block.hasJoin()) {
+      // merge and sort the primary key of joined tuple
+
+    }
     setFinishTime();
     eventHandler.handle(new SubQueryCompletedEvent(getId(), SubQueryState.SUCCEEDED));
   }
@@ -435,8 +439,8 @@ public class SubQuery implements EventHandler<SubQueryEvent> {
     return inputStatistics;
   }
 
-  public TableStats[] getBlockStats() {
-    return blockStatistics;
+  public TableStats[] getResultBlockStats() {
+    return resultBlockStatistics;
   }
 
   public List<String> getDiagnostics() {
@@ -601,7 +605,7 @@ public class SubQuery implements EventHandler<SubQueryEvent> {
     meta = CatalogUtil.newTableMeta(storeType, new KeyValueSet());
     inputStatistics = statsArray[0];
     resultStatistics = statsArray[1];
-    blockStatistics = retrieveBlockStats();
+    resultBlockStatistics = retrieveBlockStats();
   }
 
   @Override

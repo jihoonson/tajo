@@ -341,6 +341,9 @@ public class TajoConf extends Configuration {
     //OPTIMIZER
     OPTIMIZER_JOIN_ENABLE("tajo.optimizer.join.enable", true),
 
+    // FOR LATE SHUFFLE
+    PRIMARY_KEY_INDEX("tajo.primary.key.index", ""),
+
     // DEBUG OPTION
     TAJO_DEBUG("tajo.debug", false),
 
