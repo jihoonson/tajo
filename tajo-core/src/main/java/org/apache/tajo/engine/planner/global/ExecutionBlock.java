@@ -15,6 +15,7 @@
 package org.apache.tajo.engine.planner.global;
 
 import org.apache.tajo.ExecutionBlockId;
+import org.apache.tajo.catalog.statistics.Histogram;
 import org.apache.tajo.engine.planner.enforce.Enforcer;
 import org.apache.tajo.engine.planner.logical.*;
 
@@ -41,6 +42,7 @@ public class ExecutionBlock {
   private boolean hasUnionPlan;
 
   private Set<String> broadcasted = new HashSet<String>();
+
 
   public ExecutionBlock(ExecutionBlockId executionBlockId) {
     this.executionBlockId = executionBlockId;
