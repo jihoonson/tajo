@@ -27,13 +27,15 @@ import org.apache.tajo.common.ProtoObject;
 import org.apache.tajo.datum.Datum;
 import org.apache.tajo.json.GsonObject;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.Comparator;
+import java.util.SortedSet;
+import java.util.TreeSet;
 
 public class Histogram implements ProtoObject<HistogramProto>, Cloneable, GsonObject {
   private final HistogramProto.Builder builder = HistogramProto.newBuilder();
   @Expose private Column column = null;
-  @Expose private List<HistogramEntry> entries = new ArrayList<HistogramEntry>();
+  @Expose private SortedSet<HistogramEntry> entries =
+      new TreeSet<HistogramEntry>(new HistogramEntryComparator());
 
   public Histogram() {
 
@@ -54,28 +56,20 @@ public class Histogram implements ProtoObject<HistogramProto>, Cloneable, GsonOb
     return column;
   }
 
-  public List<HistogramEntry> getEntries() {
+  public SortedSet<HistogramEntry> getEntries() {
     return entries;
-  }
-
-  public HistogramEntry getEntry(int i) {
-    return entries.get(i);
   }
 
   public void setColumn(Column column) {
     this.column = column;
   }
 
-  public void updateEntryCount(int i, int count) {
-    entries.get(i).setCount(count);
-  }
-
   public void addEntry(HistogramEntry entry) {
     this.entries.add(entry);
   }
 
-  public void addEntry(Datum start, Datum end) {
-    this.entries.add(new HistogramEntry(start, end));
+  public void addEntry(Datum start, Datum end, long count) {
+    this.entries.add(new HistogramEntry(start, end, count));
   }
 
   @Override
@@ -107,9 +101,18 @@ public class Histogram implements ProtoObject<HistogramProto>, Cloneable, GsonOb
     return clone;
   }
 
+  public static class HistogramEntryComparator implements Comparator<HistogramEntry> {
+
+    @Override
+    public int compare(HistogramEntry entry, HistogramEntry entry2) {
+      // assume that ranges are not overlapped
+      return entry.start.compareTo(entry2.start);
+    }
+  }
+
   public static class HistogramEntry implements ProtoObject<HistogramEntryProto>, Cloneable, GsonObject {
     private final HistogramEntryProto.Builder builder = HistogramEntryProto.newBuilder();
-    @Expose private Integer count;
+    @Expose private Long count;
     @Expose private Datum start;
     @Expose private Datum end;
 
@@ -122,13 +125,19 @@ public class Histogram implements ProtoObject<HistogramProto>, Cloneable, GsonOb
       this.end = end;
     }
 
+    public HistogramEntry(Datum start, Datum end, long count) {
+      this.start = start;
+      this.end = end;
+      this.count = count;
+    }
+
     public HistogramEntry(HistogramEntryProto proto) {
       this.count = proto.getCount();
       this.start = CatalogGsonHelper.fromJson(proto.getStartValInJson(), Datum.class);
       this.end = CatalogGsonHelper.fromJson(proto.getEndValInJson(), Datum.class);
     }
 
-    public void setCount(int count) {
+    public void setCount(long count) {
       this.count = count;
     }
 
@@ -136,7 +145,7 @@ public class Histogram implements ProtoObject<HistogramProto>, Cloneable, GsonOb
       this.count++;
     }
 
-    public int getCount() {
+    public long getCount() {
       return count;
     }
 

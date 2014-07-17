@@ -305,7 +305,7 @@ message AlterColumnProto {
 message HistogramEntryProto {
   required string startValInJson = 1;
   required string endValInJson = 2;
-  required int32 count = 3;
+  required int64 count = 3;
 }
 
 message HistogramProto {

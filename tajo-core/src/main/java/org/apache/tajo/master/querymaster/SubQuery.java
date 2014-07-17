@@ -35,12 +35,11 @@ import org.apache.hadoop.yarn.util.Records;
 import org.apache.tajo.ExecutionBlockId;
 import org.apache.tajo.QueryIdFactory;
 import org.apache.tajo.QueryUnitId;
-import org.apache.tajo.catalog.CatalogUtil;
-import org.apache.tajo.catalog.Schema;
-import org.apache.tajo.catalog.TableDesc;
-import org.apache.tajo.catalog.TableMeta;
+import org.apache.tajo.catalog.*;
 import org.apache.tajo.catalog.proto.CatalogProtos;
 import org.apache.tajo.catalog.statistics.ColumnStats;
+import org.apache.tajo.catalog.statistics.Histogram;
+import org.apache.tajo.catalog.statistics.Histogram.HistogramEntry;
 import org.apache.tajo.catalog.statistics.StatisticsUtil;
 import org.apache.tajo.catalog.statistics.TableStats;
 import org.apache.tajo.conf.TajoConf;
@@ -384,10 +383,18 @@ public class SubQuery implements EventHandler<SubQueryEvent> {
     for (String pkey : pkeys) {
       pkeySet.add(pkey);
     }
+    Map<Column, Histogram> histogramMap = new HashMap<Column, Histogram>();
     for (TableStats eachBlockStat : resultBlockStatistics) {
       for (ColumnStats eachColStat : eachBlockStat.getColumnStats()) {
         if (pkeySet.contains(eachColStat.getColumn().getSimpleName())) {
-          // TODO
+          Histogram histogram;
+          if (histogramMap.containsKey(eachColStat.getColumn())) {
+            histogram = histogramMap.get(eachColStat.getColumn());
+          } else {
+            histogram = new Histogram(eachColStat.getColumn());
+          }
+          histogram.addEntry(new HistogramEntry(eachColStat.getMinValue(), eachColStat.getMaxValue(),
+              eachColStat.getNumDistValues()));
         }
       }
     }
