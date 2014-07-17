@@ -301,3 +301,14 @@ message AlterColumnProto {
   required string oldColumnName = 1;
   required string newColumnName = 2;
 }
+
+message HistogramEntryProto {
+  required string startValInJson = 1;
+  required string endValInJson = 2;
+  required int32 count = 3;
+}
+
+message HistogramProto {
+  required ColumnProto column = 1;
+  repeated HistogramEntryProto entries = 2;
+}

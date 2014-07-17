@@ -70,6 +70,7 @@ import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import static org.apache.tajo.conf.TajoConf.ConfVars;
+import static org.apache.tajo.conf.TajoConf.getConfVars;
 import static org.apache.tajo.ipc.TajoWorkerProtocol.ShuffleType;
 
 
@@ -371,10 +372,25 @@ public class SubQuery implements EventHandler<SubQueryEvent> {
     finalizeStats();
     if (block.hasJoin()) {
       // merge and sort the primary key of joined tuple
-
+      mergeAndSortPKeyValues();
     }
     setFinishTime();
     eventHandler.handle(new SubQueryCompletedEvent(getId(), SubQueryState.SUCCEEDED));
+  }
+
+  private void mergeAndSortPKeyValues() {
+    String[] pkeys = context.getConf().getVar(ConfVars.PRIMARY_KEYS).split(",");
+    HashSet<String> pkeySet = new HashSet<String>();
+    for (String pkey : pkeys) {
+      pkeySet.add(pkey);
+    }
+    for (TableStats eachBlockStat : resultBlockStatistics) {
+      for (ColumnStats eachColStat : eachBlockStat.getColumnStats()) {
+        if (pkeySet.contains(eachColStat.getColumn().getSimpleName())) {
+          // TODO
+        }
+      }
+    }
   }
 
   /**

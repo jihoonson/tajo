@@ -342,7 +342,7 @@ public class TajoConf extends Configuration {
     OPTIMIZER_JOIN_ENABLE("tajo.optimizer.join.enable", true),
 
     // FOR LATE SHUFFLE
-    PRIMARY_KEY_INDEX("tajo.primary.key.index", ""),
+    PRIMARY_KEYS("tajo.primary.keys", "l_orderkey,l_linenumber"),
 
     // DEBUG OPTION
     TAJO_DEBUG("tajo.debug", false),
