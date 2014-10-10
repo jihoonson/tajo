@@ -75,7 +75,7 @@ public class LogicalOptimizer {
     rulesAfterToJoinOpt.addRewriteRule(new ProjectionPushDownRule());
     rulesAfterToJoinOpt.addRewriteRule(new PartitionedTableRewriter(systemConf));
     if (index_enabled) {
-      rulesAfterToJoinOpt.addRewriteRule(new AccessPathRewriter());
+      rulesAfterToJoinOpt.addRewriteRule(new AccessPathRewriter(systemConf));
     }
 
     // Currently, it is only used for some test cases to inject exception manually.

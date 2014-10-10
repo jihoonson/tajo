@@ -913,7 +913,7 @@ public class FilterPushDownRule extends BasicLogicalPlanVisitor<FilterPushDownCo
 
           if (catalog.existIndexByColumn(databaseName, tableName, column.getSimpleName())) {
             IndexDesc indexDesc = catalog.getIndexByColumn(databaseName, tableName, column.getSimpleName());
-            block.addAccessPath(scanNode, new IndexScanInfo(indexDesc, new Datum[]{datum}));
+            block.addAccessPath(scanNode, new IndexScanInfo(table.getStats(), indexDesc, new Datum[]{datum}));
           }
         }
       }

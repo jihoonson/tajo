@@ -292,6 +292,7 @@ public class TajoConf extends Configuration {
 
     // Index configuration
     INDEX_ENABLED("tajo.query.index.enabled", true),
+    INDEX_SELECTIVITY_THRESHOLD("tajo.query.index.selectivity.threshold", 0.05f),
 
     /////////////////////////////////////////////////////////////////////////////////
     // User Session Configuration

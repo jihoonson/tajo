@@ -18,6 +18,8 @@
 
 package org.apache.tajo.engine.planner;
 
+import org.apache.tajo.catalog.statistics.TableStats;
+
 public abstract class AccessPathInfo {
   public enum ScanTypeControl {
     INDEX_SCAN,
@@ -25,12 +27,26 @@ public abstract class AccessPathInfo {
   }
 
   private ScanTypeControl scanType;
+  private TableStats tableStats;
 
-  public AccessPathInfo(ScanTypeControl scanType) {
+  public AccessPathInfo(ScanTypeControl scanType, TableStats tableStats) {
     this.scanType = scanType;
+    this.tableStats = tableStats;
   }
 
   public ScanTypeControl getScanType() {
     return scanType;
+  }
+
+  public TableStats getTableStats() {
+    return tableStats;
+  }
+
+  public void setTableStats(TableStats tableStats) {
+    this.tableStats = tableStats;
+  }
+
+  public boolean hasTableStats() {
+    return this.tableStats != null;
   }
 }

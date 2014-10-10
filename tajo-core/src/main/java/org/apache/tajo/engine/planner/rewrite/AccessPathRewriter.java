@@ -24,6 +24,9 @@ import org.apache.tajo.catalog.Column;
 import org.apache.tajo.catalog.IndexDesc;
 import org.apache.tajo.catalog.Schema;
 import org.apache.tajo.catalog.SortSpec;
+import org.apache.tajo.catalog.statistics.ColumnStats;
+import org.apache.tajo.catalog.statistics.TableStats;
+import org.apache.tajo.conf.TajoConf;
 import org.apache.tajo.engine.planner.*;
 import org.apache.tajo.engine.planner.AccessPathInfo.ScanTypeControl;
 import org.apache.tajo.engine.planner.logical.IndexScanNode;
@@ -32,7 +35,6 @@ import org.apache.tajo.engine.planner.logical.RelationNode;
 import org.apache.tajo.engine.planner.logical.ScanNode;
 
 import java.util.List;
-import java.util.Map.Entry;
 import java.util.Stack;
 
 public class AccessPathRewriter implements RewriteRule {
@@ -40,6 +42,11 @@ public class AccessPathRewriter implements RewriteRule {
 
   private static final String NAME = "Access Path Rewriter";
   private final Rewriter rewriter = new Rewriter();
+  private final float selectivityThreshold;
+
+  public AccessPathRewriter(TajoConf conf) {
+    this.selectivityThreshold = conf.getFloatVar(conf, TajoConf.ConfVars.INDEX_SELECTIVITY_THRESHOLD);
+  }
 
   @Override
   public String getName() {
@@ -64,6 +71,19 @@ public class AccessPathRewriter implements RewriteRule {
     return false;
   }
 
+  private double estimateSelectivity(IndexDesc indexDesc, TableStats tableStats) {
+    // assume that the key column has a uniform distribution
+    for (ColumnStats columnStats : tableStats.getColumnStats()) {
+      if (indexDesc.getColumn().equals(columnStats.getColumn())) {
+        long distValNum = columnStats.getNumDistValues();
+        long totalRows = tableStats.getNumRows();
+        long rowNumPerVal = totalRows / distValNum;
+        return 1.d - (double)rowNumPerVal / (double)totalRows;
+      }
+    }
+    return -1.d;
+  }
+
   @Override
   public LogicalPlan rewrite(LogicalPlan plan) throws PlanningException {
     LogicalPlan.QueryBlock rootBlock = plan.getRootBlock();
@@ -77,24 +97,42 @@ public class AccessPathRewriter implements RewriteRule {
     public Object visitScan(Object object, LogicalPlan plan, LogicalPlan.QueryBlock block, ScanNode scanNode,
                             Stack<LogicalNode> stack) throws PlanningException {
       List<AccessPathInfo> accessPaths = block.getAccessInfos(scanNode);
+      AccessPathInfo optimalPath = null;
+      // initialize
+      for (AccessPathInfo accessPath : accessPaths) {
+        if (accessPath.getScanType() == ScanTypeControl.SEQ_SCAN) {
+          optimalPath = accessPath;
+        }
+      }
       // find the optimal path
-      IndexScanInfo optimalPath = null;
       for (AccessPathInfo accessPath : accessPaths) {
         if (accessPath.getScanType() == ScanTypeControl.INDEX_SCAN) {
           // estimation selectivity and choose the better path
-          optimalPath = (IndexScanInfo) accessPath;
+          IndexScanInfo indexScanInfo = (IndexScanInfo) accessPath;
+          if (indexScanInfo.hasTableStats()) {
+            // TODO: improve the selectivity estimation
+            // estimate the selectivity
+            double estimateSelectivity = estimateSelectivity(indexScanInfo.getIndexDesc(),
+                indexScanInfo.getTableStats());
+            LOG.info("Estimated selectivity: " + estimateSelectivity);
+            if (estimateSelectivity > selectivityThreshold) {
+              // if the estimated selectivity is greater than threshold, use the index scan
+              optimalPath = accessPath;
+            }
+          }
         }
       }
 
-      if (optimalPath != null) {
-        plan.addHistory("AccessPathRewriter chooses " + optimalPath.getIndexDesc().getName() + " for "
+      if (optimalPath != null && optimalPath.getScanType() == ScanTypeControl.INDEX_SCAN) {
+        IndexScanInfo indexScanInfo = (IndexScanInfo) optimalPath;
+        plan.addHistory("AccessPathRewriter chooses " + indexScanInfo.getIndexDesc().getName() + " for "
             + scanNode.getTableName() + " scan");
-        IndexDesc indexDesc = optimalPath.getIndexDesc();
+        IndexDesc indexDesc = indexScanInfo.getIndexDesc();
         Schema indexKeySchema = new Schema(new Column[]{indexDesc.getColumn()});
         SortSpec[] sortSpecs = new SortSpec[1];
         sortSpecs[0] = new SortSpec(indexDesc.getColumn(), indexDesc.isAscending(), false);
         IndexScanNode indexScanNode = new IndexScanNode(plan.newPID(), scanNode, indexKeySchema,
-            optimalPath.getValues(), sortSpecs, indexDesc.getIndexPath());
+            indexScanInfo.getValues(), sortSpecs, indexDesc.getIndexPath());
         if (stack.empty() || block.getRoot().equals(scanNode)) {
           block.setRoot(indexScanNode);
         } else {

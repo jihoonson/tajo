@@ -19,16 +19,17 @@
 package org.apache.tajo.engine.planner;
 
 import org.apache.tajo.catalog.TableDesc;
+import org.apache.tajo.catalog.statistics.TableStats;
 
 public class SeqScanInfo extends AccessPathInfo {
   private TableDesc tableDesc;
 
-  public SeqScanInfo() {
-    super(ScanTypeControl.SEQ_SCAN);
+  public SeqScanInfo(TableStats tableStats) {
+    super(ScanTypeControl.SEQ_SCAN, tableStats);
   }
 
   public SeqScanInfo(TableDesc tableDesc) {
-    this();
+    this(tableDesc.getStats());
     this.setTableDesc(tableDesc);
   }
 

@@ -19,18 +19,19 @@
 package org.apache.tajo.engine.planner;
 
 import org.apache.tajo.catalog.IndexDesc;
+import org.apache.tajo.catalog.statistics.TableStats;
 import org.apache.tajo.datum.Datum;
 
 public class IndexScanInfo extends AccessPathInfo {
   private IndexDesc indexDesc;
   private Datum[] values;
 
-  public IndexScanInfo() {
-    super(ScanTypeControl.INDEX_SCAN);
+  public IndexScanInfo(TableStats tableStats) {
+    super(ScanTypeControl.INDEX_SCAN, tableStats);
   }
 
-  public IndexScanInfo(IndexDesc indexDesc, Datum[] values) {
-    this();
+  public IndexScanInfo(TableStats tableStats, IndexDesc indexDesc, Datum[] values) {
+    this(tableStats);
     this.setIndexDesc(indexDesc);
     this.values = values;
   }
