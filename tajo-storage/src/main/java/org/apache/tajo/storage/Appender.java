@@ -18,6 +18,7 @@
 
 package org.apache.tajo.storage;
 
+import org.apache.tajo.catalog.Column;
 import org.apache.tajo.catalog.statistics.TableStats;
 
 import java.io.Closeable;
@@ -36,6 +37,8 @@ public interface Appender extends Closeable {
   void close() throws IOException;
 
   void enableStats();
+
+  void enableColumnStat(Column column);
   
   TableStats getStats();
 }

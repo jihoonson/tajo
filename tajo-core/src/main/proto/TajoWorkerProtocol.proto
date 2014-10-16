@@ -237,6 +237,7 @@ message EnforceProperty {
     BROADCAST = 5;
     COLUMN_PARTITION = 6;
     DISTINCT_GROUP_BY = 7;
+    COLUMN_STAT = 8;
   }
 
   // Identifies which field is filled in.
@@ -251,6 +252,12 @@ message EnforceProperty {
   optional BroadcastEnforce broadcast = 7;
   optional ColumnPartitionEnforcer columnPartition = 8;
   optional DistinctGroupbyEnforcer distinct = 9;
+  optional ColumnStatEnforcer columnStat = 10;
+}
+
+message ColumnStatEnforcer {
+  required ColumnProto column = 1;
+  optional bool collect = 2 [default = true];
 }
 
 message SortedInputEnforce {

@@ -20,10 +20,13 @@ package org.apache.tajo.storage;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
+import org.apache.tajo.catalog.Column;
 import org.apache.tajo.catalog.Schema;
 import org.apache.tajo.catalog.TableMeta;
+import org.apache.tajo.util.TUtil;
 
 import java.io.IOException;
+import java.util.Set;
 
 public abstract class FileAppender implements Appender {
   protected boolean inited = false;
@@ -34,6 +37,7 @@ public abstract class FileAppender implements Appender {
   protected final Path path;
 
   protected boolean enabledStats;
+  protected Set<Column> statEnabledColumns = TUtil.newHashSet();
   
   public FileAppender(Configuration conf, Schema schema, TableMeta meta, Path path) {
     this.conf = conf;
@@ -55,6 +59,10 @@ public abstract class FileAppender implements Appender {
     }
 
     this.enabledStats = true;
+  }
+
+  public void enableColumnStat(Column column) {
+    statEnabledColumns.add(column);
   }
 
   public long getEstimatedOutputSize() throws IOException {

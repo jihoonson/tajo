@@ -20,6 +20,7 @@ package org.apache.tajo.engine.planner.enforce;
 
 
 import org.apache.tajo.annotation.Nullable;
+import org.apache.tajo.catalog.Column;
 import org.apache.tajo.catalog.SortSpec;
 import org.apache.tajo.catalog.proto.CatalogProtos;
 import org.apache.tajo.common.ProtoObject;
@@ -211,6 +212,25 @@ public class Enforcer implements ProtoObject<EnforcerProto> {
     TUtil.putToNestedList(properties, builder.getType(), builder.build());
   }
 
+  public void enableColumnStat(Column column) {
+    EnforceProperty.Builder builder = newProperty();
+    ColumnStatEnforcer.Builder enforcer = ColumnStatEnforcer.newBuilder();
+    enforcer.setColumn(column.getProto());
+    builder.setType(EnforceType.COLUMN_STAT);
+    builder.setColumnStat(enforcer);
+    TUtil.putToNestedList(properties, builder.getType(), builder.build());
+  }
+
+  public void disableColumnStat(Column column) {
+    EnforceProperty.Builder builder = newProperty();
+    ColumnStatEnforcer.Builder enforcer = ColumnStatEnforcer.newBuilder();
+    enforcer.setColumn(column.getProto());
+    enforcer.setCollect(false);
+    builder.setType(EnforceType.COLUMN_STAT);
+    builder.setColumnStat(enforcer);
+    TUtil.putToNestedList(properties, builder.getType(), builder.build());
+  }
+
   public Collection<EnforceProperty> getProperties() {
     if (proto != null) {
       return proto.getPropertiesList();
@@ -326,6 +346,13 @@ public class Enforcer implements ProtoObject<EnforcerProto> {
     case SORTED_INPUT:
       SortedInputEnforce sortedInput = property.getSortedInput();
       sb.append("sorted input=" + sortedInput.getTableName());
+      break;
+    case COLUMN_STAT:
+      ColumnStatEnforcer columnStatEnforcer = property.getColumnStat();
+      sb.append("type=ColumnStat");
+      sb.append(columnStatEnforcer.getCollect() ? "enable" : "disable");
+      sb.append("column stat for ").append(columnStatEnforcer.getColumn().getName());
+      break;
     }
 
     return sb.toString();
