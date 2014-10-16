@@ -76,9 +76,12 @@ public class AccessPathRewriter implements RewriteRule {
     for (ColumnStats columnStats : tableStats.getColumnStats()) {
       if (indexDesc.getColumn().equals(columnStats.getColumn())) {
         long distValNum = columnStats.getNumDistValues();
-        long totalRows = tableStats.getNumRows();
-        long rowNumPerVal = totalRows / distValNum;
-        return 1.d - (double)rowNumPerVal / (double)totalRows;
+        if (distValNum > 0) {
+          long totalRows = tableStats.getNumRows();
+          long rowNumPerVal = totalRows / distValNum;
+          return (double)rowNumPerVal / (double)totalRows;
+        }
+        break;
       }
     }
     return -1.d;
