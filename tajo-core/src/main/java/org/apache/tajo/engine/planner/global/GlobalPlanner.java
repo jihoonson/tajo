@@ -163,7 +163,13 @@ public class GlobalPlanner {
 
   private static void enableColumnStatForShuffle(ExecutionBlock block) {
     Enforcer enforcer = block.getEnforcer();
-    for (Column col : block.getPlan().getOutSchema().getColumns()) {
+    Schema outSchema;
+    if (block.getPlan() instanceof InsertNode) {
+      outSchema = ((InsertNode) block.getPlan()).getTargetSchema();
+    } else {
+      outSchema = block.getPlan().getOutSchema();
+    }
+    for (Column col : outSchema.getColumns()) {
       enforcer.enableColumnStat(col);
     }
     LOG.info("Column stats for all columns are enabled for the output of " + block.getId());
@@ -171,7 +177,9 @@ public class GlobalPlanner {
 
   private static void addConnectAndEnableColumnStat(MasterPlan masterPlan, DataChannel channel) {
     masterPlan.addConnect(channel);
-    enableColumnStatForShuffle(masterPlan.getExecBlock(channel.getSrcId()));
+    if (channel.getShuffleType() != NONE_SHUFFLE) {
+      enableColumnStatForShuffle(masterPlan.getExecBlock(channel.getSrcId()));
+    }
   }
 
   private static void setFinalOutputChannel(DataChannel outputChannel, Schema outputSchema) {

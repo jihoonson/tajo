@@ -349,9 +349,9 @@ public class Enforcer implements ProtoObject<EnforcerProto> {
       break;
     case COLUMN_STAT:
       ColumnStatEnforcer columnStatEnforcer = property.getColumnStat();
-      sb.append("type=ColumnStat");
+      sb.append("type=ColumnStat ");
       sb.append(columnStatEnforcer.getCollect() ? "enable" : "disable");
-      sb.append("column stat for ").append(columnStatEnforcer.getColumn().getName());
+      sb.append(" column stat for ").append(columnStatEnforcer.getColumn().getName());
       break;
     }
 
