@@ -23,9 +23,11 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.fs.Path;
 import org.apache.tajo.SessionVars;
 import org.apache.tajo.catalog.CatalogUtil;
+import org.apache.tajo.catalog.Column;
 import org.apache.tajo.catalog.TableMeta;
 import org.apache.tajo.catalog.statistics.StatisticsUtil;
 import org.apache.tajo.catalog.statistics.TableStats;
+import org.apache.tajo.engine.planner.StatContext;
 import org.apache.tajo.engine.planner.logical.InsertNode;
 import org.apache.tajo.engine.planner.logical.PersistentStoreNode;
 import org.apache.tajo.storage.Appender;
@@ -53,9 +55,13 @@ public class StoreTableExec extends UnaryPhysicalExec {
   private int writtenFileNum = 0;               // how many file are written so far?
   private Path lastFileName;                    // latest written file name
 
-  public StoreTableExec(TaskAttemptContext context, PersistentStoreNode plan, PhysicalExec child) throws IOException {
+  private StatContext statContext;
+
+  public StoreTableExec(TaskAttemptContext context, PersistentStoreNode plan, PhysicalExec child,
+                        StatContext statContext) throws IOException {
     super(context, plan.getInSchema(), plan.getOutSchema(), child);
     this.plan = plan;
+    this.statContext = statContext;
   }
 
   public void init() throws IOException {
@@ -96,6 +102,11 @@ public class StoreTableExec extends UnaryPhysicalExec {
     }
 
     appender.enableStats();
+    if (statContext.hasStatEnabledColumns()) {
+      for (Column column : statContext.getStatEnabledColumns()) {
+        appender.enableColumnStat(column);
+      }
+    }
     appender.init();
 
     if (suffixId > 0) {

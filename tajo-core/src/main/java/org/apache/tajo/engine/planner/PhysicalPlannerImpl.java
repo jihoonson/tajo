@@ -763,6 +763,12 @@ public class PhysicalPlannerImpl implements PhysicalPlanner {
    */
   public PhysicalExec createShuffleFileWritePlan(TaskAttemptContext ctx,
                                                  ShuffleFileWriteNode plan, PhysicalExec subOp) throws IOException {
+    Enforcer enforcer = ctx.getEnforcer();
+    List<EnforceProperty> properties = enforcer.getEnforceProperties(EnforceType.COLUMN_STAT);
+    StatContext statContext = new StatContext();
+    if (properties != null && properties.size() > 0) {
+      statContext.setStatEnabledColumns(properties);
+    }
     switch (plan.getShuffleType()) {
     case HASH_SHUFFLE:
     case SCATTERED_HASH_SHUFFLE:
@@ -789,7 +795,7 @@ public class PhysicalPlannerImpl implements PhysicalPlanner {
       if (!ctx.getQueryContext().containsKey(SessionVars.NULL_CHAR)) {
         plan.getOptions().set(StorageConstants.CSVFILE_NULL, TajoConf.ConfVars.$CSVFILE_NULL.defaultVal);
       }
-      return new StoreTableExec(ctx, plan, subOp);
+      return new StoreTableExec(ctx, plan, subOp, statContext);
 
     default:
       throw new IllegalStateException(ctx.getDataChannel().getShuffleType() + " is not supported yet.");
@@ -803,6 +809,12 @@ public class PhysicalPlannerImpl implements PhysicalPlanner {
   public PhysicalExec createStorePlan(TaskAttemptContext ctx,
                                       StoreTableNode plan, PhysicalExec subOp) throws IOException {
 
+    Enforcer enforcer = ctx.getEnforcer();
+    List<EnforceProperty> properties = enforcer.getEnforceProperties(EnforceType.COLUMN_STAT);
+    StatContext statContext = new StatContext();
+    if (properties != null && properties.size() > 0) {
+      statContext.setStatEnabledColumns(properties);
+    }
     if (plan.getPartitionMethod() != null) {
       switch (plan.getPartitionMethod().getPartitionType()) {
       case COLUMN:
@@ -811,7 +823,7 @@ public class PhysicalPlannerImpl implements PhysicalPlanner {
         throw new IllegalStateException(plan.getPartitionMethod().getPartitionType() + " is not supported yet.");
       }
     } else {
-      return new StoreTableExec(ctx, plan, subOp);
+      return new StoreTableExec(ctx, plan, subOp, statContext);
     }
   }
 

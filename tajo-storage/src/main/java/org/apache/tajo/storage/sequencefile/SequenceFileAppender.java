@@ -69,7 +69,7 @@ public class SequenceFileAppender extends FileAppender {
   private SerializerDeserializer serde;
 
   long rowCount;
-  private boolean isShuffle;
+//  private boolean isShuffle;
 
   private Writable EMPTY_KEY;
 
@@ -86,13 +86,13 @@ public class SequenceFileAppender extends FileAppender {
     this.fs = path.getFileSystem(conf);
 
     //determine the intermediate file type
-    String store = conf.get(TajoConf.ConfVars.SHUFFLE_FILE_FORMAT.varname,
-        TajoConf.ConfVars.SHUFFLE_FILE_FORMAT.defaultVal);
-    if (enabledStats && CatalogProtos.StoreType.SEQUENCEFILE == CatalogProtos.StoreType.valueOf(store.toUpperCase())) {
-      isShuffle = true;
-    } else {
-      isShuffle = false;
-    }
+//    String store = conf.get(TajoConf.ConfVars.SHUFFLE_FILE_FORMAT.varname,
+//        TajoConf.ConfVars.SHUFFLE_FILE_FORMAT.defaultVal);
+//    if (enabledStats && CatalogProtos.StoreType.SEQUENCEFILE == CatalogProtos.StoreType.valueOf(store.toUpperCase())) {
+//      isShuffle = true;
+//    } else {
+//      isShuffle = false;
+//    }
 
     this.delimiter = StringEscapeUtils.unescapeJava(this.meta.getOption(StorageConstants.SEQUENCEFILE_DELIMITER,
         StorageConstants.DEFAULT_FIELD_DELIMITER)).charAt(0);
@@ -197,10 +197,13 @@ public class SequenceFileAppender extends FileAppender {
 
             serde.serialize(schema.getColumn(j), datum, os, nullChars);
 
-            if (isShuffle) {
-              // it is to calculate min/max values, and it is only used for the intermediate file.
+            if (columnStatEnabled.get(j)) {
               stats.analyzeField(j, datum);
             }
+//            if (isShuffle) {
+//              // it is to calculate min/max values, and it is only used for the intermediate file.
+//              stats.analyzeField(j, datum);
+//            }
           }
           lasti = i + 1;
           nullByte = 0;
@@ -220,8 +223,11 @@ public class SequenceFileAppender extends FileAppender {
           os.write((byte) delimiter);
         }
 
-        if (isShuffle) {
-          // it is to calculate min/max values, and it is only used for the intermediate file.
+//        if (isShuffle) {
+//          // it is to calculate min/max values, and it is only used for the intermediate file.
+//          stats.analyzeField(i, datum);
+//        }
+        if (columnStatEnabled.get(i)) {
           stats.analyzeField(i, datum);
         }
 

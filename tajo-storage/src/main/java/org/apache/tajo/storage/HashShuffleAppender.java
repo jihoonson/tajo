@@ -22,6 +22,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.tajo.ExecutionBlockId;
 import org.apache.tajo.QueryUnitAttemptId;
+import org.apache.tajo.catalog.Column;
 import org.apache.tajo.catalog.statistics.TableStats;
 import org.apache.tajo.util.Pair;
 
@@ -176,6 +177,10 @@ public class HashShuffleAppender implements Appender {
 
   @Override
   public void enableStats() {
+  }
+
+  @Override
+  public void enableColumnStat(Column column) {
   }
 
   @Override

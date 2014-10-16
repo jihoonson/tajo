@@ -599,7 +599,7 @@ public class RCFile {
     boolean useNewMagic = true;
     private byte[] nullChars;
     private SerializerDeserializer serde;
-    private boolean isShuffle;
+//    private boolean isShuffle;
 
     // Insert a globally unique 16-byte value every few entries, so that one
     // can seek into the middle of a file and then synchronize with record
@@ -725,13 +725,13 @@ public class RCFile {
       }
 
       //determine the intermediate file type
-      String store = conf.get(TajoConf.ConfVars.SHUFFLE_FILE_FORMAT.varname,
-          TajoConf.ConfVars.SHUFFLE_FILE_FORMAT.defaultVal);
-      if (enabledStats && CatalogProtos.StoreType.RCFILE == CatalogProtos.StoreType.valueOf(store.toUpperCase())) {
-        isShuffle = true;
-      } else {
-        isShuffle = false;
-      }
+//      String store = conf.get(TajoConf.ConfVars.SHUFFLE_FILE_FORMAT.varname,
+//          TajoConf.ConfVars.SHUFFLE_FILE_FORMAT.defaultVal);
+//      if (enabledStats && CatalogProtos.StoreType.RCFILE == CatalogProtos.StoreType.valueOf(store.toUpperCase())) {
+//        isShuffle = true;
+//      } else {
+//        isShuffle = false;
+//      }
 
       if (this.meta.containsOption(StorageConstants.COMPRESSION_CODEC)) {
         String codecClassname = this.meta.getOption(StorageConstants.COMPRESSION_CODEC);
@@ -893,16 +893,22 @@ public class RCFile {
         Datum datum = tuple.get(i);
         int length = columnBuffers[i].append(schema.getColumn(i), datum);
         columnBufferSize += length;
-        if (isShuffle) {
-          // it is to calculate min/max values, and it is only used for the intermediate file.
+        if (columnStatEnabled.get(i)) {
           stats.analyzeField(i, datum);
         }
+//        if (isShuffle) {
+//          it is to calculate min/max values, and it is only used for the intermediate file.
+//          stats.analyzeField(i, datum);
+//        }
       }
 
       if (size < columnNumber) {
         for (int i = size; i < columnNumber; i++) {
           columnBuffers[i].append(schema.getColumn(i), NullDatum.get());
-          if (isShuffle) {
+//          if (isShuffle) {
+//            stats.analyzeField(i, NullDatum.get());
+//          }
+          if (columnStatEnabled.get(i)) {
             stats.analyzeField(i, NullDatum.get());
           }
         }

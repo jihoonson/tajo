@@ -26,6 +26,7 @@ import org.apache.tajo.catalog.TableMeta;
 import org.apache.tajo.util.TUtil;
 
 import java.io.IOException;
+import java.util.BitSet;
 import java.util.Set;
 
 public abstract class FileAppender implements Appender {
@@ -37,13 +38,14 @@ public abstract class FileAppender implements Appender {
   protected final Path path;
 
   protected boolean enabledStats;
-  protected Set<Column> statEnabledColumns = TUtil.newHashSet();
+  protected BitSet columnStatEnabled;
   
   public FileAppender(Configuration conf, Schema schema, TableMeta meta, Path path) {
     this.conf = conf;
     this.meta = meta;
     this.schema = schema;
     this.path = path;
+    this.columnStatEnabled = new BitSet(schema.size());
   }
 
   public void init() throws IOException {
@@ -62,7 +64,7 @@ public abstract class FileAppender implements Appender {
   }
 
   public void enableColumnStat(Column column) {
-    statEnabledColumns.add(column);
+    columnStatEnabled.set(schema.getColumnId(column.getQualifiedName()));
   }
 
   public long getEstimatedOutputSize() throws IOException {
