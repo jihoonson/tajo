@@ -148,7 +148,6 @@ public class GlobalPlanner {
       terminalBlock = masterPlan.createTerminalBlock();
       DataChannel finalChannel = new DataChannel(childExecBlock.getId(), terminalBlock.getId());
       setFinalOutputChannel(finalChannel, lastNode.getOutSchema());
-//      masterPlan.addConnect(finalChannel);
       addConnectAndEnableColumnStat(masterPlan, finalChannel);
     } else { // if one or more unions is terminal
       terminalBlock = childExecBlock;
@@ -375,13 +374,11 @@ public class GlobalPlanner {
           DataChannel leftChannel = createDataChannelFromJoin(leftBlock, rightBlock, currentBlock, joinNode, true);
           ScanNode leftScan = buildInputExecutor(masterPlan.getLogicalPlan(), leftChannel);
           joinNode.setLeftChild(leftScan);
-//          masterPlan.addConnect(leftChannel);
           addConnectAndEnableColumnStat(masterPlan, leftChannel);
 
           DataChannel rightChannel = createDataChannelFromJoin(leftBlock, rightBlock, currentBlock, joinNode, false);
           ScanNode rightScan = buildInputExecutor(masterPlan.getLogicalPlan(), rightChannel);
           joinNode.setRightChild(rightScan);
-//          masterPlan.addConnect(rightChannel);
           addConnectAndEnableColumnStat(masterPlan, rightChannel);
         }
 
@@ -481,8 +478,6 @@ public class GlobalPlanner {
       joinNode.setRightChild(rightScan);
       currentBlock.setPlan(joinNode);
 
-//      masterPlan.addConnect(leftChannel);
-//      masterPlan.addConnect(rightChannel);
       addConnectAndEnableColumnStat(masterPlan, leftChannel);
       addConnectAndEnableColumnStat(masterPlan, rightChannel);
 
@@ -525,7 +520,6 @@ public class GlobalPlanner {
           joinNode.setRightChild(scanNode);
         }
       }
-//      masterPlan.addConnect(channel);
       addConnectAndEnableColumnStat(masterPlan, channel);
       targetBlock.addUnionScan(channel.getSrcId(), dedicatedScanNodeBlock);
     }
@@ -537,7 +531,6 @@ public class GlobalPlanner {
       if (otherSideShuffleKeys != null) {
         otherSideChannel.setShuffleKeys(otherSideShuffleKeys);
       }
-//      masterPlan.addConnect(otherSideChannel);
       addConnectAndEnableColumnStat(masterPlan, otherSideChannel);
 
       ScanNode scan = buildInputExecutor(masterPlan.getLogicalPlan(), otherSideChannel);
@@ -801,7 +794,6 @@ public class GlobalPlanner {
     secondPhaseGroupby.setInSchema(scanNode.getOutSchema());
     secondStage.setPlan(secondPhaseGroupby);
 
-//    context.plan.addConnect(channel);
     addConnectAndEnableColumnStat(context.plan, channel);
 
     return secondStage;
@@ -941,7 +933,6 @@ public class GlobalPlanner {
     secondPhaseGroupby.setInSchema(scanNode.getOutSchema());
     currentBlock.setPlan(secondPhaseGroupby);
 
-//    masterPlan.addConnect(channel);
     addConnectAndEnableColumnStat(masterPlan, channel);
 
     return currentBlock;
@@ -1027,7 +1018,6 @@ public class GlobalPlanner {
       currentNode.setInSchema(secondScan.getOutSchema());
       currentBlock.setPlan(currentNode);
       currentBlock.getEnforcer().addSortedInput(secondScan.getTableName(), currentNode.getSortKeys());
-//      masterPlan.addConnect(channel);
       addConnectAndEnableColumnStat(masterPlan, channel);
     }
 
@@ -1121,7 +1111,6 @@ public class GlobalPlanner {
     currentNode.setInSchema(scanNode.getOutSchema());
     nextBlock.setPlan(currentNode);
 
-//    masterPlan.addConnect(channel);
     addConnectAndEnableColumnStat(masterPlan, channel);
 
     return nextBlock;
@@ -1231,7 +1220,6 @@ public class GlobalPlanner {
         LimitNode parentLimit = PlannerUtil.clone(context.plan.getLogicalPlan(), node);
         parentLimit.setChild(scanNode);
         newExecBlock.setPlan(parentLimit);
-//        context.plan.addConnect(newChannel);
         addConnectAndEnableColumnStat(context.plan, newChannel);
         context.execBlockMap.put(parentLimit.getPID(), newExecBlock);
         node = parentLimit;
@@ -1315,7 +1303,6 @@ public class GlobalPlanner {
       }
 
       currentBlock.setPlan(windowAgg);
-//      context.plan.addConnect(channel);
       addConnectAndEnableColumnStat(context.plan, channel);
 
       return currentBlock;
@@ -1431,7 +1418,6 @@ public class GlobalPlanner {
       for (ExecutionBlock childBlocks : queryBlockBlocks) {
         DataChannel channel = new DataChannel(childBlocks, execBlock, NONE_SHUFFLE, 1);
         channel.setStoreType(storeType);
-//        context.plan.addConnect(channel);
         addConnectAndEnableColumnStat(context.plan, channel);
       }
 

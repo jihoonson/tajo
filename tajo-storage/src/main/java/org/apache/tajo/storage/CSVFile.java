@@ -71,7 +71,6 @@ public class CSVFile {
     private int BUFFER_SIZE = 128 * 1024;
     private int bufferedBytes = 0;
     private long pos = 0;
-//    private boolean isShuffle;
 
     private NonSyncByteArrayOutputStream os = new NonSyncByteArrayOutputStream(BUFFER_SIZE);
     private SerializerDeserializer serde;
@@ -99,15 +98,6 @@ public class CSVFile {
       if (!fs.exists(path.getParent())) {
         throw new FileNotFoundException(path.toString());
       }
-
-      //determine the intermediate file type
-//      String store = conf.get(TajoConf.ConfVars.SHUFFLE_FILE_FORMAT.varname,
-//          TajoConf.ConfVars.SHUFFLE_FILE_FORMAT.defaultVal);
-//      if (enabledStats && CatalogProtos.StoreType.CSV == CatalogProtos.StoreType.valueOf(store.toUpperCase())) {
-//        isShuffle = true;
-//      } else {
-//        isShuffle = false;
-//      }
 
       if(this.meta.containsOption(StorageConstants.COMPRESSION_CODEC)) {
         String codecName = this.meta.getOption(StorageConstants.COMPRESSION_CODEC);
@@ -172,10 +162,6 @@ public class CSVFile {
         if (columnStatEnabled.get(i)) {
           stats.analyzeField(i, datum);
         }
-//        if (isShuffle) {
-//          // it is to calculate min/max values, and it is only used for the intermediate file.
-//          stats.analyzeField(i, datum);
-//        }
       }
       os.write(LF);
       rowBytes += 1;
