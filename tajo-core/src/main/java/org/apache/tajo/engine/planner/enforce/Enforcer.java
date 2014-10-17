@@ -23,6 +23,7 @@ import org.apache.tajo.annotation.Nullable;
 import org.apache.tajo.catalog.Column;
 import org.apache.tajo.catalog.SortSpec;
 import org.apache.tajo.catalog.proto.CatalogProtos;
+import org.apache.tajo.catalog.proto.CatalogProtos.StatType;
 import org.apache.tajo.common.ProtoObject;
 import org.apache.tajo.ipc.TajoWorkerProtocol.DistinctGroupbyEnforcer.DistinctAggregationAlgorithm;
 import org.apache.tajo.ipc.TajoWorkerProtocol.DistinctGroupbyEnforcer.MultipleAggregationStage;
@@ -212,23 +213,29 @@ public class Enforcer implements ProtoObject<EnforcerProto> {
     TUtil.putToNestedList(properties, builder.getType(), builder.build());
   }
 
-  public void enableColumnStat(Column column) {
-    EnforceProperty.Builder builder = newProperty();
+  public void enableColumnStat(Column column, StatType[] statTypes) {
     ColumnStatEnforcer.Builder enforcer = ColumnStatEnforcer.newBuilder();
     enforcer.setColumn(column.getProto());
+    for (StatType type : statTypes) {
+      enforcer.addCollectTypes(type);
+    }
+
+    EnforceProperty.Builder builder = newProperty();
     builder.setType(EnforceType.COLUMN_STAT);
     builder.setColumnStat(enforcer);
     TUtil.putToNestedList(properties, builder.getType(), builder.build());
   }
 
-  public void disableColumnStat(Column column) {
-    EnforceProperty.Builder builder = newProperty();
-    ColumnStatEnforcer.Builder enforcer = ColumnStatEnforcer.newBuilder();
-    enforcer.setColumn(column.getProto());
-    enforcer.setCollect(false);
-    builder.setType(EnforceType.COLUMN_STAT);
-    builder.setColumnStat(enforcer);
-    TUtil.putToNestedList(properties, builder.getType(), builder.build());
+  private static StatType[] getAllColumnStatTypes() {
+    return new StatType[] {StatType.COLUMN_NUM_DIST_VALS,
+        StatType.COLUMN_NUM_NULLS,
+        StatType.COLUMN_MIN_VALUE,
+        StatType.COLUMN_MAX_VALUE,
+        StatType.COLUMN_HISTOGRAM};
+  }
+
+  public void enableAllColunStats(Column column) {
+    enableColumnStat(column, getAllColumnStatTypes());
   }
 
   public Collection<EnforceProperty> getProperties() {
@@ -349,9 +356,12 @@ public class Enforcer implements ProtoObject<EnforcerProto> {
       break;
     case COLUMN_STAT:
       ColumnStatEnforcer columnStatEnforcer = property.getColumnStat();
-      sb.append("type=ColumnStat ");
-      sb.append(columnStatEnforcer.getCollect() ? "enable" : "disable");
-      sb.append(" column stat for ").append(columnStatEnforcer.getColumn().getName());
+      sb.append("type=ColumnStat, column=").append(columnStatEnforcer.getColumn().getName());
+      sb.append(", statType=");
+      for (StatType statType : columnStatEnforcer.getCollectTypesList()) {
+        sb.append(statType).append(",");
+      }
+      sb.deleteCharAt(sb.length()-1);
       break;
     }
 

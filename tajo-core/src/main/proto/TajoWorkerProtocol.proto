@@ -257,7 +257,7 @@ message EnforceProperty {
 
 message ColumnStatEnforcer {
   required ColumnProto column = 1;
-  optional bool collect = 2 [default = true];
+  repeated StatType collectTypes = 2;
 }
 
 message SortedInputEnforce {

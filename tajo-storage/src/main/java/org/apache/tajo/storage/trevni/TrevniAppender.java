@@ -128,8 +128,8 @@ public class TrevniAppender extends FileAppender {
     Column col;
     writer.startRow();
     for (int i = 0; i < schema.size(); i++) {
-      if (enabledStats) {
-        stats.analyzeField(i, t.get(i));
+      if (columnStatEnabled.containsKey(i)) {
+        stats.analyzeField(i, columnStatEnabled.get(i), t.get(i));
       }
 
       if (!t.isNull(i)) {

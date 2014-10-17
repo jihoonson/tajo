@@ -18,15 +18,20 @@
 
 package org.apache.tajo.engine.planner;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.tajo.catalog.Column;
+import org.apache.tajo.catalog.proto.CatalogProtos.StatType;
 import org.apache.tajo.ipc.TajoWorkerProtocol;
 import org.apache.tajo.util.TUtil;
 
 import java.util.List;
+import java.util.Map;
 
 public class StatContext {
 
-  private Column[] statEnabledColumns;
+  private static final Log LOG = LogFactory.getLog(StatContext.class);
+  private Map<Column, List<StatType>> enabledColumnStats = TUtil.newHashMap();
 
   public StatContext() {
 
@@ -37,22 +42,26 @@ public class StatContext {
   }
 
   public void setStatEnabledColumns(List<TajoWorkerProtocol.EnforceProperty> properties) {
-    List<Column> columns = TUtil.newList();
     for (TajoWorkerProtocol.EnforceProperty property : properties) {
-      TajoWorkerProtocol.ColumnStatEnforcer columnStatEnforcer = property.getColumnStat();
-      if (!columnStatEnforcer.hasCollect()
-          || columnStatEnforcer.getCollect()) {
-        columns.add(new Column(columnStatEnforcer.getColumn()));
+      TajoWorkerProtocol.ColumnStatEnforcer enforcer = property.getColumnStat();
+      enabledColumnStats.put(new Column(enforcer.getColumn()), enforcer.getCollectTypesList());
+      if (enforcer.getCollectTypesList().contains(StatType.COLUMN_HISTOGRAM) ||
+          enforcer.getCollectTypesList().contains(StatType.COLUMN_NUM_DIST_VALS)) {
+        LOG.warn("Stat types " + StatType.COLUMN_HISTOGRAM + " and " + StatType.COLUMN_NUM_DIST_VALS +
+            " are not supported yet");
       }
     }
-    statEnabledColumns = columns.toArray(new Column[columns.size()]);
-  }
-
-  public Column[] getStatEnabledColumns() {
-    return this.statEnabledColumns;
   }
 
   public boolean hasStatEnabledColumns() {
-    return statEnabledColumns != null;
+    return enabledColumnStats.size() > 0;
+  }
+
+  public boolean isStatEnabled(Column column) {
+    return enabledColumnStats.containsKey(column);
+  }
+
+  public List<StatType> getEnabledStatTypes(Column column) {
+    return enabledColumnStats.get(column);
   }
 }

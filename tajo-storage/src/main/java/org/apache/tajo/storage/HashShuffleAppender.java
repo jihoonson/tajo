@@ -23,14 +23,12 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.tajo.ExecutionBlockId;
 import org.apache.tajo.QueryUnitAttemptId;
 import org.apache.tajo.catalog.Column;
+import org.apache.tajo.catalog.proto.CatalogProtos.StatType;
 import org.apache.tajo.catalog.statistics.TableStats;
 import org.apache.tajo.util.Pair;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class HashShuffleAppender implements Appender {
@@ -180,7 +178,13 @@ public class HashShuffleAppender implements Appender {
   }
 
   @Override
-  public void enableColumnStat(Column column) {
+  public void enableColumnStat(Column column, Collection<StatType> statTypes) {
+
+  }
+
+  @Override
+  public void enableAllColumnStats() {
+
   }
 
   @Override

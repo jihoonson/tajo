@@ -159,8 +159,8 @@ public class CSVFile {
           rowBytes += 1;
         }
 
-        if (columnStatEnabled.get(i)) {
-          stats.analyzeField(i, datum);
+        if (columnStatEnabled.containsKey(i)) {
+          stats.analyzeField(i, columnStatEnabled.get(i), datum);
         }
       }
       os.write(LF);

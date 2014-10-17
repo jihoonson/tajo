@@ -169,7 +169,7 @@ public class GlobalPlanner {
       outSchema = block.getPlan().getOutSchema();
     }
     for (Column col : outSchema.getColumns()) {
-      enforcer.enableColumnStat(col);
+      enforcer.enableAllColunStats(col);
     }
     LOG.info("Column stats for all columns are enabled for the output of " + block.getId());
   }

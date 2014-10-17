@@ -138,8 +138,8 @@ public class AvroAppender extends FileAppender {
     GenericRecord record = new GenericData.Record(avroSchema);
     for (int i = 0; i < schema.size(); ++i) {
       Column column = schema.getColumn(i);
-      if (enabledStats) {
-        stats.analyzeField(i, tuple.get(i));
+      if (columnStatEnabled.containsKey(i)) {
+        stats.analyzeField(i, columnStatEnabled.get(i), tuple.get(i));
       }
       Object value;
       Schema.Field avroField = avroFields.get(i);

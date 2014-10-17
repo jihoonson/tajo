@@ -883,16 +883,16 @@ public class RCFile {
         Datum datum = tuple.get(i);
         int length = columnBuffers[i].append(schema.getColumn(i), datum);
         columnBufferSize += length;
-        if (columnStatEnabled.get(i)) {
-          stats.analyzeField(i, datum);
+        if (columnStatEnabled.containsKey(i)) {
+          stats.analyzeField(i, columnStatEnabled.get(i), datum);
         }
       }
 
       if (size < columnNumber) {
         for (int i = size; i < columnNumber; i++) {
           columnBuffers[i].append(schema.getColumn(i), NullDatum.get());
-          if (columnStatEnabled.get(i)) {
-            stats.analyzeField(i, NullDatum.get());
+          if (columnStatEnabled.containsKey(i)) {
+            stats.analyzeField(i, columnStatEnabled.get(i), NullDatum.get());
           }
         }
       }

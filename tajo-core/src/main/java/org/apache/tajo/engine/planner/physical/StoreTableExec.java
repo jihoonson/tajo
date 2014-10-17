@@ -103,8 +103,10 @@ public class StoreTableExec extends UnaryPhysicalExec {
 
     appender.enableStats();
     if (statContext.hasStatEnabledColumns()) {
-      for (Column column : statContext.getStatEnabledColumns()) {
-        appender.enableColumnStat(column);
+      for (Column column : outSchema.getColumns()) {
+        if (statContext.isStatEnabled(column)) {
+          appender.enableColumnStat(column, statContext.getEnabledStatTypes(column));
+        }
       }
     }
     appender.init();

@@ -21,12 +21,15 @@ package org.apache.tajo.storage;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.tajo.catalog.Schema;
+import org.apache.tajo.catalog.proto.CatalogProtos.StatType;
 import org.apache.tajo.catalog.statistics.ColumnStats;
 import org.apache.tajo.catalog.statistics.TableStats;
 import org.apache.tajo.common.TajoDataTypes.DataType;
 import org.apache.tajo.common.TajoDataTypes.Type;
 import org.apache.tajo.datum.Datum;
 import org.apache.tajo.datum.NullDatum;
+
+import java.util.Collection;
 
 /**
  * This class is not thread-safe.
@@ -81,20 +84,26 @@ public class TableStatistics {
     return this.numBytes;
   }
 
-  public void analyzeField(int idx, Datum datum) {
+  public void analyzeField(int idx, Collection<StatType> statTypes, Datum datum) {
     if (datum instanceof NullDatum) {
-      numNulls[idx]++;
+      if (statTypes.contains(StatType.COLUMN_NUM_NULLS)) {
+        numNulls[idx]++;
+      }
       return;
     }
 
     if (comparable[idx]) {
-      if (!maxValues.contains(idx) ||
-          maxValues.get(idx).compareTo(datum) < 0) {
-        maxValues.put(idx, datum);
+      if (statTypes.contains(StatType.COLUMN_MAX_VALUE)) {
+        if (!maxValues.contains(idx) ||
+            maxValues.get(idx).compareTo(datum) < 0) {
+          maxValues.put(idx, datum);
+        }
       }
-      if (!minValues.contains(idx) ||
-          minValues.get(idx).compareTo(datum) > 0) {
-        minValues.put(idx, datum);
+      if (statTypes.contains(StatType.COLUMN_MIN_VALUE)) {
+        if (!minValues.contains(idx) ||
+            minValues.get(idx).compareTo(datum) > 0) {
+          minValues.put(idx, datum);
+        }
       }
     }
   }

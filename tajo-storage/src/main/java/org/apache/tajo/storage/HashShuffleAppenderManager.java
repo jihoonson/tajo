@@ -87,6 +87,7 @@ public class HashShuffleAppenderManager {
         FileAppender appender = (FileAppender) StorageManagerFactory.getStorageManager(
             tajoConf).getAppender(meta, outSchema, dataFile);
         appender.enableStats();
+        appender.enableAllColumnStats();
         appender.init();
 
         partitionAppenderMeta = new PartitionAppenderMeta();

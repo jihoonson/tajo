@@ -187,8 +187,8 @@ public class SequenceFileAppender extends FileAppender {
 
             serde.serialize(schema.getColumn(j), datum, os, nullChars);
 
-            if (columnStatEnabled.get(j)) {
-              stats.analyzeField(j, datum);
+            if (columnStatEnabled.containsKey(j)) {
+              stats.analyzeField(j, columnStatEnabled.get(j), datum);
             }
           }
           lasti = i + 1;
@@ -209,8 +209,8 @@ public class SequenceFileAppender extends FileAppender {
           os.write((byte) delimiter);
         }
 
-        if (columnStatEnabled.get(i)) {
-          stats.analyzeField(i, datum);
+        if (columnStatEnabled.containsKey(i)) {
+          stats.analyzeField(i, columnStatEnabled.get(i), datum);
         }
 
       }

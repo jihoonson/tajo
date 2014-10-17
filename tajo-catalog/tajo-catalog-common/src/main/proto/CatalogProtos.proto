@@ -192,8 +192,11 @@ enum StatType {
   TABLE_AVG_ROWS = 3;
   TABLE_NUM_BYTES = 4;
 
-  COLUMN_NUM_NDV = 5;
+  COLUMN_NUM_DIST_VALS = 5;
   COLUMN_NUM_NULLS = 6;
+  COLUMN_MIN_VALUE = 7;
+  COLUMN_MAX_VALUE = 8;
+  COLUMN_HISTOGRAM = 9;
 }
 
 message StatSetProto {

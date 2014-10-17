@@ -23,11 +23,12 @@ import org.apache.hadoop.fs.Path;
 import org.apache.tajo.catalog.Column;
 import org.apache.tajo.catalog.Schema;
 import org.apache.tajo.catalog.TableMeta;
+import org.apache.tajo.catalog.proto.CatalogProtos.StatType;
+import org.apache.tajo.datum.Datum;
 import org.apache.tajo.util.TUtil;
 
 import java.io.IOException;
-import java.util.BitSet;
-import java.util.Set;
+import java.util.*;
 
 public abstract class FileAppender implements Appender {
   protected boolean inited = false;
@@ -38,14 +39,13 @@ public abstract class FileAppender implements Appender {
   protected final Path path;
 
   protected boolean enabledStats;
-  protected BitSet columnStatEnabled;
+  protected Map<Integer, Collection<StatType>> columnStatEnabled = TUtil.newHashMap();
   
   public FileAppender(Configuration conf, Schema schema, TableMeta meta, Path path) {
     this.conf = conf;
     this.meta = meta;
     this.schema = schema;
     this.path = path;
-    this.columnStatEnabled = new BitSet(schema.size());
   }
 
   public void init() throws IOException {
@@ -63,8 +63,19 @@ public abstract class FileAppender implements Appender {
     this.enabledStats = true;
   }
 
-  public void enableColumnStat(Column column) {
-    columnStatEnabled.set(schema.getColumnId(column.getQualifiedName()));
+  @Override
+  public void enableColumnStat(Column column, Collection<StatType> statTypes) {
+    if (inited) {
+      throw new IllegalStateException("Should enable this option before init()");
+    }
+    columnStatEnabled.put(schema.getColumnId(column.getQualifiedName()), statTypes);
+  }
+
+  @Override
+  public void enableAllColumnStats() {
+    for (Column col : schema.getColumns()) {
+      enableColumnStat(col, getAllColumnStatTypes());
+    }
   }
 
   public long getEstimatedOutputSize() throws IOException {
@@ -72,4 +83,14 @@ public abstract class FileAppender implements Appender {
   }
 
   public abstract long getOffset() throws IOException;
+
+  private static Collection<StatType> getAllColumnStatTypes() {
+    Collection<StatType> allStats = new HashSet<StatType>();
+    allStats.add(StatType.COLUMN_NUM_DIST_VALS);
+    allStats.add(StatType.COLUMN_NUM_NULLS);
+    allStats.add(StatType.COLUMN_MIN_VALUE);
+    allStats.add(StatType.COLUMN_MAX_VALUE);
+    allStats.add(StatType.COLUMN_HISTOGRAM);
+    return allStats;
+  }
 }
