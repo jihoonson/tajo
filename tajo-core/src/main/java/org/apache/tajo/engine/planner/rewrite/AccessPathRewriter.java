@@ -85,23 +85,6 @@ public class AccessPathRewriter implements RewriteRule {
     return false;
   }
 
-  private double estimateSelectivity(IndexDesc indexDesc, TableStats tableStats) {
-    // assume that the key column has a uniform distribution
-    for (ColumnStats columnStats : tableStats.getColumnStats()) {
-      if (indexDesc.getColumn().equals(columnStats.getColumn())) {
-        long distValNum = columnStats.getNumDistValues();
-        if (distValNum > 0) {
-          long totalRows = tableStats.getNumRows();
-          long rowNumPerVal = totalRows / distValNum;
-          return (double)rowNumPerVal / (double)totalRows;
-        }
-        break;
-      }
-    }
-    return -1.d;
-  }
-
-  @Override
   public LogicalPlan rewrite(LogicalPlan plan) throws PlanningException {
     LogicalPlan.QueryBlock rootBlock = plan.getRootBlock();
     rewriter.visit(rootBlock, plan, rootBlock, rootBlock.getRoot(), new Stack<LogicalNode>());
@@ -125,16 +108,13 @@ public class AccessPathRewriter implements RewriteRule {
       for (AccessPathInfo accessPath : accessPaths) {
         if (accessPath.getScanType() == ScanTypeControl.INDEX_SCAN) {
           // estimation selectivity and choose the better path
-          IndexScanInfo indexScanInfo = (IndexScanInfo) accessPath;
-          if (indexScanInfo.hasTableStats()) {
-            // TODO: improve the selectivity estimation
-            double estimateSelectivity = 0.01;
-            LOG.info("Selectivity threshold: " + estimateSelectivity);
-            LOG.info("Estimated selectivity: " + estimateSelectivity);
-            if (estimateSelectivity < selectivityThreshold) {
-              // if the estimated selectivity is greater than threshold, use the index scan
-              optimalPath = accessPath;
-            }
+          // TODO: improve the selectivity estimation
+          double estimateSelectivity = 0.001;
+          LOG.info("Selectivity threshold: " + selectivityThreshold);
+          LOG.info("Estimated selectivity: " + estimateSelectivity);
+          if (estimateSelectivity < selectivityThreshold) {
+            // if the estimated selectivity is greater than threshold, use the index scan
+            optimalPath = accessPath;
           }
         }
       }

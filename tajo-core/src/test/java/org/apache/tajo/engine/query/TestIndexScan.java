@@ -18,32 +18,37 @@
 
 package org.apache.tajo.engine.query;
 
+import com.google.protobuf.ServiceException;
 import org.apache.tajo.IntegrationTest;
 import org.apache.tajo.QueryTestCaseBase;
+import org.apache.tajo.SessionVars;
 import org.apache.tajo.TajoConstants;
-import org.apache.tajo.catalog.TableDesc;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
 import java.sql.ResultSet;
+import java.util.Map;
 
 @Category(IntegrationTest.class)
 public class TestIndexScan extends QueryTestCaseBase {
 
-  public TestIndexScan() {
+  public TestIndexScan() throws ServiceException {
     super(TajoConstants.DEFAULT_DATABASE_NAME);
+    Map<String,String> sessionVars = client.getAllSessionVariables();
+    sessionVars.put(SessionVars.INDEX_ENABLED.keyname(), "true");
+    sessionVars.put(SessionVars.INDEX_SELECTIVITY_THRESHOLD.keyname(), "0.01f");
+    client.updateSessionVariables(sessionVars);
   }
 
   @Test
   public final void testWhereCond1() throws Exception {
-    executeString("create table lineitem_clone as select * from lineitem");
-    TableDesc desc = client.getTableDesc("lineitem_clone");
-    executeString("create index l_orderkey_idx on lineitem_clone (l_orderkey)");
-    ResultSet res = executeString("select * from lineitem_clone where l_orderkey = 1;");
+    executeString("create index l_orderkey_idx on lineitem (l_orderkey)");
+    ResultSet res = executeString("select * from lineitem where l_orderkey = 1;");
     int cnt = 0;
     while (res.next()) {
       System.out.println("cnt: " + (++cnt));
     }
     cleanupQuery(res);
+    executeString("drop index l_orderkey_idx");
   }
 }
