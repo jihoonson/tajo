@@ -49,8 +49,8 @@ public class AccessPathRewriter implements RewriteRule {
 
   public AccessPathRewriter(QueryContext queryContext) {
     if (queryContext != null) {
-      this.indexEnabled = queryContext.getBool(ConfVars.$INDEX_ENABLED);
-      this.selectivityThreshold = queryContext.getFloat(ConfVars.$INDEX_SELECTIVITY_THRESHOLD);
+      this.indexEnabled = queryContext.getBool(SessionVars.INDEX_ENABLED);
+      this.selectivityThreshold = queryContext.getFloat(SessionVars.INDEX_SELECTIVITY_THRESHOLD);
       if (indexEnabled) {
         LOG.info("Index scan is enabled");
       }
