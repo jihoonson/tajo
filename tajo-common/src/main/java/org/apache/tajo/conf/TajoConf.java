@@ -478,7 +478,7 @@ public class TajoConf extends Configuration {
   }
 
   public static long getLongVar(Configuration conf, ConfVars var) {
-    assert (var.valClass == Long.class || var.valClass == Integer.class);
+    assert (var.valClass == Long.class || var.valClass == Integer.class || var.valClass == Float.class);
     if (var.valClass == Integer.class) {
       return conf.getInt(var.varname, var.defaultIntVal);
     } else {
