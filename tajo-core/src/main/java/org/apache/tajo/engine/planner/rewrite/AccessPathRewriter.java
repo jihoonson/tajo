@@ -20,19 +20,21 @@ package org.apache.tajo.engine.planner.rewrite;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.tajo.SessionVars;
 import org.apache.tajo.catalog.Column;
 import org.apache.tajo.catalog.IndexDesc;
 import org.apache.tajo.catalog.Schema;
 import org.apache.tajo.catalog.SortSpec;
 import org.apache.tajo.catalog.statistics.ColumnStats;
 import org.apache.tajo.catalog.statistics.TableStats;
-import org.apache.tajo.conf.TajoConf;
+import org.apache.tajo.conf.TajoConf.ConfVars;
 import org.apache.tajo.engine.planner.*;
 import org.apache.tajo.engine.planner.AccessPathInfo.ScanTypeControl;
 import org.apache.tajo.engine.planner.logical.IndexScanNode;
 import org.apache.tajo.engine.planner.logical.LogicalNode;
 import org.apache.tajo.engine.planner.logical.RelationNode;
 import org.apache.tajo.engine.planner.logical.ScanNode;
+import org.apache.tajo.engine.query.QueryContext;
 
 import java.util.List;
 import java.util.Stack;
@@ -43,9 +45,19 @@ public class AccessPathRewriter implements RewriteRule {
   private static final String NAME = "Access Path Rewriter";
   private final Rewriter rewriter = new Rewriter();
   private final float selectivityThreshold;
+  private final boolean indexEnabled;
 
-  public AccessPathRewriter(TajoConf conf) {
-    this.selectivityThreshold = conf.getFloatVar(conf, TajoConf.ConfVars.INDEX_SELECTIVITY_THRESHOLD);
+  public AccessPathRewriter(QueryContext queryContext) {
+    if (queryContext != null) {
+      this.indexEnabled = queryContext.getBool(ConfVars.$INDEX_ENABLED);
+      this.selectivityThreshold = queryContext.getFloat(ConfVars.$INDEX_SELECTIVITY_THRESHOLD);
+      if (indexEnabled) {
+        LOG.info("Index scan is enabled");
+      }
+    } else {
+      this.indexEnabled = false;
+      this.selectivityThreshold = 0.01f;
+    }
   }
 
   @Override
@@ -55,14 +67,16 @@ public class AccessPathRewriter implements RewriteRule {
 
   @Override
   public boolean isEligible(LogicalPlan plan) {
-    for (LogicalPlan.QueryBlock block : plan.getQueryBlocks()) {
-      for (RelationNode relationNode : block.getRelations()) {
-        List<AccessPathInfo> accessPathInfos = block.getAccessInfos(relationNode);
-        // If there are any alternative access paths
-        if (accessPathInfos.size() > 1) {
-          for (AccessPathInfo accessPathInfo : accessPathInfos) {
-            if (accessPathInfo.getScanType() == ScanTypeControl.INDEX_SCAN) {
-              return true;
+    if (indexEnabled) {
+      for (LogicalPlan.QueryBlock block : plan.getQueryBlocks()) {
+        for (RelationNode relationNode : block.getRelations()) {
+          List<AccessPathInfo> accessPathInfos = block.getAccessInfos(relationNode);
+          // If there are any alternative access paths
+          if (accessPathInfos.size() > 1) {
+            for (AccessPathInfo accessPathInfo : accessPathInfos) {
+              if (accessPathInfo.getScanType() == ScanTypeControl.INDEX_SCAN) {
+                return true;
+              }
             }
           }
         }
@@ -114,11 +128,10 @@ public class AccessPathRewriter implements RewriteRule {
           IndexScanInfo indexScanInfo = (IndexScanInfo) accessPath;
           if (indexScanInfo.hasTableStats()) {
             // TODO: improve the selectivity estimation
-            // estimate the selectivity
-            double estimateSelectivity = estimateSelectivity(indexScanInfo.getIndexDesc(),
-                indexScanInfo.getTableStats());
+            double estimateSelectivity = 0.01;
+            LOG.info("Selectivity threshold: " + estimateSelectivity);
             LOG.info("Estimated selectivity: " + estimateSelectivity);
-            if (estimateSelectivity > selectivityThreshold) {
+            if (estimateSelectivity < selectivityThreshold) {
               // if the estimated selectivity is greater than threshold, use the index scan
               optimalPath = accessPath;
             }

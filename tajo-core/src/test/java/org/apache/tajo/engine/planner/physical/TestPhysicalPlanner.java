@@ -167,12 +167,13 @@ public class TestPhysicalPlanner {
     }
     appender.flush();
     appender.close();
+
+    defaultContext = LocalTajoTestingUtility.createDummyContext(conf);
     catalog.createTable(score);
     analyzer = new SQLAnalyzer();
     planner = new LogicalPlanner(catalog);
-    optimizer = new LogicalOptimizer(conf, catalog);
+    optimizer = new LogicalOptimizer(conf, defaultContext, catalog);
 
-    defaultContext = LocalTajoTestingUtility.createDummyContext(conf);
     masterPlan = new MasterPlan(LocalTajoTestingUtility.newQueryId(), null, null);
 
     createLargeScoreTable();

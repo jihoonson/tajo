@@ -38,6 +38,7 @@ import org.apache.tajo.engine.planner.logical.join.JoinGraph;
 import org.apache.tajo.engine.planner.logical.join.JoinOrderAlgorithm;
 import org.apache.tajo.engine.planner.rewrite.*;
 import org.apache.tajo.engine.query.QueryContext;
+import org.apache.tajo.master.session.Session;
 
 import java.util.LinkedHashSet;
 import java.util.Set;
@@ -58,25 +59,17 @@ public class LogicalOptimizer {
   private BasicQueryRewriteEngine rulesAfterToJoinOpt;
   private JoinOrderAlgorithm joinOrderAlgorithm = new GreedyHeuristicJoinOrderAlgorithm();
 
-  public LogicalOptimizer(TajoConf systemConf, CatalogService catalog) {
+  public LogicalOptimizer(TajoConf systemConf, QueryContext queryContext, CatalogService catalog) {
     this.catalog = catalog;
-    boolean index_enabled = systemConf.getBoolVar(ConfVars.INDEX_ENABLED);
-    if (index_enabled) {
-      LOG.info("Index scan is enabled.");
-    } else {
-      LOG.info("Index scan is disabled.");
-    }
     rulesBeforeJoinOpt = new BasicQueryRewriteEngine();
     if (systemConf.getBoolVar(ConfVars.$TEST_FILTER_PUSHDOWN_ENABLED)) {
-      rulesBeforeJoinOpt.addRewriteRule(new FilterPushDownRule(catalog, index_enabled));
+      rulesBeforeJoinOpt.addRewriteRule(new FilterPushDownRule(catalog));
     }
 
     rulesAfterToJoinOpt = new BasicQueryRewriteEngine();
     rulesAfterToJoinOpt.addRewriteRule(new ProjectionPushDownRule());
     rulesAfterToJoinOpt.addRewriteRule(new PartitionedTableRewriter(systemConf));
-    if (index_enabled) {
-      rulesAfterToJoinOpt.addRewriteRule(new AccessPathRewriter(systemConf));
-    }
+    rulesAfterToJoinOpt.addRewriteRule(new AccessPathRewriter(queryContext));
 
     // Currently, it is only used for some test cases to inject exception manually.
     String userDefinedRewriterClass = systemConf.get("tajo.plan.rewriter.classes");

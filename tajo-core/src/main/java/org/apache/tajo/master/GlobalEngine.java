@@ -101,7 +101,7 @@ public class GlobalEngine extends AbstractService {
       analyzer = new SQLAnalyzer();
       preVerifier = new PreLogicalPlanVerifier(context.getCatalog());
       planner = new LogicalPlanner(context.getCatalog());
-      optimizer = new LogicalOptimizer(context.getConf(), catalog);
+      optimizer = new LogicalOptimizer(context.getConf(), null, context.getCatalog());
       annotatedPlanVerifier = new LogicalPlanVerifier(context.getConf(), context.getCatalog());
 
       hookManager = new DistributedQueryHookManager();

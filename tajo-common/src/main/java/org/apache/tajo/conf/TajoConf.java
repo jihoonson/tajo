@@ -290,10 +290,6 @@ public class TajoConf extends Configuration {
     // Geo IP
     GEOIP_DATA("tajo.function.geoip-database-location", ""),
 
-    // Index configuration
-    INDEX_ENABLED("tajo.query.index.enabled", true),
-    INDEX_SELECTIVITY_THRESHOLD("tajo.query.index.selectivity.threshold", 0.05f),
-
     /////////////////////////////////////////////////////////////////////////////////
     // User Session Configuration
     //
@@ -334,6 +330,10 @@ public class TajoConf extends Configuration {
         (long)256 * 1048576),
     $MAX_OUTPUT_FILE_SIZE("tajo.query.max-outfile-size-mb", 0), // zero means infinite
     $CODEGEN("tajo.executor.codegen.enabled", false), // Runtime code generation
+
+    // for index
+    $INDEX_ENABLED("tajo.query.index.enabled", false),
+    $INDEX_SELECTIVITY_THRESHOLD("tajo.query.index.selectivity.threshold", 0.05f),
 
     // Client -----------------------------------------------------------------
     $CLIENT_SESSION_EXPIRY_TIME("tajo.client.session.expiry-time-sec", 3600), // default time is one hour.

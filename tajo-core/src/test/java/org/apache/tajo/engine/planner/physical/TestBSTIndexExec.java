@@ -151,7 +151,7 @@ public class TestBSTIndexExec {
 
     analyzer = new SQLAnalyzer();
     planner = new LogicalPlanner(catalog);
-    optimizer = new LogicalOptimizer(conf, catalog);
+    optimizer = new LogicalOptimizer(conf, null, catalog);
   }
 
   @After

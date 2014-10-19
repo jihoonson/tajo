@@ -59,6 +59,7 @@ public class TestSortExec {
   private static Path workDir;
   private static Path tablePath;
   private static TableMeta employeeMeta;
+  private static QueryContext queryContext;
 
   private static Random rnd = new Random(System.currentTimeMillis());
 
@@ -98,9 +99,10 @@ public class TestSortExec {
         tablePath);
     catalog.createTable(desc);
 
+    queryContext = new QueryContext(conf);
     analyzer = new SQLAnalyzer();
     planner = new LogicalPlanner(catalog);
-    optimizer = new LogicalOptimizer(conf, catalog);
+    optimizer = new LogicalOptimizer(conf, queryContext, catalog);
   }
 
   public static String[] QUERIES = {
@@ -110,7 +112,7 @@ public class TestSortExec {
   public final void testNext() throws IOException, PlanningException {
     FileFragment[] frags = StorageManager.splitNG(conf, "default.employee", employeeMeta, tablePath, Integer.MAX_VALUE);
     Path workDir = CommonTestingUtil.getTestDir("target/test-data/TestSortExec");
-    TaskAttemptContext ctx = new TaskAttemptContext(new QueryContext(conf),
+    TaskAttemptContext ctx = new TaskAttemptContext(queryContext,
         LocalTajoTestingUtility
         .newQueryUnitAttemptId(), new FileFragment[] { frags[0] }, workDir);
     ctx.setEnforcer(new Enforcer());

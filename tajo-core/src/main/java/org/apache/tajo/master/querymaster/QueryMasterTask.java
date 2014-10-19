@@ -352,7 +352,7 @@ public class QueryMasterTask extends CompositeService {
       }
       CatalogService catalog = getQueryTaskContext().getQueryMasterContext().getWorkerContext().getCatalog();
       LogicalPlanner planner = new LogicalPlanner(catalog);
-      LogicalOptimizer optimizer = new LogicalOptimizer(systemConf, catalog);
+      LogicalOptimizer optimizer = new LogicalOptimizer(systemConf, queryContext, catalog);
       Expr expr = JsonHelper.fromJson(jsonExpr, Expr.class);
       LogicalPlan plan = planner.createPlan(queryContext, expr);
       optimizer.optimize(queryContext, plan);

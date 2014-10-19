@@ -90,7 +90,7 @@ public class TestRangeRetrieverHandler {
 
     analyzer = new SQLAnalyzer();
     planner = new LogicalPlanner(catalog);
-    optimizer = new LogicalOptimizer(conf, catalog);
+    optimizer = new LogicalOptimizer(conf, null, catalog);
 
     schema = new Schema();
     schema.addColumn("empid", Type.INT4);
