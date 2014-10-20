@@ -41,14 +41,20 @@ public class TestIndexScan extends QueryTestCaseBase {
   }
 
   @Test
-  public final void testWhereCond1() throws Exception {
+  public final void testOnSortedNonUniqueKeys() throws Exception {
     executeString("create index l_orderkey_idx on lineitem (l_orderkey)");
     ResultSet res = executeString("select * from lineitem where l_orderkey = 1;");
-    int cnt = 0;
-    while (res.next()) {
-      System.out.println("cnt: " + (++cnt));
-    }
+    assertResultSet(res);
     cleanupQuery(res);
     executeString("drop index l_orderkey_idx");
+  }
+
+  @Test
+  public final void testOnUnsortedTextKeys() throws Exception {
+    executeString("create index l_shipdate_idx on lineitem (l_shipdate)");
+    ResultSet res = executeString("select l_orderkey, l_shipdate, l_comment from lineitem where l_shipdate = '1997-01-28';");
+    assertResultSet(res);
+    cleanupQuery(res);
+    executeString("drop index l_shipdate_idx");
   }
 }
