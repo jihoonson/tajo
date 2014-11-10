@@ -30,7 +30,7 @@ import org.apache.tajo.datum.Int4Datum;
 import org.apache.tajo.datum.TextDatum;
 import org.apache.tajo.engine.planner.global.ExecutionBlock;
 import org.apache.tajo.engine.planner.global.MasterPlan;
-import org.apache.tajo.engine.planner.logical.NodeType;
+import org.apache.tajo.plan.logical.NodeType;
 import org.apache.tajo.jdbc.TajoResultSet;
 import org.apache.tajo.master.querymaster.QueryMasterTask;
 import org.apache.tajo.storage.*;
@@ -565,7 +565,7 @@ public class TestJoinBroadcast extends QueryTestCaseBase {
         }
         Path dataPath = new Path(table.getPath(), fileIndex + ".csv");
         fileIndex++;
-        appender = StorageManagerFactory.getStorageManager(conf).getAppender(tableMeta, schema,
+        appender = StorageManager.getStorageManager(conf).getAppender(tableMeta, schema,
             dataPath);
         appender.init();
       }

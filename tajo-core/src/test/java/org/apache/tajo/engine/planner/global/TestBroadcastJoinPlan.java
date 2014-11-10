@@ -36,15 +36,14 @@ import org.apache.tajo.datum.DatumFactory;
 import org.apache.tajo.datum.TextDatum;
 import org.apache.tajo.engine.function.FunctionLoader;
 import org.apache.tajo.engine.parser.SQLAnalyzer;
-import org.apache.tajo.engine.planner.LogicalOptimizer;
-import org.apache.tajo.engine.planner.LogicalPlan;
-import org.apache.tajo.engine.planner.LogicalPlanner;
-import org.apache.tajo.engine.planner.PlanningException;
-import org.apache.tajo.engine.planner.logical.*;
+import org.apache.tajo.plan.LogicalOptimizer;
+import org.apache.tajo.plan.LogicalPlan;
+import org.apache.tajo.plan.LogicalPlanner;
+import org.apache.tajo.plan.PlanningException;
 import org.apache.tajo.engine.query.QueryContext;
-import org.apache.tajo.master.TajoMaster;
+import org.apache.tajo.plan.logical.*;
 import org.apache.tajo.storage.Appender;
-import org.apache.tajo.storage.StorageManagerFactory;
+import org.apache.tajo.storage.StorageManager;
 import org.apache.tajo.storage.Tuple;
 import org.apache.tajo.storage.VTuple;
 import org.apache.tajo.util.CommonTestingUtil;
@@ -141,7 +140,7 @@ public class TestBroadcastJoinPlan {
         contentsData += j;
       }
     }
-    Appender appender = StorageManagerFactory.getStorageManager(conf).getAppender(tableMeta, schema,
+    Appender appender = StorageManager.getStorageManager(conf).getAppender(tableMeta, schema,
         dataPath);
     appender.init();
     Tuple tuple = new VTuple(schema.size());
