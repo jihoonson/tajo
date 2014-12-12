@@ -21,25 +21,40 @@ package org.apache.tajo.plan.util;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import org.apache.tajo.OverridableConf;
+import org.apache.tajo.SessionVars;
 import org.apache.tajo.algebra.*;
 import org.apache.tajo.annotation.Nullable;
-import org.apache.tajo.catalog.Column;
-import org.apache.tajo.catalog.Schema;
-import org.apache.tajo.catalog.SchemaUtil;
-import org.apache.tajo.catalog.SortSpec;
+import org.apache.tajo.catalog.*;
 import org.apache.tajo.catalog.proto.CatalogProtos;
 import org.apache.tajo.common.TajoDataTypes.DataType;
+import org.apache.tajo.conf.TajoConf;
 import org.apache.tajo.plan.*;
 import org.apache.tajo.plan.expr.*;
 import org.apache.tajo.plan.logical.*;
 import org.apache.tajo.plan.visitor.BasicLogicalPlanVisitor;
 import org.apache.tajo.plan.visitor.ExplainLogicalPlanVisitor;
 import org.apache.tajo.plan.visitor.SimpleAlgebraVisitor;
+import org.apache.tajo.storage.StorageConstants;
+import org.apache.tajo.util.KeyValueSet;
 import org.apache.tajo.util.TUtil;
 
 import java.util.*;
 
+import static org.apache.tajo.catalog.proto.CatalogProtos.StoreType.CSV;
+import static org.apache.tajo.catalog.proto.CatalogProtos.StoreType.TEXTFILE;
+
 public class PlannerUtil {
+
+  public static boolean checkIfSetSession(LogicalNode node) {
+    LogicalNode baseNode = node;
+    if (node instanceof LogicalRootNode) {
+      baseNode = ((LogicalRootNode) node).getChild();
+    }
+
+    return baseNode.getType() == NodeType.SET_SESSION;
+
+  }
 
   public static boolean checkIfDDLPlan(LogicalNode node) {
     LogicalNode baseNode = node;
@@ -775,5 +790,33 @@ public class PlannerUtil {
     }
 
     return explains.toString();
+  }
+
+  public static void applySessionToTableProperties(OverridableConf sessionVars,
+                                                   CatalogProtos.StoreType storeType,
+                                                   KeyValueSet tableProperties) {
+    if (storeType == CSV || storeType == TEXTFILE) {
+      if (sessionVars.containsKey(SessionVars.NULL_CHAR)) {
+        tableProperties.set(StorageConstants.TEXT_NULL, sessionVars.get(SessionVars.NULL_CHAR));
+      }
+
+      if (sessionVars.containsKey(SessionVars.TIMEZONE)) {
+        tableProperties.set(StorageConstants.TIMEZONE, sessionVars.get(SessionVars.TIMEZONE));
+      }
+    }
+  }
+
+  /**
+   * This method sets a set of table properties by System default configs.
+   * These properties are implicitly used to read or write rows in Table.
+   * Don't use this method for TableMeta to be stored in Catalog.
+   *
+   * @param systemConf System configuration
+   * @param meta TableMeta to be set
+   */
+  public static void applySystemDefaultToTableProperties(OverridableConf systemConf, TableMeta meta) {
+    if (!meta.containsOption(StorageConstants.TIMEZONE)) {
+      meta.putOption(StorageConstants.TIMEZONE, systemConf.get(SessionVars.TIMEZONE));
+    }
   }
 }

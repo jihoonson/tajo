@@ -330,7 +330,13 @@ public class QueryTestCaseBase {
     if (parsedResults.size() > 1) {
       assertNotNull("This script \"" + queryFileName + "\" includes two or more queries");
     }
-    ResultSet result = client.executeQueryAndGetResult(parsedResults.get(0).getHistoryStatement());
+
+    int idx = 0;
+    for (; idx < parsedResults.size() - 1; idx++) {
+      client.executeQueryAndGetResult(parsedResults.get(idx).getHistoryStatement()).close();
+    }
+
+    ResultSet result = client.executeQueryAndGetResult(parsedResults.get(idx).getHistoryStatement());
     assertNotNull("Query succeeded test", result);
     return result;
   }
@@ -532,6 +538,14 @@ public class QueryTestCaseBase {
    *   replaced by the first and second elements of <code>args</code> respectively</li>. It uses zero-based index.
    * </ul>
    *
+   * Example ddl
+   * <pre>
+   *   CREATE EXTERNAL TABLE ${0} (
+   *     t_timestamp  TIMESTAMP,
+   *     t_date    DATE
+   *   ) USING CSV LOCATION ${table.path}
+   * </pre>
+   *
    * @param ddlFileName A file name, containing a data definition statement.
    * @param dataFileName A file name, containing data rows, which columns have to be separated by vertical bar '|'.
    *                     This file name is used for replacing some format string indicating an external table location.
@@ -684,7 +698,7 @@ public class QueryTestCaseBase {
       return null;
     }
 
-    Path path = tableDesc.getPath();
+    Path path = new Path(tableDesc.getPath());
     return getTableFileContents(path);
   }
 
@@ -694,7 +708,7 @@ public class QueryTestCaseBase {
       return null;
     }
 
-    Path path = tableDesc.getPath();
+    Path path = new Path(tableDesc.getPath());
     FileSystem fs = path.getFileSystem(conf);
 
     return listFiles(fs, path);

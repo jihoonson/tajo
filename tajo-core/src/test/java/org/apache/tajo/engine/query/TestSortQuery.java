@@ -125,21 +125,14 @@ public class TestSortQuery extends QueryTestCaseBase {
   public final void testSortWithDate() throws Exception {
     // skip this test if catalog uses HCatalogStore.
     // It is because HCatalogStore does not support Time data type.
-    TimeZone oldTimeZone = TajoConf.setCurrentTimeZone(TimeZone.getTimeZone("UTC"));
-    TimeZone systemOldTimeZone = TimeZone.getDefault();
-    TimeZone.setDefault(TimeZone.getTimeZone("UTC"));
-    try {
-      if (!testingCluster.isHCatalogStoreRunning()) {
-        // create external table table1 (col1 timestamp, col2 date, col3 time) ...
-        executeDDL("create_table_with_date_ddl.sql", "table1");
 
-        ResultSet res = executeQuery();
-        assertResultSet(res);
-        cleanupQuery(res);
-      }
-    } finally {
-      TajoConf.setCurrentTimeZone(oldTimeZone);
-      TimeZone.setDefault(systemOldTimeZone);
+    if (!testingCluster.isHCatalogStoreRunning()) {
+      // create external table table1 (col1 timestamp, col2 date, col3 time) ...
+      executeDDL("create_table_with_date_ddl.sql", "table1");
+
+      ResultSet res = executeQuery();
+      assertResultSet(res);
+      cleanupQuery(res);
     }
   }
 
@@ -181,8 +174,8 @@ public class TestSortQuery extends QueryTestCaseBase {
     try {
       testingCluster.setAllTajoDaemonConfValue(ConfVars.$TEST_MIN_TASK_NUM.varname, "2");
       KeyValueSet tableOptions = new KeyValueSet();
-      tableOptions.set(StorageConstants.CSVFILE_DELIMITER, StorageConstants.DEFAULT_FIELD_DELIMITER);
-      tableOptions.set(StorageConstants.CSVFILE_NULL, "\\\\N");
+      tableOptions.set(StorageConstants.TEXT_DELIMITER, StorageConstants.DEFAULT_FIELD_DELIMITER);
+      tableOptions.set(StorageConstants.TEXT_NULL, "\\\\N");
 
       Schema schema = new Schema();
       schema.addColumn("id", Type.INT4);
@@ -209,8 +202,8 @@ public class TestSortQuery extends QueryTestCaseBase {
     try {
       testingCluster.setAllTajoDaemonConfValue(ConfVars.$TEST_MIN_TASK_NUM.varname, "2");
       KeyValueSet tableOptions = new KeyValueSet();
-      tableOptions.set(StorageConstants.CSVFILE_DELIMITER, StorageConstants.DEFAULT_FIELD_DELIMITER);
-      tableOptions.set(StorageConstants.CSVFILE_NULL, "\\\\N");
+      tableOptions.set(StorageConstants.TEXT_DELIMITER, StorageConstants.DEFAULT_FIELD_DELIMITER);
+      tableOptions.set(StorageConstants.TEXT_NULL, "\\\\N");
 
       Schema schema = new Schema();
       schema.addColumn("col1", Type.INT4);
@@ -237,8 +230,8 @@ public class TestSortQuery extends QueryTestCaseBase {
     try {
       testingCluster.setAllTajoDaemonConfValue(ConfVars.$TEST_MIN_TASK_NUM.varname, "2");
       KeyValueSet tableOptions = new KeyValueSet();
-      tableOptions.set(StorageConstants.CSVFILE_DELIMITER, StorageConstants.DEFAULT_FIELD_DELIMITER);
-      tableOptions.set(StorageConstants.CSVFILE_NULL, "\\\\N");
+      tableOptions.set(StorageConstants.TEXT_DELIMITER, StorageConstants.DEFAULT_FIELD_DELIMITER);
+      tableOptions.set(StorageConstants.TEXT_NULL, "\\\\N");
 
       Schema schema = new Schema();
       schema.addColumn("col1", Type.INT4);

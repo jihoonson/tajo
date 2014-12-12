@@ -42,7 +42,7 @@ public class TestDDLBuilder {
     schema1.addColumn("addr", TajoDataTypes.Type.TEXT);
 
     meta1 = CatalogUtil.newTableMeta(CatalogProtos.StoreType.CSV);
-    meta1.putOption(StorageConstants.CSVFILE_DELIMITER, StorageConstants.DEFAULT_FIELD_DELIMITER);
+    meta1.putOption(StorageConstants.TEXT_DELIMITER, StorageConstants.DEFAULT_FIELD_DELIMITER);
     meta1.putOption(StorageConstants.COMPRESSION_CODEC, GzipCodec.class.getName());
 
     Schema expressionSchema = new Schema();
@@ -58,7 +58,7 @@ public class TestDDLBuilder {
 
   @Test
   public void testBuildDDLForExternalTable() throws Exception {
-    TableDesc desc = new TableDesc("db1.table1", schema1, meta1, new Path("/table1"));
+    TableDesc desc = new TableDesc("db1.table1", schema1, meta1, new Path("/table1").toUri());
     desc.setPartitionMethod(partitionMethod1);
     desc.setExternal(true);
     assertEquals(FileUtil.readTextFileFromResource("results/testDDLBuilder/testBuildDDLForExternalTable.result"),
@@ -84,13 +84,13 @@ public class TestDDLBuilder {
         "key,key2",
         expressionSchema2);
 
-    TableDesc desc = new TableDesc("db1.TABLE2", schema2, meta1, new Path("/table1"));
+    TableDesc desc = new TableDesc("db1.TABLE2", schema2, meta1, new Path("/table1").toUri());
     desc.setPartitionMethod(partitionMethod2);
     desc.setExternal(true);
     assertEquals(FileUtil.readTextFileFromResource("results/testDDLBuilder/testBuildDDLQuotedTableName1.result"),
         DDLBuilder.buildDDLForExternalTable(desc));
 
-    desc = new TableDesc("db1.TABLE1", schema2, meta1, new Path("/table1"));
+    desc = new TableDesc("db1.TABLE1", schema2, meta1, new Path("/table1").toUri());
     desc.setPartitionMethod(partitionMethod2);
     desc.setExternal(false);
     assertEquals(FileUtil.readTextFileFromResource("results/testDDLBuilder/testBuildDDLQuotedTableName2.result"),
@@ -99,7 +99,7 @@ public class TestDDLBuilder {
 
   @Test
   public void testBuildDDLForBaseTable() throws Exception {
-    TableDesc desc = new TableDesc("db1.table2", schema1, meta1, new Path("/table1"));
+    TableDesc desc = new TableDesc("db1.table2", schema1, meta1, new Path("/table1").toUri());
     assertEquals(FileUtil.readTextFileFromResource("results/testDDLBuilder/testBuildDDLForBaseTable.result"),
         DDLBuilder.buildDDLForBaseTable(desc));
   }

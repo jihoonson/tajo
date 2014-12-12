@@ -19,11 +19,10 @@
 package org.apache.tajo;
 
 import com.google.common.collect.Maps;
-
-import java.util.Map;
-
 import org.apache.tajo.validation.Validator;
 import org.apache.tajo.validation.Validators;
+
+import java.util.Map;
 
 import static org.apache.tajo.SessionVars.VariableMode.*;
 import static org.apache.tajo.conf.TajoConf.ConfVars;
@@ -72,8 +71,8 @@ public enum SessionVars implements ConfigKey {
   ON_ERROR_STOP(ConfVars.$CLI_ERROR_STOP, "tsql will exist if an error occurs.", CLI_SIDE_VAR),
 
   // Timezone & Date ----------------------------------------------------------
-  TZ(ConfVars.$TIMEZONE, "Sets timezone", FROM_SHELL_ENV),
-  DATE_ORDER(ConfVars.$DATE_ORDER, "date order (default is YMD)", FROM_SHELL_ENV),
+  TIMEZONE(ConfVars.$TIMEZONE, "Sets timezone", CLI_SIDE_VAR),
+  DATE_ORDER(ConfVars.$DATE_ORDER, "date order (default is YMD)", CLI_SIDE_VAR),
 
   // Locales and Character set ------------------------------------------------
   // TODO - they are reserved variables, and we should support them.
@@ -121,7 +120,7 @@ public enum SessionVars implements ConfigKey {
       DEFAULT, Long.class, Validators.min("0")),
   MAX_OUTPUT_FILE_SIZE(ConfVars.$MAX_OUTPUT_FILE_SIZE, "Maximum per-output file size (mb). 0 means infinite.", DEFAULT,
       Long.class, Validators.min("0")),
-  NULL_CHAR(ConfVars.$CSVFILE_NULL, "null char of text file output", DEFAULT),
+  NULL_CHAR(ConfVars.$TEXT_NULL, "null char of text file output", DEFAULT),
   CODEGEN(ConfVars.$CODEGEN, "Runtime code generation enabled (experiment)", DEFAULT),
 
   // Behavior Control ---------------------------------------------------------

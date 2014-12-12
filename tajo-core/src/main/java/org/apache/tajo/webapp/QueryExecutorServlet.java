@@ -29,10 +29,7 @@ import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -62,14 +59,13 @@ public class QueryExecutorServlet extends HttpServlet {
   ObjectMapper om = new ObjectMapper();
 
   //queryRunnerId -> QueryRunner
+  //TODO We must handle the session.
   private final Map<String, QueryRunner> queryRunners = new HashMap<String, QueryRunner>();
 
   private TajoConf tajoConf;
   private TajoClient tajoClient;
 
   private ExecutorService queryRunnerExecutor = Executors.newFixedThreadPool(5);
-
-  private QueryRunnerCleaner queryRunnerCleaner;
 
   @Override
   public void init(ServletConfig config) throws ServletException {
@@ -80,8 +76,7 @@ public class QueryExecutorServlet extends HttpServlet {
       tajoConf = new TajoConf();
       tajoClient = new TajoClientImpl(tajoConf);
 
-      queryRunnerCleaner = new QueryRunnerCleaner();
-      queryRunnerCleaner.start();
+      new QueryRunnerCleaner().start();
     } catch (IOException e) {
       LOG.error(e.getMessage());
     }
@@ -103,11 +98,29 @@ public class QueryExecutorServlet extends HttpServlet {
       }
 
       if("runQuery".equals(action)) {
+        String prevQueryRunnerId = request.getParameter("prevQueryId");
+        if (prevQueryRunnerId != null) {
+          synchronized (queryRunners) {
+            QueryRunner runner = queryRunners.remove(prevQueryRunnerId);
+            if (runner != null) runner.setStop();
+          }
+        }
+
+        float allowedMemoryRatio = 0.5f; // if TajoMaster memory usage is over 50%, the request will be canceled
+        long maxMemory = Runtime.getRuntime().maxMemory();
+        long usedMemory = Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory();
+        if(usedMemory > maxMemory * allowedMemoryRatio) {
+          errorResponse(response, "Allowed memory size of " +
+              (maxMemory * allowedMemoryRatio) / (1024 * 1024) + " MB exhausted");
+          return;
+        }
+
         String query = request.getParameter("query");
         if(query == null || query.trim().isEmpty()) {
           errorResponse(response, "No query parameter");
           return;
         }
+
         String queryRunnerId = null;
         while(true) {
           synchronized(queryRunners) {
@@ -121,7 +134,8 @@ public class QueryExecutorServlet extends HttpServlet {
             }
           }
         }
-        QueryRunner queryRunner = new QueryRunner(queryRunnerId, query);
+        String database = request.getParameter("database");
+        QueryRunner queryRunner = new QueryRunner(queryRunnerId, query, database);
         try {
           queryRunner.sizeLimit = Integer.parseInt(request.getParameter("limitSize"));
         } catch (java.lang.NumberFormatException nfe) {
@@ -249,6 +263,7 @@ public class QueryExecutorServlet extends HttpServlet {
     AtomicBoolean stop = new AtomicBoolean(false);
     QueryId queryId;
     String query;
+    String database;
     long resultRows;
     int sizeLimit;
     long numOfRows;
@@ -261,8 +276,13 @@ public class QueryExecutorServlet extends HttpServlet {
     List<List<Object>> queryResult;
 
     public QueryRunner(String queryRunnerId, String query) {
+      this (queryRunnerId, query, "default");
+    }
+
+    public QueryRunner(String queryRunnerId, String query, String database) {
       this.queryRunnerId = queryRunnerId;
       this.query = query;
+      this.database = database;
     }
 
     public void setStop() {
@@ -274,6 +294,9 @@ public class QueryExecutorServlet extends HttpServlet {
       startTime = System.currentTimeMillis();
       try {
         tajoClient = TajoHAClientUtil.getTajoClient(tajoConf, tajoClient);
+
+        if (!tajoClient.getCurrentDatabase().equals(database))
+          tajoClient.selectDatabase(database);
 
         response = tajoClient.executeQuery(query);
 
@@ -292,6 +315,22 @@ public class QueryExecutorServlet extends HttpServlet {
             }
 
             progress.set(100);
+          }
+        } else if (response.getResultCode() == ClientProtos.ResultCode.ERROR) {
+          if (response.hasErrorMessage()) {
+            StringBuffer errorMessage = new StringBuffer(response.getErrorMessage());
+            String modifiedMessage;
+
+            if (errorMessage.length() > 200) {
+              modifiedMessage = errorMessage.substring(0, 200);
+            } else {
+              modifiedMessage = errorMessage.toString();
+            }
+            
+            String lineSeparator = System.getProperty("line.separator");
+            modifiedMessage = modifiedMessage.replaceAll(lineSeparator, "<br/>");
+
+            error = new Exception(modifiedMessage);
           }
         }
       } catch (Exception e) {

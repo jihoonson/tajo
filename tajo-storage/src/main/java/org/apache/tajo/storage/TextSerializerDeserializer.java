@@ -20,6 +20,7 @@ package org.apache.tajo.storage;
 
 import com.google.protobuf.Message;
 import org.apache.commons.codec.binary.Base64;
+import org.apache.tajo.TajoConstants;
 import org.apache.tajo.catalog.Column;
 import org.apache.tajo.common.TajoDataTypes;
 import org.apache.tajo.conf.TajoConf;
@@ -30,13 +31,14 @@ import org.apache.tajo.util.NumberUtil;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.util.TimeZone;
 
-//Compatibility with Apache Hive
+// Compatibility with Apache Hive
+@Deprecated
 public class TextSerializerDeserializer implements SerializerDeserializer {
   public static final byte[] trueBytes = "true".getBytes();
   public static final byte[] falseBytes = "false".getBytes();
   private ProtobufJsonFormat protobufJsonFormat = ProtobufJsonFormat.getInstance();
-
 
   @Override
   public int serialize(Column col, Datum datum, OutputStream out, byte[] nullCharacters) throws IOException {
@@ -85,12 +87,12 @@ public class TextSerializerDeserializer implements SerializerDeserializer {
         out.write(bytes);
         break;
       case TIME:
-        bytes = ((TimeDatum)datum).asChars(TajoConf.getCurrentTimeZone(), true).getBytes();
+        bytes = ((TimeDatum)datum).asChars(TimeZone.getDefault(), true).getBytes();
         length = bytes.length;
         out.write(bytes);
         break;
       case TIMESTAMP:
-        bytes = ((TimestampDatum)datum).asChars(TajoConf.getCurrentTimeZone(), true).getBytes();
+        bytes = ((TimestampDatum)datum).asChars(TimeZone.getDefault(), true).getBytes();
         length = bytes.length;
         out.write(bytes);
         break;

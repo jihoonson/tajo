@@ -65,15 +65,18 @@ import org.apache.tajo.plan.verifier.VerificationState;
 import org.apache.tajo.plan.verifier.VerifyException;
 import org.apache.tajo.storage.*;
 import org.apache.tajo.util.CommonTestingUtil;
+import org.apache.tajo.util.ProtoUtil;
 import org.apache.tajo.worker.TaskAttemptContext;
 
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.TimeZone;
 
 import static org.apache.tajo.TajoConstants.DEFAULT_TABLESPACE_NAME;
 import static org.apache.tajo.catalog.proto.CatalogProtos.AlterTablespaceProto;
+import static org.apache.tajo.catalog.proto.CatalogProtos.UpdateTableStatsProto;
 import static org.apache.tajo.ipc.ClientProtos.SerializedResultSet;
 import static org.apache.tajo.ipc.ClientProtos.SubmitQueryResponse;
 
@@ -211,7 +214,39 @@ public class GlobalEngine extends AbstractService {
     responseBuilder.setIsForwarded(false);
     responseBuilder.setUserName(queryContext.get(SessionVars.USERNAME));
 
-    if (PlannerUtil.checkIfDDLPlan(rootNode)) {
+    if (PlannerUtil.checkIfSetSession(rootNode)) {
+
+      SetSessionNode setSessionNode = rootNode.getChild();
+
+      final String varName = setSessionNode.getName();
+
+      // SET CATALOG 'XXX'
+      if (varName.equals(SessionVars.CURRENT_DATABASE.name())) {
+        String databaseName = setSessionNode.getValue();
+
+        if (catalog.existDatabase(databaseName)) {
+          session.selectDatabase(setSessionNode.getValue());
+        } else {
+          responseBuilder.setQueryId(QueryIdFactory.NULL_QUERY_ID.getProto());
+          responseBuilder.setResultCode(ClientProtos.ResultCode.ERROR);
+          responseBuilder.setErrorMessage("database \"" + databaseName + "\" does not exists.");
+          return responseBuilder.build();
+        }
+
+        // others
+      } else {
+        if (setSessionNode.isDefaultValue()) {
+          session.removeVariable(varName);
+        } else {
+          session.setVariable(varName, setSessionNode.getValue());
+        }
+      }
+
+      context.getSystemMetrics().counter("Query", "numDDLQuery").inc();
+      responseBuilder.setQueryId(QueryIdFactory.NULL_QUERY_ID.getProto());
+      responseBuilder.setResultCode(ClientProtos.ResultCode.OK);
+
+    } else if (PlannerUtil.checkIfDDLPlan(rootNode)) {
       context.getSystemMetrics().counter("Query", "numDDLQuery").inc();
       updateQuery(queryContext, rootNode.getChild());
       responseBuilder.setQueryId(QueryIdFactory.NULL_QUERY_ID.getProto());
@@ -269,7 +304,6 @@ public class GlobalEngine extends AbstractService {
       responseBuilder.setQueryId(queryId.getProto());
       responseBuilder.setMaxRowNum(maxRow);
       responseBuilder.setTableDesc(desc.getProto());
-      responseBuilder.setSessionVariables(session.getProto().getVariables());
       responseBuilder.setResultCode(ClientProtos.ResultCode.OK);
 
       // NonFromQuery indicates a form of 'select a, x+y;'
@@ -325,6 +359,8 @@ public class GlobalEngine extends AbstractService {
         LOG.info("Query is forwarded to " + queryInfo.getQueryMasterHost() + ":" + queryInfo.getQueryMasterPort());
       }
     }
+
+    responseBuilder.setSessionVars(ProtoUtil.convertFromMap(session.getAllVariables()));
     SubmitQueryResponse response = responseBuilder.build();
     return response;
   }
@@ -335,22 +371,19 @@ public class GlobalEngine extends AbstractService {
     String queryId = nodeUniqName + "_" + System.currentTimeMillis();
 
     FileSystem fs = TajoConf.getWarehouseDir(context.getConf()).getFileSystem(context.getConf());
-    Path stagingDir = QueryMasterTask.initStagingDir(context.getConf(), fs, queryId.toString());
-
+    Path stagingDir = QueryMasterTask.initStagingDir(context.getConf(), queryId.toString(), queryContext);
     Path stagingResultDir = new Path(stagingDir, TajoConstants.RESULT_DIR_NAME);
-    fs.mkdirs(stagingResultDir);
 
     TableDesc tableDesc = null;
     Path finalOutputDir = null;
     if (insertNode.getTableName() != null) {
       tableDesc = this.catalog.getTableDesc(insertNode.getTableName());
-      finalOutputDir = tableDesc.getPath();
+      finalOutputDir = new Path(tableDesc.getPath());
     } else {
       finalOutputDir = insertNode.getPath();
     }
 
-    TaskAttemptContext taskAttemptContext =
-        new TaskAttemptContext(queryContext, null, null, (CatalogProtos.FragmentProto[]) null, stagingDir);
+    TaskAttemptContext taskAttemptContext = new TaskAttemptContext(queryContext, null, null, null, stagingDir);
     taskAttemptContext.setOutputPath(new Path(stagingResultDir, "part-01-000000"));
 
     EvalExprExec evalExprExec = new EvalExprExec(taskAttemptContext, (EvalExprNode) insertNode.getChild());
@@ -401,8 +434,11 @@ public class GlobalEngine extends AbstractService {
       stats.setNumBytes(volume);
       stats.setNumRows(1);
 
-      catalog.dropTable(insertNode.getTableName());
-      catalog.createTable(tableDesc);
+      UpdateTableStatsProto.Builder builder = UpdateTableStatsProto.newBuilder();
+      builder.setTableName(tableDesc.getName());
+      builder.setStats(stats.getProto());
+
+      catalog.updateTableStats(builder.build());
 
       responseBuilder.setTableDesc(tableDesc.getProto());
     } else {
@@ -460,6 +496,8 @@ public class GlobalEngine extends AbstractService {
   private boolean updateQuery(QueryContext queryContext, LogicalNode root) throws IOException {
 
     switch (root.getType()) {
+      case SET_SESSION:
+
       case CREATE_DATABASE:
         CreateDatabaseNode createDatabase = (CreateDatabaseNode) root;
         createDatabase(queryContext, createDatabase.getDatabaseName(), null, createDatabase.isIfNotExists());
@@ -655,7 +693,7 @@ public class GlobalEngine extends AbstractService {
 
       Path warehousePath = new Path(TajoConf.getWarehouseDir(context.getConf()), databaseName);
       TableDesc tableDesc = catalog.getTableDesc(databaseName, simpleTableName);
-      Path tablePath = tableDesc.getPath();
+      Path tablePath = new Path(tableDesc.getPath());
       if (tablePath.getParent() == null ||
           !tablePath.getParent().toUri().getPath().equals(warehousePath.toUri().getPath())) {
         throw new IOException("Can't truncate external table:" + eachTableName + ", data dir=" + tablePath +
@@ -665,7 +703,7 @@ public class GlobalEngine extends AbstractService {
     }
 
     for (TableDesc eachTable: tableDescList) {
-      Path path = eachTable.getPath();
+      Path path = new Path(eachTable.getPath());
       LOG.info("Truncate table: " + eachTable.getName() + ", delete all data files in " + path);
       FileSystem fs = path.getFileSystem(context.getConf());
 
@@ -768,7 +806,7 @@ public class GlobalEngine extends AbstractService {
     }
 
     TableDesc desc = new TableDesc(CatalogUtil.buildFQName(databaseName, simpleTableName),
-        schema, meta, path, isExternal);
+        schema, meta, path.toUri(), isExternal);
     desc.setStats(stats);
     if (partitionDesc != null) {
       desc.setPartitionMethod(partitionDesc);
@@ -867,7 +905,7 @@ public class GlobalEngine extends AbstractService {
       }
     }
 
-    Path path = catalog.getTableDesc(qualifiedName).getPath();
+    Path path = new Path(catalog.getTableDesc(qualifiedName).getPath());
     catalog.dropTable(qualifiedName);
 
     if (purge) {

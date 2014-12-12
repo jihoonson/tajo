@@ -28,7 +28,10 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.service.AbstractService;
-import org.apache.tajo.*;
+import org.apache.tajo.QueryId;
+import org.apache.tajo.QueryIdFactory;
+import org.apache.tajo.TajoIdProtos;
+import org.apache.tajo.TajoProtos;
 import org.apache.tajo.catalog.*;
 import org.apache.tajo.catalog.exception.NoSuchDatabaseException;
 import org.apache.tajo.catalog.partition.PartitionMethodDesc;
@@ -140,17 +143,18 @@ public class TajoMasterClientService extends AbstractService {
         String sessionId =
             context.getSessionManager().createSession(request.getUsername(), databaseName);
         CreateSessionResponse.Builder builder = CreateSessionResponse.newBuilder();
-        builder.setState(CreateSessionResponse.ResultState.SUCCESS);
+        builder.setResultCode(ResultCode.OK);
         builder.setSessionId(TajoIdProtos.SessionIdProto.newBuilder().setId(sessionId).build());
+        builder.setSessionVars(ProtoUtil.convertFromMap(context.getSessionManager().getAllVariables(sessionId)));
         return builder.build();
       } catch (NoSuchDatabaseException nsde) {
         CreateSessionResponse.Builder builder = CreateSessionResponse.newBuilder();
-        builder.setState(CreateSessionResponse.ResultState.FAILED);
+        builder.setResultCode(ResultCode.ERROR);
         builder.setMessage(nsde.getMessage());
         return builder.build();
       } catch (InvalidSessionException e) {
         CreateSessionResponse.Builder builder = CreateSessionResponse.newBuilder();
-        builder.setState(CreateSessionResponse.ResultState.FAILED);
+        builder.setResultCode(ResultCode.ERROR);
         builder.setMessage(e.getMessage());
         return builder.build();
       }
@@ -159,26 +163,42 @@ public class TajoMasterClientService extends AbstractService {
     @Override
     public BoolProto removeSession(RpcController controller, TajoIdProtos.SessionIdProto request)
         throws ServiceException {
+
       if (request != null) {
         context.getSessionManager().removeSession(request.getId());
       }
-      return ProtoUtil.TRUE;
+
+      return BOOL_TRUE;
+    }
+
+    public SessionUpdateResponse buildSessionUpdateOnSuccess(Map<String, String> variables) {
+      SessionUpdateResponse.Builder builder = SessionUpdateResponse.newBuilder();
+      builder.setResultCode(ResultCode.OK);
+      builder.setSessionVars(new KeyValueSet(variables).getProto());
+      return builder.build();
+    }
+
+    public SessionUpdateResponse buildSessionUpdateOnError(String message) {
+      SessionUpdateResponse.Builder builder = SessionUpdateResponse.newBuilder();
+      builder.setResultCode(ResultCode.ERROR);
+      builder.setMessage(message);
+      return builder.build();
     }
 
     @Override
-    public BoolProto updateSessionVariables(RpcController controller, UpdateSessionVariableRequest request)
+    public SessionUpdateResponse updateSessionVariables(RpcController controller, UpdateSessionVariableRequest request)
         throws ServiceException {
       try {
         String sessionId = request.getSessionId().getId();
-        for (KeyValueProto kv : request.getSetVariables().getKeyvalList()) {
+        for (KeyValueProto kv : request.getSessionVars().getKeyvalList()) {
           context.getSessionManager().setVariable(sessionId, kv.getKey(), kv.getValue());
         }
         for (String unsetVariable : request.getUnsetVariablesList()) {
           context.getSessionManager().removeVariable(sessionId, unsetVariable);
         }
-        return ProtoUtil.TRUE;
+        return buildSessionUpdateOnSuccess(context.getSessionManager().getAllVariables(sessionId));
       } catch (Throwable t) {
-        throw new ServiceException(t);
+        return buildSessionUpdateOnError("Invalid Session Id" + request.getSessionId());
       }
     }
 
@@ -317,21 +337,22 @@ public class TajoMasterClientService extends AbstractService {
 
         // if we cannot get a QueryInProgress instance from QueryJobManager,
         // the instance can be in the finished query list.
+        QueryInfo queryInfo = null;
         if (queryInProgress == null) {
-          queryInProgress = context.getQueryJobManager().getFinishedQuery(queryId);
+          queryInfo = context.getQueryJobManager().getFinishedQuery(queryId);
+        } else {
+          queryInfo = queryInProgress.getQueryInfo();
         }
 
         GetQueryResultResponse.Builder builder = GetQueryResultResponse.newBuilder();
 
-        // If we cannot the QueryInProgress instance from the finished list,
+        // If we cannot the QueryInfo instance from the finished list,
         // the query result was expired due to timeout.
         // In this case, we will result in error.
-        if (queryInProgress == null) {
+        if (queryInfo == null) {
           builder.setErrorMessage("No such query: " + queryId.toString());
           return builder.build();
         }
-
-        QueryInfo queryInfo = queryInProgress.getQueryInfo();
 
         try {
           //TODO After implementation Tajo's user security feature, Should be modified.
@@ -402,14 +423,12 @@ public class TajoMasterClientService extends AbstractService {
         context.getSessionManager().touch(request.getSessionId().getId());
         GetQueryListResponse.Builder builder = GetQueryListResponse.newBuilder();
 
-        Collection<QueryInProgress> queries
+        Collection<QueryInfo> queries
             = context.getQueryJobManager().getFinishedQueries();
 
         BriefQueryInfo.Builder infoBuilder = BriefQueryInfo.newBuilder();
 
-        for (QueryInProgress queryInProgress : queries) {
-          QueryInfo queryInfo = queryInProgress.getQueryInfo();
-
+        for (QueryInfo queryInfo : queries) {
           infoBuilder.setQueryId(queryInfo.getQueryId().getProto());
           infoBuilder.setState(queryInfo.getQueryState());
           infoBuilder.setQuery(queryInfo.getSql());
@@ -450,12 +469,14 @@ public class TajoMasterClientService extends AbstractService {
           QueryInProgress queryInProgress = context.getQueryJobManager().getQueryInProgress(queryId);
 
           // It will try to find a query status from a finished query list.
+          QueryInfo queryInfo = null;
           if (queryInProgress == null) {
-            queryInProgress = context.getQueryJobManager().getFinishedQuery(queryId);
+            queryInfo = context.getQueryJobManager().getFinishedQuery(queryId);
+          } else {
+            queryInfo = queryInProgress.getQueryInfo();
           }
 
-          if (queryInProgress != null) {
-            QueryInfo queryInfo = queryInProgress.getQueryInfo();
+          if (queryInfo != null) {
             builder.setResultCode(ResultCode.OK);
             builder.setState(queryInfo.getQueryState());
             builder.setProgress(queryInfo.getProgress());
@@ -535,6 +556,37 @@ public class TajoMasterClientService extends AbstractService {
       } catch (Throwable t) {
         throw new ServiceException(t);
       }
+    }
+
+    @Override
+    public GetQueryInfoResponse getQueryInfo(RpcController controller, QueryIdRequest request) throws ServiceException {
+      GetQueryInfoResponse.Builder builder = GetQueryInfoResponse.newBuilder();
+
+      try {
+        context.getSessionManager().touch(request.getSessionId().getId());
+        QueryId queryId = new QueryId(request.getQueryId());
+
+        QueryJobManager queryJobManager = context.getQueryJobManager();
+        QueryInProgress queryInProgress = queryJobManager.getQueryInProgress(queryId);
+
+        QueryInfo queryInfo = null;
+        if (queryInProgress == null) {
+          queryInfo = context.getHistoryReader().getQueryInfo(queryId.toString());
+        } else {
+          queryInfo = queryInProgress.getQueryInfo();
+        }
+
+        if (queryInfo != null) {
+          builder.setQueryInfo(queryInfo.getProto());
+        }
+        builder.setResultCode(ResultCode.OK);
+      } catch (Throwable t) {
+        LOG.warn(t.getMessage(), t);
+        builder.setResultCode(ResultCode.ERROR);
+        builder.setErrorMessage(org.apache.hadoop.util.StringUtils.stringifyException(t));
+      }
+
+      return builder.build();
     }
 
     /**

@@ -24,7 +24,6 @@ import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.yarn.api.records.Container;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.api.records.Priority;
 import org.apache.hadoop.yarn.api.records.Resource;
@@ -58,12 +57,16 @@ import org.apache.tajo.master.TaskRunnerGroupEvent.EventType;
 import org.apache.tajo.master.event.*;
 import org.apache.tajo.master.event.QueryUnitAttemptScheduleEvent.QueryUnitAttemptScheduleContext;
 import org.apache.tajo.master.querymaster.QueryUnit.IntermediateEntry;
+import org.apache.tajo.master.container.TajoContainer;
+import org.apache.tajo.master.container.TajoContainerId;
 import org.apache.tajo.plan.util.PlannerUtil;
 import org.apache.tajo.plan.logical.*;
 import org.apache.tajo.storage.StorageManager;
 import org.apache.tajo.storage.fragment.FileFragment;
 import org.apache.tajo.unit.StorageUnit;
 import org.apache.tajo.util.KeyValueSet;
+import org.apache.tajo.util.history.QueryUnitHistory;
+import org.apache.tajo.util.history.SubQueryHistory;
 import org.apache.tajo.worker.FetchImpl;
 
 import java.io.IOException;
@@ -103,7 +106,8 @@ public class SubQuery implements EventHandler<SubQueryEvent> {
   private long finishTime;
 
   volatile Map<QueryUnitId, QueryUnit> tasks = new ConcurrentHashMap<QueryUnitId, QueryUnit>();
-  volatile Map<ContainerId, Container> containers = new ConcurrentHashMap<ContainerId, Container>();
+  volatile Map<TajoContainerId, TajoContainer> containers = new ConcurrentHashMap<TajoContainerId,
+    TajoContainer>();
 
   private static final DiagnosticsUpdateTransition DIAGNOSTIC_UPDATE_TRANSITION = new DiagnosticsUpdateTransition();
   private static final InternalErrorTransition INTERNAL_ERROR_TRANSITION = new InternalErrorTransition();
@@ -280,6 +284,7 @@ public class SubQuery implements EventHandler<SubQueryEvent> {
   private TaskSchedulerContext schedulerContext;
   private List<IntermediateEntry> hashShuffleIntermediateEntries = new ArrayList<IntermediateEntry>();
   private AtomicInteger completeReportReceived = new AtomicInteger(0);
+  private SubQueryHistory finalSubQueryHistory;
 
   public SubQuery(QueryMasterTask.QueryMasterTaskContext context, MasterPlan masterPlan,
                   ExecutionBlock block, StorageManager sm) {
@@ -392,6 +397,76 @@ public class SubQuery implements EventHandler<SubQueryEvent> {
 
   public void addTask(QueryUnit task) {
     tasks.put(task.getId(), task);
+  }
+
+  public SubQueryHistory getSubQueryHistory() {
+    if (finalSubQueryHistory != null) {
+      if (finalSubQueryHistory.getFinishTime() == 0) {
+        finalSubQueryHistory = makeSubQueryHistory();
+        finalSubQueryHistory.setQueryUnits(makeQueryUnitHistories());
+      }
+      return finalSubQueryHistory;
+    } else {
+      return makeSubQueryHistory();
+    }
+  }
+
+  private List<QueryUnitHistory> makeQueryUnitHistories() {
+    List<QueryUnitHistory> queryUnitHistories = new ArrayList<QueryUnitHistory>();
+
+    for(QueryUnit eachQueryUnit: getQueryUnits()) {
+      queryUnitHistories.add(eachQueryUnit.getQueryUnitHistory());
+    }
+
+    return queryUnitHistories;
+  }
+
+  private SubQueryHistory makeSubQueryHistory() {
+    SubQueryHistory subQueryHistory = new SubQueryHistory();
+
+    subQueryHistory.setExecutionBlockId(getId().toString());
+    subQueryHistory.setPlan(PlannerUtil.buildExplainString(block.getPlan()));
+    subQueryHistory.setState(getState().toString());
+    subQueryHistory.setStartTime(startTime);
+    subQueryHistory.setFinishTime(finishTime);
+    subQueryHistory.setSucceededObjectCount(succeededObjectCount);
+    subQueryHistory.setKilledObjectCount(killedObjectCount);
+    subQueryHistory.setFailedObjectCount(failedObjectCount);
+    subQueryHistory.setTotalScheduledObjectsCount(totalScheduledObjectsCount);
+    subQueryHistory.setHostLocalAssigned(getTaskScheduler().getHostLocalAssigned());
+    subQueryHistory.setRackLocalAssigned(getTaskScheduler().getRackLocalAssigned());
+
+    long totalInputBytes = 0;
+    long totalReadBytes = 0;
+    long totalReadRows = 0;
+    long totalWriteBytes = 0;
+    long totalWriteRows = 0;
+    int numShuffles = 0;
+    for(QueryUnit eachQueryUnit: getQueryUnits()) {
+      numShuffles = eachQueryUnit.getShuffleOutpuNum();
+      if (eachQueryUnit.getLastAttempt() != null) {
+        TableStats inputStats = eachQueryUnit.getLastAttempt().getInputStats();
+        if (inputStats != null) {
+          totalInputBytes += inputStats.getNumBytes();
+          totalReadBytes += inputStats.getReadBytes();
+          totalReadRows += inputStats.getNumRows();
+        }
+        TableStats outputStats = eachQueryUnit.getLastAttempt().getResultStats();
+        if (outputStats != null) {
+          totalWriteBytes += outputStats.getNumBytes();
+          totalWriteRows += outputStats.getNumRows();
+        }
+      }
+    }
+
+    subQueryHistory.setTotalInputBytes(totalInputBytes);
+    subQueryHistory.setTotalReadBytes(totalReadBytes);
+    subQueryHistory.setTotalReadRows(totalReadRows);
+    subQueryHistory.setTotalWriteBytes(totalWriteBytes);
+    subQueryHistory.setTotalWriteRows(totalWriteRows);
+    subQueryHistory.setNumShuffles(numShuffles);
+    subQueryHistory.setProgress(getProgress());
+    return subQueryHistory;
   }
 
   /**
@@ -588,13 +663,6 @@ public class SubQuery implements EventHandler<SubQueryEvent> {
   private void releaseContainers() {
     // If there are still live TaskRunners, try to kill the containers.
     eventHandler.handle(new TaskRunnerGroupEvent(EventType.CONTAINER_REMOTE_CLEANUP, getId(), containers.values()));
-  }
-
-  public void releaseContainer(ContainerId containerId) {
-    // try to kill the container.
-    ArrayList<Container> list = new ArrayList<Container>();
-    list.add(containers.get(containerId));
-    eventHandler.handle(new TaskRunnerGroupEvent(EventType.CONTAINER_REMOTE_CLEANUP, getId(), list));
   }
 
   /**
@@ -986,7 +1054,7 @@ public class SubQuery implements EventHandler<SubQueryEvent> {
         // After calling this method, partition paths are removed from the physical plan.
         fragments = Repartitioner.getFragmentsFromPartitionedTable(subQuery.getStorageManager(), scan, table);
       } else {
-        Path inputPath = table.getPath();
+        Path inputPath = new Path(table.getPath());
         fragments = subQuery.getStorageManager().getSplits(scan.getCanonicalName(), meta, table.getSchema(), inputPath);
       }
 
@@ -1056,8 +1124,8 @@ public class SubQuery implements EventHandler<SubQueryEvent> {
       try {
         SubQueryContainerAllocationEvent allocationEvent =
             (SubQueryContainerAllocationEvent) event;
-        for (Container container : allocationEvent.getAllocatedContainer()) {
-          ContainerId cId = container.getId();
+        for (TajoContainer container : allocationEvent.getAllocatedContainer()) {
+          TajoContainerId cId = container.getId();
           if (subQuery.containers.containsKey(cId)) {
             subQuery.eventHandler.handle(new SubQueryDiagnosticsUpdateEvent(subQuery.getId(),
                 "Duplicated containers are allocated: " + cId.toString()));
@@ -1172,6 +1240,9 @@ public class SubQuery implements EventHandler<SubQueryEvent> {
 
       getContext().getQueryMasterContext().getQueryMaster().cleanupExecutionBlock(ebIds);
     }
+
+    this.finalSubQueryHistory = makeSubQueryHistory();
+    this.finalSubQueryHistory.setQueryUnits(makeQueryUnitHistories());
   }
 
   public List<IntermediateEntry> getHashShuffleIntermediateEntries() {

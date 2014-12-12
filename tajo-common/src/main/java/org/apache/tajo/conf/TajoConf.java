@@ -18,8 +18,8 @@
 
 package org.apache.tajo.conf;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
-
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -39,16 +39,10 @@ import java.io.PrintStream;
 import java.net.InetSocketAddress;
 import java.util.Map;
 import java.util.TimeZone;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class TajoConf extends Configuration {
-
-  private static TimeZone CURRENT_TIMEZONE;
+  private static TimeZone SYSTEM_TIMEZONE;
   private static int DATE_ORDER = -1;
-  private static final ReentrantReadWriteLock confLock = new ReentrantReadWriteLock();
-  private static final Lock writeLock = confLock.writeLock();
-  private static final Lock readLock = confLock.readLock();
   
   private static final Map<String, ConfVars> vars = TUtil.newHashMap();
 
@@ -59,8 +53,6 @@ public class TajoConf extends Configuration {
     Configuration.addDefaultResource("storage-site.xml");
     Configuration.addDefaultResource("tajo-default.xml");
     Configuration.addDefaultResource("tajo-site.xml");
-
-    confStaticInit();
     
     for (ConfVars confVars: ConfVars.values()) {
       vars.put(confVars.keyname(), confVars);
@@ -82,66 +74,37 @@ public class TajoConf extends Configuration {
     addResource(path);
   }
 
-  private static void confStaticInit() {
-    TimeZone.setDefault(getCurrentTimeZone());
-    getDateOrder();
+  @SuppressWarnings("unused")
+  public TimeZone getSystemTimezone() {
+    return TimeZone.getTimeZone(getVar(ConfVars.$TIMEZONE));
   }
 
-  public static TimeZone getCurrentTimeZone() {
-    writeLock.lock();
-    try {
-      if (CURRENT_TIMEZONE == null) {
-        TajoConf tajoConf = new TajoConf();
-        CURRENT_TIMEZONE = TimeZone.getTimeZone(tajoConf.getVar(ConfVars.$TIMEZONE));
-      }
-      return CURRENT_TIMEZONE;
-    } finally {
-      writeLock.unlock();
-    }
-  }
-
-  public static TimeZone setCurrentTimeZone(TimeZone timeZone) {
-    writeLock.lock();
-    try {
-      TimeZone oldTimeZone = CURRENT_TIMEZONE;
-      CURRENT_TIMEZONE = timeZone;
-      return oldTimeZone;
-    } finally {
-      writeLock.unlock();
-    }
+  public void setSystemTimezone(TimeZone timezone) {
+    setVar(ConfVars.$TIMEZONE, timezone.getID());
   }
 
   public static int getDateOrder() {
-    writeLock.lock();
-    try {
-      if (DATE_ORDER < 0) {
-        TajoConf tajoConf = new TajoConf();
-        String dateOrder = tajoConf.getVar(ConfVars.$DATE_ORDER);
-        if ("YMD".equals(dateOrder)) {
-          DATE_ORDER = DateTimeConstants.DATEORDER_YMD;
-        } else if ("DMY".equals(dateOrder)) {
-          DATE_ORDER = DateTimeConstants.DATEORDER_DMY;
-        } else if ("MDY".equals(dateOrder)) {
-          DATE_ORDER = DateTimeConstants.DATEORDER_MDY;
-        } else {
-          DATE_ORDER = DateTimeConstants.DATEORDER_YMD;
-        }
+    if (DATE_ORDER < 0) {
+      TajoConf tajoConf = new TajoConf();
+      String dateOrder = tajoConf.getVar(ConfVars.$DATE_ORDER);
+      if ("YMD".equals(dateOrder)) {
+        DATE_ORDER = DateTimeConstants.DATEORDER_YMD;
+      } else if ("DMY".equals(dateOrder)) {
+        DATE_ORDER = DateTimeConstants.DATEORDER_DMY;
+      } else if ("MDY".equals(dateOrder)) {
+        DATE_ORDER = DateTimeConstants.DATEORDER_MDY;
+      } else {
+        DATE_ORDER = DateTimeConstants.DATEORDER_YMD;
       }
-      return DATE_ORDER;
-    } finally {
-      writeLock.unlock();
     }
+    return DATE_ORDER;
   }
 
+  @VisibleForTesting
   public static int setDateOrder(int dateOrder) {
-    writeLock.lock();
-    try {
-      int oldDateOrder = DATE_ORDER;
-      DATE_ORDER = dateOrder;
-      return oldDateOrder;
-    } finally {
-    	writeLock.unlock();
-    }
+    int oldDateOrder = DATE_ORDER;
+    DATE_ORDER = dateOrder;
+    return oldDateOrder;
   }
 
   public static enum ConfVars implements ConfigKey {
@@ -155,8 +118,7 @@ public class TajoConf extends Configuration {
     // a username for a running Tajo cluster
     ROOT_DIR("tajo.rootdir", "file:///tmp/tajo-${user.name}/", 
         Validators.groups(Validators.notNull(), Validators.pathUrl())),
-    USERNAME("tajo.username", "${user.name}", 
-        Validators.groups(Validators.notNull(), Validators.javaString())),
+    USERNAME("tajo.username", "${user.name}", Validators.javaString()),
 
     // Configurable System Directories
     WAREHOUSE_DIR("tajo.warehouse.directory", EMPTY_VALUE, Validators.pathUrl()),
@@ -193,8 +155,7 @@ public class TajoConf extends Configuration {
     WORKER_QM_RPC_ADDRESS("tajo.worker.qm-rpc.address", "0.0.0.0:28093", Validators.networkAddr()),
 
     // Tajo Worker Temporal Directories
-    WORKER_TEMPORAL_DIR("tajo.worker.tmpdir.locations", "/tmp/tajo-${user.name}/tmpdir", 
-        Validators.pathUrl()),
+    WORKER_TEMPORAL_DIR("tajo.worker.tmpdir.locations", "/tmp/tajo-${user.name}/tmpdir", Validators.pathUrlList()),
     WORKER_TEMPORAL_DIR_CLEANUP("tajo.worker.tmpdir.cleanup-at-startup", false, Validators.bool()),
 
     // Tajo Worker Resources
@@ -296,6 +257,11 @@ public class TajoConf extends Configuration {
     // Metrics ----------------------------------------------------------------
     METRICS_PROPERTY_FILENAME("tajo.metrics.property.file", "tajo-metrics.properties"),
 
+    // Query History  ---------------------------------------------------------
+    HISTORY_QUERY_DIR("tajo.history.query.dir", STAGING_ROOT_DIR.defaultVal + "/history"),
+    HISTORY_TASK_DIR("tajo.history.task.dir", "file:///tmp/tajo-${user.name}/history"),
+    HISTORY_EXPIRY_TIME_DAY("tajo.history.expiry-time-day", 7),
+
     // Misc -------------------------------------------------------------------
 
     // Geo IP
@@ -355,11 +321,11 @@ public class TajoConf extends Configuration {
     $CLI_ERROR_STOP("tajo.cli.error.stop", false),
 
     // Timezone & Date ----------------------------------------------------------
-    $TIMEZONE("tajo.timezone", System.getProperty("user.timezone")),
-    $DATE_ORDER("tajo.date.order", "YMD"),
+    $TIMEZONE("tajo.timezone", TimeZone.getDefault().getID()),
+    $DATE_ORDER("tajo.datetime.date-order", "YMD"),
 
     // FILE FORMAT
-    $CSVFILE_NULL("tajo.csvfile.null", "\\\\N"),
+    $TEXT_NULL("tajo.text.null", "\\\\N"),
 
     // Only for Debug and Testing
     $DEBUG_ENABLED("tajo.debug.enabled", false),
@@ -666,7 +632,15 @@ public class TajoConf extends Configuration {
     return path.indexOf("file:/") == 0 || path.indexOf("hdfs:/") == 0;
   }
 
-  public static Path getStagingDir(TajoConf conf) throws IOException {
+  /**
+   * It returns the default root staging directory used by queries without a target table or
+   * a specified output directory. An example query is <pre>SELECT a,b,c FROM XXX;</pre>.
+   *
+   * @param conf TajoConf
+   * @return Path which points the default staging directory
+   * @throws IOException
+   */
+  public static Path getDefaultRootStagingDir(TajoConf conf) throws IOException {
     String stagingDirString = conf.getVar(ConfVars.STAGING_ROOT_DIR);
     if (!hasScheme(stagingDirString)) {
       Path warehousePath = getWarehouseDir(conf);
@@ -676,6 +650,27 @@ public class TajoConf extends Configuration {
       return path;
     }
     return new Path(stagingDirString);
+  }
+
+  public static Path getQueryHistoryDir(TajoConf conf) throws IOException {
+    String historyDirString = conf.getVar(ConfVars.HISTORY_QUERY_DIR);
+    if (!hasScheme(historyDirString)) {
+      Path stagingPath = getDefaultRootStagingDir(conf);
+      FileSystem fs = stagingPath.getFileSystem(conf);
+      Path path = new Path(fs.getUri().toString(), historyDirString);
+      conf.setVar(ConfVars.HISTORY_QUERY_DIR, path.toString());
+      return path;
+    }
+    return new Path(historyDirString);
+  }
+
+  public static Path getTaskHistoryDir(TajoConf conf) throws IOException {
+    String historyDirString = conf.getVar(ConfVars.HISTORY_TASK_DIR);
+    if (!hasScheme(historyDirString)) {
+      //Local dir
+      historyDirString = "file://" + historyDirString;
+    }
+    return new Path(historyDirString);
   }
 
   public static Path getSystemConfPath(TajoConf conf) {

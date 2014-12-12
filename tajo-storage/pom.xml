@@ -1,5 +1,5 @@
-<?xml version="1.0" encoding="UTF-8"?>
 <!--
+<?xml version="1.0" encoding="UTF-8"?>
   Copyright 2012 Database Lab., Korea Univ.
 
   Licensed under the Apache License, Version 2.0 (the "License");
@@ -71,7 +71,7 @@
         </executions>
         <configuration>
           <excludes>
-            <exclude>src/test/resources/testVariousTypes.avsc</exclude>
+            <exclude>src/test/resources/dataset/**</exclude>
           </excludes>
         </configuration>
       </plugin>
@@ -179,13 +179,8 @@
 
     <dependency>
       <groupId>org.apache.avro</groupId>
-      <artifactId>trevni-core</artifactId>
-      <version>1.7.3</version>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.avro</groupId>
-      <artifactId>trevni-avro</artifactId>
-      <version>1.7.3</version>
+      <artifactId>avro-mapred</artifactId>
+      <version>1.7.7</version>
       <exclusions>
         <exclusion>
           <groupId>org.apache.hadoop</groupId>
@@ -313,6 +308,15 @@
       <groupId>com.twitter</groupId>
       <artifactId>parquet-format</artifactId>
       <version>${parquet.format.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>io.netty</groupId>
+      <artifactId>netty-buffer</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>net.minidev</groupId>
+      <artifactId>json-smart</artifactId>
+      <version>2.0</version>
     </dependency>
   </dependencies>
 

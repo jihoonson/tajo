@@ -34,6 +34,8 @@ import org.apache.tajo.QueryId;
 import org.apache.tajo.SessionVars;
 import org.apache.tajo.TajoConstants;
 import org.apache.tajo.TajoProtos.QueryState;
+import org.apache.tajo.catalog.proto.CatalogProtos.UpdateTableStatsProto;
+import org.apache.tajo.catalog.proto.CatalogProtos.TableStatsProto;
 import org.apache.tajo.catalog.CatalogService;
 import org.apache.tajo.catalog.TableDesc;
 import org.apache.tajo.catalog.TableMeta;
@@ -52,6 +54,8 @@ import org.apache.tajo.storage.StorageManager;
 import org.apache.tajo.storage.StorageConstants;
 import org.apache.tajo.storage.StorageUtil;
 import org.apache.tajo.util.TUtil;
+import org.apache.tajo.util.history.QueryHistory;
+import org.apache.tajo.util.history.SubQueryHistory;
 
 import java.io.IOException;
 import java.text.NumberFormat;
@@ -287,6 +291,42 @@ public class Query implements EventHandler<QueryEvent> {
     finishTime = clock.getTime();
   }
 
+  public QueryHistory getQueryHistory() {
+    QueryHistory queryHistory = makeQueryHistory();
+    queryHistory.setSubQueryHistories(makeSubQueryHistories());
+    return queryHistory;
+  }
+
+  private List<SubQueryHistory> makeSubQueryHistories() {
+    List<SubQueryHistory> subQueryHistories = new ArrayList<SubQueryHistory>();
+    for(SubQuery eachSubQuery: getSubQueries()) {
+      subQueryHistories.add(eachSubQuery.getSubQueryHistory());
+    }
+
+    return subQueryHistories;
+  }
+
+  private QueryHistory makeQueryHistory() {
+    QueryHistory queryHistory = new QueryHistory();
+
+    queryHistory.setQueryId(getId().toString());
+    queryHistory.setQueryMaster(context.getQueryMasterContext().getWorkerContext().getWorkerName());
+    queryHistory.setHttpPort(context.getQueryMasterContext().getWorkerContext().getConnectionInfo().getHttpInfoPort());
+    queryHistory.setLogicalPlan(plan.toString());
+    queryHistory.setLogicalPlan(plan.getLogicalPlan().toString());
+    queryHistory.setDistributedPlan(plan.toString());
+
+    List<String[]> sessionVariables = new ArrayList<String[]>();
+    for(Map.Entry<String,String> entry: plan.getContext().getAllKeyValus().entrySet()) {
+      if (SessionVars.exists(entry.getKey()) && SessionVars.isPublic(SessionVars.get(entry.getKey()))) {
+        sessionVariables.add(new String[]{entry.getKey(), entry.getValue()});
+      }
+    }
+    queryHistory.setSessionVariables(sessionVariables);
+
+    return queryHistory;
+  }
+
   public List<String> getDiagnostics() {
     readLock.lock();
     try {
@@ -373,9 +413,9 @@ public class Query implements EventHandler<QueryEvent> {
     public QueryState transition(Query query, QueryEvent queryEvent) {
       QueryCompletedEvent subQueryEvent = (QueryCompletedEvent) queryEvent;
       QueryState finalState;
+
       if (subQueryEvent.getState() == SubQueryState.SUCCEEDED) {
-        finalizeQuery(query, subQueryEvent);
-        finalState = QueryState.QUERY_SUCCEEDED;
+        finalState = finalizeQuery(query, subQueryEvent);
       } else if (subQueryEvent.getState() == SubQueryState.FAILED) {
         finalState = QueryState.QUERY_FAILED;
       } else if (subQueryEvent.getState() == SubQueryState.KILLED) {
@@ -385,29 +425,32 @@ public class Query implements EventHandler<QueryEvent> {
       }
       query.eventHandler.handle(new QueryMasterQueryCompletedEvent(query.getId()));
       query.setFinishTime();
+
       return finalState;
     }
 
-    private void finalizeQuery(Query query, QueryCompletedEvent event) {
+    private QueryState finalizeQuery(Query query, QueryCompletedEvent event) {
       MasterPlan masterPlan = query.getPlan();
 
       ExecutionBlock terminal = query.getPlan().getTerminalBlock();
       DataChannel finalChannel = masterPlan.getChannel(event.getExecutionBlockId(), terminal.getId());
-      Path finalOutputDir = commitOutputData(query);
 
       QueryHookExecutor hookExecutor = new QueryHookExecutor(query.context.getQueryMasterContext());
       try {
-        hookExecutor.execute(query.context.getQueryContext(), query, event.getExecutionBlockId(),
-            finalOutputDir);
-      } catch (Exception e) {
-        query.eventHandler.handle(new QueryDiagnosticsUpdateEvent(query.id, ExceptionUtils.getStackTrace(e)));
+        Path finalOutputDir = commitOutputData(query);
+        hookExecutor.execute(query.context.getQueryContext(), query, event.getExecutionBlockId(), finalOutputDir);
+      } catch (Throwable t) {
+        query.eventHandler.handle(new QueryDiagnosticsUpdateEvent(query.id, ExceptionUtils.getStackTrace(t)));
+        return QueryState.QUERY_ERROR;
       }
+
+      return QueryState.QUERY_SUCCEEDED;
     }
 
     /**
      * It moves a result data stored in a staging output dir into a final output dir.
      */
-    public Path commitOutputData(Query query) {
+    public Path commitOutputData(Query query) throws IOException {
       QueryContext queryContext = query.context.getQueryContext();
       Path stagingResultDir = new Path(queryContext.getStagingDir(), TajoConstants.RESULT_DIR_NAME);
       Path finalOutputDir;
@@ -424,8 +467,9 @@ public class Query implements EventHandler<QueryEvent> {
             boolean movedToOldTable = false;
             boolean committed = false;
             Path oldTableDir = new Path(queryContext.getStagingDir(), TajoConstants.INSERT_OVERWIRTE_OLD_TABLE_NAME);
+            ContentSummary summary = fs.getContentSummary(stagingResultDir);
 
-            if (queryContext.hasPartition()) {
+            if (queryContext.hasPartition() && summary.getFileCount() > 0L) {
               // This is a map for existing non-leaf directory to rename. A key is current directory and a value is
               // renaming directory.
               Map<Path, Path> renameDirs = TUtil.newHashMap();
@@ -469,24 +513,49 @@ public class Query implements EventHandler<QueryEvent> {
                   fs.delete(entry.getValue(), true);
                   fs.rename(entry.getValue(), entry.getKey());
                 }
+
                 throw new IOException(ioe.getMessage());
               }
-            } else {
+            } else { // no partition
               try {
+
+                // if the final output dir exists, move all contents to the temporary table dir.
+                // Otherwise, just make the final output dir. As a result, the final output dir will be empty.
                 if (fs.exists(finalOutputDir)) {
-                  fs.rename(finalOutputDir, oldTableDir);
+                  fs.mkdirs(oldTableDir);
+
+                  for (FileStatus status : fs.listStatus(finalOutputDir, StorageManager.hiddenFileFilter)) {
+                    fs.rename(status.getPath(), oldTableDir);
+                  }
+
                   movedToOldTable = fs.exists(oldTableDir);
                 } else { // if the parent does not exist, make its parent directory.
-                  fs.mkdirs(finalOutputDir.getParent());
+                  fs.mkdirs(finalOutputDir);
                 }
 
-                fs.rename(stagingResultDir, finalOutputDir);
+                // Move the results to the final output dir.
+                for (FileStatus status : fs.listStatus(stagingResultDir)) {
+                  fs.rename(status.getPath(), finalOutputDir);
+                }
+
+                // Check the final output dir
                 committed = fs.exists(finalOutputDir);
+
               } catch (IOException ioe) {
                 // recover the old table
                 if (movedToOldTable && !committed) {
-                  fs.rename(oldTableDir, finalOutputDir);
+
+                  // if commit is failed, recover the old data
+                  for (FileStatus status : fs.listStatus(finalOutputDir, StorageManager.hiddenFileFilter)) {
+                    fs.delete(status.getPath(), true);
+                  }
+
+                  for (FileStatus status : fs.listStatus(oldTableDir)) {
+                    fs.rename(status.getPath(), finalOutputDir);
+                  }
                 }
+
+                throw new IOException(ioe.getMessage());
               }
             }
           } else {
@@ -521,13 +590,24 @@ public class Query implements EventHandler<QueryEvent> {
                 }
               }
             } else { // CREATE TABLE AS SELECT (CTAS)
-              fs.rename(stagingResultDir, finalOutputDir);
+              if (fs.exists(finalOutputDir)) {
+                for (FileStatus status : fs.listStatus(stagingResultDir)) {
+                  fs.rename(status.getPath(), finalOutputDir);
+                }
+              } else {
+                fs.rename(stagingResultDir, finalOutputDir);
+              }
               LOG.info("Moved from the staging dir to the output directory '" + finalOutputDir);
             }
           }
-        } catch (IOException e) {
-          // TODO report to client
-          e.printStackTrace();
+
+          // remove the staging directory if the final output dir is given.
+          Path stagingDirRoot = queryContext.getStagingDir().getParent();
+          fs.delete(stagingDirRoot, true);
+
+        } catch (Throwable t) {
+          LOG.error(t);
+          throw new IOException(t);
         }
       } else {
         finalOutputDir = new Path(queryContext.getStagingDir(), TajoConstants.RESULT_DIR_NAME);
@@ -746,7 +826,7 @@ public class Query implements EventHandler<QueryEvent> {
         TableMeta meta = lastStage.getTableMeta();
 
         String nullChar = queryContext.get(SessionVars.NULL_CHAR);
-        meta.putOption(StorageConstants.CSVFILE_NULL, nullChar);
+        meta.putOption(StorageConstants.TEXT_NULL, nullChar);
 
         TableStats stats = lastStage.getResultStats();
 
@@ -755,7 +835,7 @@ public class Query implements EventHandler<QueryEvent> {
                 query.getId().toString(),
                 lastStage.getSchema(),
                 meta,
-                finalOutputDir);
+                finalOutputDir.toUri());
         resultTableDesc.setExternal(true);
 
         stats.setNumBytes(getTableVolume(query.systemConf, finalOutputDir));
@@ -788,7 +868,7 @@ public class Query implements EventHandler<QueryEvent> {
                 createTableNode.getTableName(),
                 createTableNode.getTableSchema(),
                 meta,
-                finalOutputDir);
+                finalOutputDir.toUri());
         tableDescTobeCreated.setExternal(createTableNode.isExternal());
 
         if (createTableNode.hasPartition()) {
@@ -830,7 +910,7 @@ public class Query implements EventHandler<QueryEvent> {
           finalTable = catalog.getTableDesc(tableName);
         } else {
           String tableName = query.getId().toString();
-          finalTable = new TableDesc(tableName, lastStage.getSchema(), meta, finalOutputDir);
+          finalTable = new TableDesc(tableName, lastStage.getSchema(), meta, finalOutputDir.toUri());
         }
 
         long volume = getTableVolume(query.systemConf, finalOutputDir);
@@ -838,8 +918,11 @@ public class Query implements EventHandler<QueryEvent> {
         finalTable.setStats(stats);
 
         if (insertNode.hasTargetTable()) {
-          catalog.dropTable(insertNode.getTableName());
-          catalog.createTable(finalTable);
+          UpdateTableStatsProto.Builder builder = UpdateTableStatsProto.newBuilder();
+          builder.setTableName(finalTable.getName());
+          builder.setStats(stats.getProto());
+
+          catalog.updateTableStats(builder.build());
         }
 
         query.setResultDesc(finalTable);

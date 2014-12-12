@@ -22,6 +22,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import org.apache.commons.lang.math.NumberUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -83,6 +84,7 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
     LogicalPlan plan;
     QueryBlock queryBlock;
     EvalTreeOptimizer evalOptimizer;
+    TimeZone timeZone;
     boolean debugOrUnitTests;
 
     public PlanContext(OverridableConf context, LogicalPlan plan, QueryBlock block, EvalTreeOptimizer evalOptimizer,
@@ -91,6 +93,13 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
       this.plan = plan;
       this.queryBlock = block;
       this.evalOptimizer = evalOptimizer;
+
+      // session's time zone
+      if (context.containsKey(SessionVars.TIMEZONE)) {
+        String timezoneId = context.get(SessionVars.TIMEZONE);
+        timeZone = TimeZone.getTimeZone(timezoneId);
+      }
+
       this.debugOrUnitTests = debugOrUnitTests;
     }
 
@@ -177,6 +186,16 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
       queryBlock.updateCurrentNode(stack.peek());
     }
     return current;
+  }
+
+  @Override
+  public LogicalNode visitSetSession(PlanContext context, Stack<Expr> stack, SetSession expr) throws PlanningException {
+    QueryBlock block = context.queryBlock;
+
+    SetSessionNode setSessionNode = block.getNodeFromExpr(expr);
+    setSessionNode.init(expr.getName(), expr.getValue());
+
+    return setSessionNode;
   }
 
   public LogicalNode visitExplain(PlanContext ctx, Stack<Expr> stack, Explain expr) throws PlanningException {
@@ -1289,10 +1308,11 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
   private void updatePhysicalInfo(TableDesc desc) {
     if (desc.getPath() != null) {
       try {
-        FileSystem fs = desc.getPath().getFileSystem(new Configuration());
-        FileStatus status = fs.getFileStatus(desc.getPath());
+        Path path = new Path(desc.getPath());
+        FileSystem fs = path.getFileSystem(new Configuration());
+        FileStatus status = fs.getFileStatus(path);
         if (desc.getStats() != null && (status.isDirectory() || status.isFile())) {
-          ContentSummary summary = fs.getContentSummary(desc.getPath());
+          ContentSummary summary = fs.getContentSummary(path);
           if (summary != null) {
             long volume = summary.getLength();
             desc.getStats().setNumBytes(volume);
@@ -1676,7 +1696,7 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
 
     createTableNode.setExternal(parentTableDesc.isExternal());
     if(parentTableDesc.isExternal()) {
-      createTableNode.setPath(parentTableDesc.getPath());
+      createTableNode.setPath(new Path(parentTableDesc.getPath()));
     }
     return createTableNode;
   }
@@ -1705,13 +1725,25 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
       createTableNode.setStorageType(CatalogProtos.StoreType.CSV);
     }
 
-    // Set default storage properties to be created.
-    KeyValueSet keyValueSet = CatalogUtil.newPhysicalProperties(createTableNode.getStorageType());
+
+
+    // Set default storage properties to table
+    KeyValueSet properties = CatalogUtil.newPhysicalProperties(createTableNode.getStorageType());
+
+    // Priority to apply table properties
+    // 1. Explicit table properties specified in WITH clause
+    // 2. Session variables
+
+    // Set session variables to properties
+    PlannerUtil.applySessionToTableProperties(context.queryContext, createTableNode.getStorageType(), properties);
+    // Set table properties specified in WITH clause
     if (expr.hasParams()) {
-      keyValueSet.putAll(expr.getParams());
+      properties.putAll(expr.getParams());
     }
 
-    createTableNode.setOptions(keyValueSet);
+    createTableNode.setOptions(properties);
+
+
 
     if (expr.hasPartition()) {
       if (expr.getPartitionMethod().getPartitionType().equals(PartitionType.COLUMN)) {

@@ -18,6 +18,7 @@
 
 package org.apache.tajo.catalog;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import org.apache.hadoop.fs.Path;
 import org.apache.tajo.DataTypeUtil;
@@ -35,12 +36,16 @@ import org.apache.tajo.unit.StorageUnit;
 import org.apache.tajo.util.KeyValueSet;
 import org.apache.tajo.util.StringUtils;
 import org.apache.tajo.util.TUtil;
+import org.mortbay.util.ajax.JSON;
 
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.*;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import static org.apache.tajo.catalog.proto.CatalogProtos.StoreType;
 import static org.apache.tajo.common.TajoDataTypes.Type;
@@ -268,21 +273,24 @@ public class CatalogUtil {
       return StoreType.ROWFILE;
     } else if (typeStr.equalsIgnoreCase(StoreType.RCFILE.name())) {
       return StoreType.RCFILE;
-    } else if (typeStr.equalsIgnoreCase(StoreType.TREVNI.name())) {
-      return StoreType.TREVNI;
     } else if (typeStr.equalsIgnoreCase(StoreType.PARQUET.name())) {
       return StoreType.PARQUET;
     } else if (typeStr.equalsIgnoreCase(StoreType.SEQUENCEFILE.name())) {
       return StoreType.SEQUENCEFILE;
     } else if (typeStr.equalsIgnoreCase(StoreType.AVRO.name())) {
       return StoreType.AVRO;
+    } else if (typeStr.equalsIgnoreCase(StoreType.TEXTFILE.name())) {
+      return StoreType.TEXTFILE;
+    } else if (typeStr.equalsIgnoreCase(StoreType.JSON.name())) {
+      return StoreType.JSON;
     } else {
       return null;
     }
   }
 
   public static TableMeta newTableMeta(StoreType type) {
-    return new TableMeta(type, new KeyValueSet());
+    KeyValueSet defaultProperties = CatalogUtil.newPhysicalProperties(type);
+    return new TableMeta(type, defaultProperties);
   }
 
   public static TableMeta newTableMeta(StoreType type, KeyValueSet options) {
@@ -290,7 +298,7 @@ public class CatalogUtil {
   }
 
   public static TableDesc newTableDesc(String tableName, Schema schema, TableMeta meta, Path path) {
-    return new TableDesc(tableName, schema, meta, path);
+    return new TableDesc(tableName, schema, meta, path.toUri());
   }
 
   public static TableDesc newTableDesc(TableDescProto proto) {
@@ -815,10 +823,18 @@ public class CatalogUtil {
   public static final String ENABLE_DICTIONARY    = "parquet.enable.dictionary";
   public static final String VALIDATION           = "parquet.validation";
 
+  /**
+   * Create new table property with default configs. It is used to make TableMeta to be stored in Catalog.
+   *
+   * @param type StoreType
+   * @return Table properties
+   */
   public static KeyValueSet newPhysicalProperties(StoreType type) {
     KeyValueSet options = new KeyValueSet();
-    if (StoreType.CSV == type) {
-      options.set(StorageConstants.CSVFILE_DELIMITER, StorageConstants.DEFAULT_FIELD_DELIMITER);
+    if (StoreType.CSV == type || StoreType.TEXTFILE == type) {
+      options.set(StorageConstants.TEXT_DELIMITER, StorageConstants.DEFAULT_FIELD_DELIMITER);
+    } else if (StoreType.JSON == type) {
+      options.set(StorageConstants.TEXT_SERDE_CLASS, "org.apache.tajo.storage.json.JsonLineSerDe");
     } else if (StoreType.RCFILE == type) {
       options.set(StorageConstants.RCFILE_SERDE, StorageConstants.DEFAULT_BINARY_SERDE);
     } else if (StoreType.SEQUENCEFILE == type) {

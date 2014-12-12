@@ -19,6 +19,7 @@
 package org.apache.tajo.client;
 
 import com.google.protobuf.ServiceException;
+
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.fs.Path;
@@ -32,12 +33,13 @@ import org.apache.tajo.catalog.partition.PartitionMethodDesc;
 import org.apache.tajo.catalog.proto.CatalogProtos;
 import org.apache.tajo.conf.TajoConf;
 import org.apache.tajo.conf.TajoConf.ConfVars;
-import org.apache.tajo.ipc.ClientProtos.BriefQueryInfo;
-import org.apache.tajo.ipc.ClientProtos.GetQueryResultResponse;
-import org.apache.tajo.ipc.ClientProtos.SubmitQueryResponse;
-import org.apache.tajo.ipc.ClientProtos.WorkerResourceInfo;
+import org.apache.tajo.ipc.ClientProtos.*;
 import org.apache.tajo.jdbc.TajoMemoryResultSet;
 import org.apache.tajo.jdbc.TajoResultSet;
+import org.apache.tajo.rule.EvaluationContext;
+import org.apache.tajo.rule.EvaluationFailedException;
+import org.apache.tajo.rule.SelfDiagnosisRuleEngine;
+import org.apache.tajo.rule.SelfDiagnosisRuleSession;
 import org.apache.tajo.util.NetUtils;
 
 import java.io.IOException;
@@ -78,12 +80,26 @@ public class TajoClientImpl extends SessionConnection implements TajoClient, Que
     super(conf, addr, baseDatabase);
     this.queryClient = new QueryClientImpl(this);
     this.catalogClient = new CatalogAdminClientImpl(this);
+    
+    diagnoseTajoClient();
   }
 
   public TajoClientImpl(String hostName, int port, @Nullable String baseDatabase) throws IOException {
     super(hostName, port, baseDatabase);
     this.queryClient = new QueryClientImpl(this);
     this.catalogClient = new CatalogAdminClientImpl(this);
+    
+    diagnoseTajoClient();
+  }
+  
+  private void diagnoseTajoClient() throws EvaluationFailedException {
+    SelfDiagnosisRuleEngine ruleEngine = SelfDiagnosisRuleEngine.getInstance();
+    SelfDiagnosisRuleSession ruleSession = ruleEngine.newRuleSession();
+    EvaluationContext context = new EvaluationContext();
+    
+    context.addParameter(TajoConf.class.getName(), getConf());
+    
+    ruleSession.withRuleNames("TajoConfValidationRule").fireRules(context);
   }
 
   /*------------------------------------------------------------------------*/
@@ -156,6 +172,14 @@ public class TajoClientImpl extends SessionConnection implements TajoClient, Que
 
   public List<WorkerResourceInfo> getClusterInfo() throws ServiceException {
     return queryClient.getClusterInfo();
+  }
+
+  public QueryInfoProto getQueryInfo(final QueryId queryId) throws ServiceException {
+    return queryClient.getQueryInfo(queryId);
+  }
+
+  public QueryHistoryProto getQueryHistory(final QueryId queryId) throws ServiceException {
+    return queryClient.getQueryHistory(queryId);
   }
 
   /*------------------------------------------------------------------------*/

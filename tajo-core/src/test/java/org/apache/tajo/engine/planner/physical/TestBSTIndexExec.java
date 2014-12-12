@@ -146,7 +146,7 @@ public class TestBSTIndexExec {
 
     TableDesc desc = new TableDesc(
         CatalogUtil.buildFQName(TajoConstants.DEFAULT_DATABASE_NAME, "employee"), schema, meta,
-        sm.getTablePath("employee"));
+        sm.getTablePath("employee").toUri());
     catalog.createTable(desc);
 
     analyzer = new SQLAnalyzer();
@@ -161,9 +161,6 @@ public class TestBSTIndexExec {
 
   @Test
   public void testEqual() throws Exception {
-    if(conf.getBoolean("tajo.storage.manager.v2", false)) {
-      return;
-    }
     this.rndKey = rnd.nextInt(250);
     final String QUERY = "select * from employee where managerId = " + rndKey;
     
