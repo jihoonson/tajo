@@ -23,23 +23,15 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.fs.Path;
 import org.apache.tajo.SessionVars;
 import org.apache.tajo.catalog.CatalogUtil;
-<<<<<<< HEAD
 import org.apache.tajo.catalog.Column;
 import org.apache.tajo.catalog.TableMeta;
 import org.apache.tajo.catalog.statistics.StatisticsUtil;
 import org.apache.tajo.catalog.statistics.TableStats;
 import org.apache.tajo.engine.planner.StatContext;
-import org.apache.tajo.engine.planner.logical.InsertNode;
-import org.apache.tajo.engine.planner.logical.PersistentStoreNode;
-=======
 import org.apache.tajo.catalog.Schema;
-import org.apache.tajo.catalog.TableMeta;
-import org.apache.tajo.catalog.statistics.StatisticsUtil;
-import org.apache.tajo.catalog.statistics.TableStats;
 import org.apache.tajo.plan.logical.InsertNode;
 import org.apache.tajo.plan.logical.PersistentStoreNode;
 import org.apache.tajo.plan.util.PlannerUtil;
->>>>>>> 5e043bd87bc6f84848d0745f435706421932cf60
 import org.apache.tajo.storage.Appender;
 import org.apache.tajo.storage.FileStorageManager;
 import org.apache.tajo.storage.StorageManager;
