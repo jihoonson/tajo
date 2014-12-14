@@ -31,7 +31,6 @@ import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.tajo.QueryUnitAttemptId;
-import org.apache.tajo.TajoConstants;
 import org.apache.tajo.TajoProtos;
 import org.apache.tajo.TajoProtos.TaskAttemptState;
 import org.apache.tajo.catalog.Schema;
@@ -41,20 +40,19 @@ import org.apache.tajo.catalog.proto.CatalogProtos;
 import org.apache.tajo.catalog.statistics.TableStats;
 import org.apache.tajo.conf.TajoConf;
 import org.apache.tajo.engine.json.CoreGsonHelper;
-import org.apache.tajo.engine.planner.PlannerUtil;
-import org.apache.tajo.engine.planner.logical.*;
+import org.apache.tajo.master.cluster.WorkerConnectionInfo;
+import org.apache.tajo.plan.util.PlannerUtil;
 import org.apache.tajo.engine.planner.physical.PhysicalExec;
 import org.apache.tajo.engine.query.QueryContext;
 import org.apache.tajo.engine.query.QueryUnitRequest;
 import org.apache.tajo.ipc.QueryMasterProtocol;
 import org.apache.tajo.ipc.TajoWorkerProtocol.*;
 import org.apache.tajo.ipc.TajoWorkerProtocol.EnforceProperty.EnforceType;
+import org.apache.tajo.plan.logical.*;
 import org.apache.tajo.pullserver.TajoPullServerService;
 import org.apache.tajo.pullserver.retriever.FileChunk;
 import org.apache.tajo.rpc.NullCallback;
-import org.apache.tajo.storage.HashShuffleAppenderManager;
-import org.apache.tajo.storage.StorageUtil;
-import org.apache.tajo.storage.TupleComparator;
+import org.apache.tajo.storage.*;
 import org.apache.tajo.storage.fragment.FileFragment;
 import org.apache.tajo.util.NetUtils;
 import org.jboss.netty.channel.socket.ClientSocketChannelFactory;
@@ -71,6 +69,7 @@ import java.util.Map.Entry;
 import java.util.concurrent.ExecutorService;
 
 import static org.apache.tajo.catalog.proto.CatalogProtos.FragmentProto;
+import static org.apache.tajo.plan.serder.PlanProto.ShuffleType;
 
 public class Task {
   private static final Log LOG = LogFactory.getLog(Task.class);
@@ -105,39 +104,6 @@ public class Task {
   private Schema finalSchema = null;
   private TupleComparator sortComp = null;
 
-  static final String OUTPUT_FILE_PREFIX="part-";
-  static final ThreadLocal<NumberFormat> OUTPUT_FILE_FORMAT_SUBQUERY =
-      new ThreadLocal<NumberFormat>() {
-        @Override
-        public NumberFormat initialValue() {
-          NumberFormat fmt = NumberFormat.getInstance();
-          fmt.setGroupingUsed(false);
-          fmt.setMinimumIntegerDigits(2);
-          return fmt;
-        }
-      };
-  static final ThreadLocal<NumberFormat> OUTPUT_FILE_FORMAT_TASK =
-      new ThreadLocal<NumberFormat>() {
-        @Override
-        public NumberFormat initialValue() {
-          NumberFormat fmt = NumberFormat.getInstance();
-          fmt.setGroupingUsed(false);
-          fmt.setMinimumIntegerDigits(6);
-          return fmt;
-        }
-      };
-
-  static final ThreadLocal<NumberFormat> OUTPUT_FILE_FORMAT_SEQ =
-      new ThreadLocal<NumberFormat>() {
-        @Override
-        public NumberFormat initialValue() {
-          NumberFormat fmt = NumberFormat.getInstance();
-          fmt.setGroupingUsed(false);
-          fmt.setMinimumIntegerDigits(3);
-          return fmt;
-        }
-      };
-
   public Task(String taskRunnerId,
               Path baseDir,
               QueryUnitAttemptId taskId,
@@ -148,7 +114,7 @@ public class Task {
     this.taskId = taskId;
 
     this.systemConf = executionBlockContext.getConf();
-    this.queryContext = request.getQueryContext();
+    this.queryContext = request.getQueryContext(systemConf);
     this.executionBlockContext = executionBlockContext;
     this.taskDir = StorageUtil.concatPath(baseDir,
         taskId.getQueryUnitId().getId() + "_" + taskId.getId());
@@ -184,16 +150,11 @@ public class Task {
       if (shuffleType == ShuffleType.RANGE_SHUFFLE) {
         SortNode sortNode = PlannerUtil.findTopNode(plan, NodeType.SORT);
         this.finalSchema = PlannerUtil.sortSpecsToSchema(sortNode.getSortKeys());
-        this.sortComp = new TupleComparator(finalSchema, sortNode.getSortKeys());
+        this.sortComp = new BaseTupleComparator(finalSchema, sortNode.getSortKeys());
       }
     } else {
-      // The final result of a task will be written in a file named part-ss-nnnnnnn,
-      // where ss is the subquery id associated with this task, and nnnnnn is the task id.
-      Path outFilePath = StorageUtil.concatPath(queryContext.getStagingDir(), TajoConstants.RESULT_DIR_NAME,
-          OUTPUT_FILE_PREFIX +
-          OUTPUT_FILE_FORMAT_SUBQUERY.get().format(taskId.getQueryUnitId().getExecutionBlockId().getId()) + "-" +
-          OUTPUT_FILE_FORMAT_TASK.get().format(taskId.getQueryUnitId().getId()) + "-" +
-          OUTPUT_FILE_FORMAT_SEQ.get().format(0));
+      Path outFilePath = ((FileStorageManager)StorageManager.getFileStorageManager(systemConf))
+          .getAppenderFilePath(taskId, queryContext.getStagingDir());
       LOG.info("Output File Path: " + outFilePath);
       context.setOutputPath(outFilePath);
     }
@@ -506,7 +467,8 @@ public class Task {
   }
 
   public void cleanupTask() {
-    executionBlockContext.addTaskHistory(taskRunnerId, getId(), createTaskHistory());
+    TaskHistory taskHistory = createTaskHistory();
+    executionBlockContext.addTaskHistory(taskRunnerId, getId(), taskHistory);
     executionBlockContext.getTasks().remove(getId());
 
     fetcherRunners.clear();
@@ -519,6 +481,8 @@ public class Task {
     } catch (IOException e) {
       LOG.fatal(e.getMessage(), e);
     }
+
+    executionBlockContext.getWorkerContext().getTaskHistoryWriter().appendHistory(taskHistory);
   }
 
   public TaskHistory createTaskHistory() {
@@ -720,7 +684,8 @@ public class Task {
           defaultStoreFile = new File(storeDir, "in_" + i);
           InetAddress address = InetAddress.getByName(uri.getHost());
 
-          if (NetUtils.isLocalAddress(address)) {
+          WorkerConnectionInfo conn = executionBlockContext.getWorkerContext().getConnectionInfo();
+          if (NetUtils.isLocalAddress(address) && conn.getPullServerPort() == uri.getPort()) {
             boolean hasError = false;
             try {
               LOG.info("Try to get local file chunk at local host");

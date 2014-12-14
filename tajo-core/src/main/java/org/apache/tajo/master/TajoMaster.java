@@ -18,7 +18,6 @@
 
 package org.apache.tajo.master;
 
-import com.google.protobuf.ServiceException;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -29,17 +28,18 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.service.CompositeService;
-import org.apache.hadoop.util.ShutdownHookManager;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.event.AsyncDispatcher;
 import org.apache.hadoop.yarn.event.EventHandler;
 import org.apache.hadoop.yarn.util.Clock;
 import org.apache.hadoop.yarn.util.RackResolver;
 import org.apache.hadoop.yarn.util.SystemClock;
-import org.apache.tajo.catalog.*;
-import org.apache.tajo.engine.function.FunctionLoader;
+import org.apache.tajo.catalog.CatalogServer;
+import org.apache.tajo.catalog.CatalogService;
+import org.apache.tajo.catalog.LocalCatalogWrapper;
 import org.apache.tajo.conf.TajoConf;
 import org.apache.tajo.conf.TajoConf.ConfVars;
+import org.apache.tajo.engine.function.FunctionLoader;
 import org.apache.tajo.master.ha.HAService;
 import org.apache.tajo.master.ha.HAServiceHDFSImpl;
 import org.apache.tajo.master.metrics.CatalogMetricsGaugeSet;
@@ -49,9 +49,15 @@ import org.apache.tajo.master.rm.TajoWorkerResourceManager;
 import org.apache.tajo.master.rm.WorkerResourceManager;
 import org.apache.tajo.master.session.SessionManager;
 import org.apache.tajo.rpc.RpcChannelFactory;
-import org.apache.tajo.storage.AbstractStorageManager;
-import org.apache.tajo.storage.StorageManagerFactory;
+import org.apache.tajo.rule.EvaluationContext;
+import org.apache.tajo.rule.EvaluationFailedException;
+import org.apache.tajo.rule.SelfDiagnosisRuleEngine;
+import org.apache.tajo.rule.SelfDiagnosisRuleSession;
+import org.apache.tajo.storage.FileStorageManager;
+import org.apache.tajo.storage.StorageManager;
 import org.apache.tajo.util.*;
+import org.apache.tajo.util.history.HistoryReader;
+import org.apache.tajo.util.history.HistoryWriter;
 import org.apache.tajo.util.metrics.TajoSystemMetrics;
 import org.apache.tajo.webapp.QueryExecutorServlet;
 import org.apache.tajo.webapp.StaticHttpServer;
@@ -105,7 +111,7 @@ public class TajoMaster extends CompositeService {
 
   private CatalogServer catalogServer;
   private CatalogService catalog;
-  private AbstractStorageManager storeManager;
+  private FileStorageManager storeManager;
   private GlobalEngine globalEngine;
   private AsyncDispatcher dispatcher;
   private TajoMasterClientService tajoMasterClientService;
@@ -126,6 +132,10 @@ public class TajoMaster extends CompositeService {
 
   private JvmPauseMonitor pauseMonitor;
 
+  private HistoryWriter historyWriter;
+
+  private HistoryReader historyReader;
+
   public TajoMaster() throws Exception {
     super(TajoMaster.class.getName());
   }
@@ -135,7 +145,7 @@ public class TajoMaster extends CompositeService {
   }
 
   public String getVersion() {
-    return VersionInfo.getVersion();
+    return VersionInfo.getDisplayVersion();
   }
 
   public TajoMasterClientService getTajoMasterClientService() {
@@ -145,6 +155,7 @@ public class TajoMaster extends CompositeService {
   @Override
   public void serviceInit(Configuration _conf) throws Exception {
     this.systemConf = (TajoConf) _conf;
+    Runtime.getRuntime().addShutdownHook(new Thread(new ShutdownHook()));
 
     context = new MasterContext(systemConf);
     clock = new SystemClock();
@@ -160,7 +171,8 @@ public class TajoMaster extends CompositeService {
 
       // check the system directory and create if they are not created.
       checkAndInitializeSystemDirectories();
-      this.storeManager = StorageManagerFactory.getStorageManager(systemConf);
+      diagnoseTajoMaster();
+      this.storeManager = (FileStorageManager)StorageManager.getFileStorageManager(systemConf, null);
 
       catalogServer = new CatalogServer(FunctionLoader.load());
       addIfService(catalogServer);
@@ -265,12 +277,22 @@ public class TajoMaster extends CompositeService {
       LOG.info("Warehouse dir '" + wareHousePath + "' is created");
     }
 
-    Path stagingPath = TajoConf.getStagingDir(systemConf);
+    Path stagingPath = TajoConf.getDefaultRootStagingDir(systemConf);
     LOG.info("Staging dir: " + wareHousePath);
     if (!defaultFS.exists(stagingPath)) {
       defaultFS.mkdirs(stagingPath, new FsPermission(STAGING_ROOTDIR_PERMISSION));
       LOG.info("Staging dir '" + stagingPath + "' is created");
     }
+  }
+  
+  private void diagnoseTajoMaster() throws EvaluationFailedException {
+    SelfDiagnosisRuleEngine ruleEngine = SelfDiagnosisRuleEngine.getInstance();
+    SelfDiagnosisRuleSession ruleSession = ruleEngine.newRuleSession();
+    EvaluationContext context = new EvaluationContext();
+    
+    context.addParameter(TajoConf.class.getName(), systemConf);
+    
+    ruleSession.withCategoryNames("base", "master").fireRules(context);
   }
 
   private void startJvmPauseMonitor(){
@@ -310,6 +332,13 @@ public class TajoMaster extends CompositeService {
     } catch (IOException e) {
       LOG.error(e.getMessage(), e);
     }
+
+    historyWriter = new HistoryWriter(getMasterName(), true);
+    historyWriter.init(getConfig());
+    addIfService(historyWriter);
+    historyWriter.start();
+
+    historyReader = new HistoryReader(getMasterName(), context.getConf());
   }
 
   private void writeSystemConf() throws IOException {
@@ -372,10 +401,9 @@ public class TajoMaster extends CompositeService {
       systemMetrics.stop();
     }
 
-    RpcChannelFactory.shutdown();
-
     if(pauseMonitor != null) pauseMonitor.stop();
     super.stop();
+
     LOG.info("Tajo Master main thread exiting");
   }
 
@@ -395,7 +423,7 @@ public class TajoMaster extends CompositeService {
     return this.catalogServer;
   }
 
-  public AbstractStorageManager getStorageManager() {
+  public FileStorageManager getStorageManager() {
     return this.storeManager;
   }
 
@@ -438,7 +466,7 @@ public class TajoMaster extends CompositeService {
       return globalEngine;
     }
 
-    public AbstractStorageManager getStorageManager() {
+    public StorageManager getStorageManager() {
       return storeManager;
     }
 
@@ -452,6 +480,14 @@ public class TajoMaster extends CompositeService {
 
     public HAService getHAService() {
       return haService;
+    }
+
+    public HistoryWriter getHistoryWriter() {
+      return historyWriter;
+    }
+
+    public HistoryReader getHistoryReader() {
+      return historyReader;
     }
   }
 
@@ -529,12 +565,25 @@ public class TajoMaster extends CompositeService {
       }
     }
   }
+
+  private class ShutdownHook implements Runnable {
+    @Override
+    public void run() {
+      if(!isInState(STATE.STOPPED)) {
+        LOG.info("============================================");
+        LOG.info("TajoMaster received SIGINT Signal");
+        LOG.info("============================================");
+        stop();
+        RpcChannelFactory.shutdown();
+      }
+    }
+  }
+
   public static void main(String[] args) throws Exception {
     StringUtils.startupShutdownMessage(TajoMaster.class, args, LOG);
 
     try {
       TajoMaster master = new TajoMaster();
-      ShutdownHookManager.get().addShutdownHook(new CompositeServiceShutdownHook(master), SHUTDOWN_HOOK_PRIORITY);
       TajoConf conf = new TajoConf(new YarnConfiguration());
       master.init(conf);
       master.start();

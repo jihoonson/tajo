@@ -108,6 +108,12 @@
             </goals>
           </execution>
         </executions>
+        <configuration>
+          <excludes>
+          	<exclude>src/main/resources/META-INF/services/*</exclude>
+            <exclude>src/test/resources/org/apache/tajo/conf/**</exclude>
+          </excludes>
+        </configuration>
       </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
@@ -211,8 +217,8 @@
       <artifactId>gson</artifactId>
     </dependency>
     <dependency>
-      <groupId>joda-time</groupId>
-      <artifactId>joda-time</artifactId>
+      <groupId>io.netty</groupId>
+      <artifactId>netty-buffer</artifactId>
     </dependency>
     <dependency>
       <groupId>junit</groupId>

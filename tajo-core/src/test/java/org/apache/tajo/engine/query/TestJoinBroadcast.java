@@ -30,7 +30,7 @@ import org.apache.tajo.datum.Int4Datum;
 import org.apache.tajo.datum.TextDatum;
 import org.apache.tajo.engine.planner.global.ExecutionBlock;
 import org.apache.tajo.engine.planner.global.MasterPlan;
-import org.apache.tajo.engine.planner.logical.NodeType;
+import org.apache.tajo.plan.logical.NodeType;
 import org.apache.tajo.jdbc.TajoResultSet;
 import org.apache.tajo.master.querymaster.QueryMasterTask;
 import org.apache.tajo.storage.*;
@@ -563,10 +563,10 @@ public class TestJoinBroadcast extends QueryTestCaseBase {
           appender.flush();
           appender.close();
         }
-        Path dataPath = new Path(table.getPath(), fileIndex + ".csv");
+        Path dataPath = new Path(table.getPath().toString(), fileIndex + ".csv");
         fileIndex++;
-        appender = StorageManagerFactory.getStorageManager(conf).getAppender(tableMeta, schema,
-            dataPath);
+        appender = ((FileStorageManager)StorageManager.getFileStorageManager(conf))
+            .getAppender(tableMeta, schema, dataPath);
         appender.init();
       }
       String[] columnDatas = rows[i].split("\\|");
@@ -580,8 +580,8 @@ public class TestJoinBroadcast extends QueryTestCaseBase {
   @Test
   public final void testLeftOuterJoinLeftSideSmallTable() throws Exception {
     KeyValueSet tableOptions = new KeyValueSet();
-    tableOptions.set(StorageConstants.CSVFILE_DELIMITER, StorageConstants.DEFAULT_FIELD_DELIMITER);
-    tableOptions.set(StorageConstants.CSVFILE_NULL, "\\\\N");
+    tableOptions.set(StorageConstants.TEXT_DELIMITER, StorageConstants.DEFAULT_FIELD_DELIMITER);
+    tableOptions.set(StorageConstants.TEXT_NULL, "\\\\N");
 
     Schema schema = new Schema();
     schema.addColumn("id", Type.INT4);
@@ -811,16 +811,17 @@ public class TestJoinBroadcast extends QueryTestCaseBase {
   private void addEmptyDataFile(String tableName, boolean isPartitioned) throws Exception {
     TableDesc table = client.getTableDesc(tableName);
 
-    FileSystem fs = table.getPath().getFileSystem(conf);
+    Path path = new Path(table.getPath());
+    FileSystem fs = path.getFileSystem(conf);
     if (isPartitioned) {
-      List<Path> partitionPathList = getPartitionPathList(fs, table.getPath());
+      List<Path> partitionPathList = getPartitionPathList(fs, path);
       for (Path eachPath: partitionPathList) {
         Path dataPath = new Path(eachPath, 0 + "_empty.csv");
         OutputStream out = fs.create(dataPath);
         out.close();
       }
     } else {
-      Path dataPath = new Path(table.getPath(), 0 + "_empty.csv");
+      Path dataPath = new Path(path, 0 + "_empty.csv");
       OutputStream out = fs.create(dataPath);
       out.close();
     }

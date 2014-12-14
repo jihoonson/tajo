@@ -28,7 +28,10 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.service.AbstractService;
 import org.apache.hadoop.util.StringUtils;
-import org.apache.tajo.*;
+import org.apache.tajo.QueryId;
+import org.apache.tajo.QueryIdFactory;
+import org.apache.tajo.SessionVars;
+import org.apache.tajo.TajoConstants;
 import org.apache.tajo.algebra.AlterTablespaceSetType;
 import org.apache.tajo.algebra.Expr;
 import org.apache.tajo.algebra.JsonHelper;
@@ -37,20 +40,13 @@ import org.apache.tajo.catalog.*;
 import org.apache.tajo.catalog.exception.*;
 import org.apache.tajo.catalog.partition.PartitionMethodDesc;
 import org.apache.tajo.catalog.proto.CatalogProtos;
-import org.apache.tajo.catalog.proto.CatalogProtos.FragmentProto;
+import org.apache.tajo.catalog.proto.CatalogProtos.StoreType;
 import org.apache.tajo.catalog.statistics.TableStats;
-import org.apache.tajo.client.TajoClient;
 import org.apache.tajo.common.TajoDataTypes;
 import org.apache.tajo.conf.TajoConf;
 import org.apache.tajo.datum.DatumFactory;
-import org.apache.tajo.engine.eval.EvalNode;
-import org.apache.tajo.engine.exception.IllegalQueryStatusException;
-import org.apache.tajo.engine.exception.VerifyException;
 import org.apache.tajo.engine.parser.SQLAnalyzer;
-import org.apache.tajo.engine.planner.*;
-import org.apache.tajo.engine.planner.logical.*;
 import org.apache.tajo.engine.planner.physical.EvalExprExec;
-import org.apache.tajo.engine.planner.physical.SeqScanExec;
 import org.apache.tajo.engine.planner.physical.StoreTableExec;
 import org.apache.tajo.engine.query.QueryContext;
 import org.apache.tajo.ipc.ClientProtos;
@@ -60,26 +56,37 @@ import org.apache.tajo.master.querymaster.QueryInfo;
 import org.apache.tajo.master.querymaster.QueryJobManager;
 import org.apache.tajo.master.querymaster.QueryMasterTask;
 import org.apache.tajo.master.session.Session;
+import org.apache.tajo.plan.*;
+import org.apache.tajo.plan.expr.EvalNode;
+import org.apache.tajo.plan.logical.*;
+import org.apache.tajo.plan.util.PlannerUtil;
+import org.apache.tajo.plan.verifier.LogicalPlanVerifier;
+import org.apache.tajo.plan.verifier.PreLogicalPlanVerifier;
+import org.apache.tajo.plan.verifier.VerificationState;
+import org.apache.tajo.plan.verifier.VerifyException;
 import org.apache.tajo.storage.*;
 import org.apache.tajo.util.CommonTestingUtil;
+import org.apache.tajo.util.ProtoUtil;
 import org.apache.tajo.worker.TaskAttemptContext;
 
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.TimeZone;
 
 import static org.apache.tajo.TajoConstants.DEFAULT_TABLESPACE_NAME;
 import static org.apache.tajo.catalog.proto.CatalogProtos.AlterTablespaceProto;
-import static org.apache.tajo.ipc.ClientProtos.SubmitQueryResponse;
+import static org.apache.tajo.catalog.proto.CatalogProtos.UpdateTableStatsProto;
 import static org.apache.tajo.ipc.ClientProtos.SerializedResultSet;
+import static org.apache.tajo.ipc.ClientProtos.SubmitQueryResponse;
 
 public class GlobalEngine extends AbstractService {
   /** Class Logger */
   private final static Log LOG = LogFactory.getLog(GlobalEngine.class);
 
   private final MasterContext context;
-  private final AbstractStorageManager sm;
+  private final StorageManager sm;
 
   private SQLAnalyzer analyzer;
   private CatalogService catalog;
@@ -208,7 +215,39 @@ public class GlobalEngine extends AbstractService {
     responseBuilder.setIsForwarded(false);
     responseBuilder.setUserName(queryContext.get(SessionVars.USERNAME));
 
-    if (PlannerUtil.checkIfDDLPlan(rootNode)) {
+    if (PlannerUtil.checkIfSetSession(rootNode)) {
+
+      SetSessionNode setSessionNode = rootNode.getChild();
+
+      final String varName = setSessionNode.getName();
+
+      // SET CATALOG 'XXX'
+      if (varName.equals(SessionVars.CURRENT_DATABASE.name())) {
+        String databaseName = setSessionNode.getValue();
+
+        if (catalog.existDatabase(databaseName)) {
+          session.selectDatabase(setSessionNode.getValue());
+        } else {
+          responseBuilder.setQueryId(QueryIdFactory.NULL_QUERY_ID.getProto());
+          responseBuilder.setResultCode(ClientProtos.ResultCode.ERROR);
+          responseBuilder.setErrorMessage("database \"" + databaseName + "\" does not exists.");
+          return responseBuilder.build();
+        }
+
+        // others
+      } else {
+        if (setSessionNode.isDefaultValue()) {
+          session.removeVariable(varName);
+        } else {
+          session.setVariable(varName, setSessionNode.getValue());
+        }
+      }
+
+      context.getSystemMetrics().counter("Query", "numDDLQuery").inc();
+      responseBuilder.setQueryId(QueryIdFactory.NULL_QUERY_ID.getProto());
+      responseBuilder.setResultCode(ClientProtos.ResultCode.OK);
+
+    } else if (PlannerUtil.checkIfDDLPlan(rootNode)) {
       context.getSystemMetrics().counter("Query", "numDDLQuery").inc();
       updateQuery(queryContext, rootNode.getChild());
       responseBuilder.setQueryId(QueryIdFactory.NULL_QUERY_ID.getProto());
@@ -251,6 +290,10 @@ public class GlobalEngine extends AbstractService {
         LimitNode limitNode = plan.getRootBlock().getNode(NodeType.LIMIT);
         maxRow = (int) limitNode.getFetchFirstNum();
       }
+      if (desc.getStats().getNumRows() == 0) {
+        desc.getStats().setNumRows(TajoConstants.UNKNOWN_ROW_NUMBER);
+      }
+
       QueryId queryId = QueryIdFactory.newQueryId(context.getResourceManager().getSeedQueryId());
 
       NonForwardQueryResultScanner queryResultScanner =
@@ -262,12 +305,11 @@ public class GlobalEngine extends AbstractService {
       responseBuilder.setQueryId(queryId.getProto());
       responseBuilder.setMaxRowNum(maxRow);
       responseBuilder.setTableDesc(desc.getProto());
-      responseBuilder.setSessionVariables(session.getProto().getVariables());
       responseBuilder.setResultCode(ClientProtos.ResultCode.OK);
 
       // NonFromQuery indicates a form of 'select a, x+y;'
     } else if (PlannerUtil.checkIfNonFromQuery(plan)) {
-      Target [] targets = plan.getRootBlock().getRawTargets();
+      Target[] targets = plan.getRootBlock().getRawTargets();
       if (targets == null) {
         throw new PlanningException("No targets");
       }
@@ -295,6 +337,15 @@ public class GlobalEngine extends AbstractService {
         responseBuilder.setResultCode(ClientProtos.ResultCode.OK);
       }
     } else { // it requires distributed execution. So, the query is forwarded to a query master.
+      StoreType storeType = PlannerUtil.getStoreType(plan);
+      if (storeType != null) {
+        StorageManager sm = StorageManager.getStorageManager(context.getConf(), storeType);
+        StorageProperty storageProperty = sm.getStorageProperty();
+        if (!storageProperty.isSupportsInsertInto()) {
+          throw new VerifyException("Inserting into non-file storage is not supported.");
+        }
+        sm.beforeInsertOrCATS(rootNode.getChild());
+      }
       context.getSystemMetrics().counter("Query", "numDMLQuery").inc();
       hookManager.doHooks(queryContext, plan);
 
@@ -307,6 +358,7 @@ public class GlobalEngine extends AbstractService {
         responseBuilder.setQueryId(QueryIdFactory.NULL_QUERY_ID.getProto());
         responseBuilder.setResultCode(ClientProtos.ResultCode.ERROR);
         responseBuilder.setErrorMessage("Fail starting QueryMaster.");
+        LOG.error("Fail starting QueryMaster: " + sql);
       } else {
         responseBuilder.setIsForwarded(true);
         responseBuilder.setQueryId(queryInfo.getQueryId().getProto());
@@ -315,9 +367,12 @@ public class GlobalEngine extends AbstractService {
           responseBuilder.setQueryMasterHost(queryInfo.getQueryMasterHost());
         }
         responseBuilder.setQueryMasterPort(queryInfo.getQueryMasterClientPort());
-        LOG.info("Query is forwarded to " + queryInfo.getQueryMasterHost() + ":" + queryInfo.getQueryMasterPort());
+        LOG.info("Query " + queryInfo.getQueryId().toString() + "," + queryInfo.getSql() + "," +
+            " is forwarded to " + queryInfo.getQueryMasterHost() + ":" + queryInfo.getQueryMasterPort());
       }
     }
+
+    responseBuilder.setSessionVars(ProtoUtil.convertFromMap(session.getAllVariables()));
     SubmitQueryResponse response = responseBuilder.build();
     return response;
   }
@@ -328,22 +383,19 @@ public class GlobalEngine extends AbstractService {
     String queryId = nodeUniqName + "_" + System.currentTimeMillis();
 
     FileSystem fs = TajoConf.getWarehouseDir(context.getConf()).getFileSystem(context.getConf());
-    Path stagingDir = QueryMasterTask.initStagingDir(context.getConf(), fs, queryId.toString());
-
+    Path stagingDir = QueryMasterTask.initStagingDir(context.getConf(), queryId.toString(), queryContext);
     Path stagingResultDir = new Path(stagingDir, TajoConstants.RESULT_DIR_NAME);
-    fs.mkdirs(stagingResultDir);
 
     TableDesc tableDesc = null;
     Path finalOutputDir = null;
     if (insertNode.getTableName() != null) {
       tableDesc = this.catalog.getTableDesc(insertNode.getTableName());
-      finalOutputDir = tableDesc.getPath();
+      finalOutputDir = new Path(tableDesc.getPath());
     } else {
       finalOutputDir = insertNode.getPath();
     }
 
-    TaskAttemptContext taskAttemptContext =
-        new TaskAttemptContext(queryContext, null, null, (CatalogProtos.FragmentProto[]) null, stagingDir);
+    TaskAttemptContext taskAttemptContext = new TaskAttemptContext(queryContext, null, null, null, stagingDir);
     taskAttemptContext.setOutputPath(new Path(stagingResultDir, "part-01-000000"));
 
     EvalExprExec evalExprExec = new EvalExprExec(taskAttemptContext, (EvalExprNode) insertNode.getChild());
@@ -394,8 +446,11 @@ public class GlobalEngine extends AbstractService {
       stats.setNumBytes(volume);
       stats.setNumRows(1);
 
-      catalog.dropTable(insertNode.getTableName());
-      catalog.createTable(tableDesc);
+      UpdateTableStatsProto.Builder builder = UpdateTableStatsProto.newBuilder();
+      builder.setTableName(tableDesc.getName());
+      builder.setStats(stats.getProto());
+
+      catalog.updateTableStats(builder.build());
 
       responseBuilder.setTableDesc(tableDesc.getProto());
     } else {
@@ -453,6 +508,8 @@ public class GlobalEngine extends AbstractService {
   private boolean updateQuery(QueryContext queryContext, LogicalNode root) throws IOException {
 
     switch (root.getType()) {
+      case SET_SESSION:
+
       case CREATE_DATABASE:
         CreateDatabaseNode createDatabase = (CreateDatabaseNode) root;
         createDatabase(queryContext, createDatabase.getDatabaseName(), null, createDatabase.isIfNotExists());
@@ -511,6 +568,7 @@ public class GlobalEngine extends AbstractService {
     LOG.info("=============================================");
 
     annotatedPlanVerifier.verify(queryContext, state, plan);
+    verifyInsertTableSchema(queryContext, state, plan);
 
     if (!state.verified()) {
       StringBuilder sb = new StringBuilder();
@@ -521,6 +579,25 @@ public class GlobalEngine extends AbstractService {
     }
 
     return plan;
+  }
+
+  private void verifyInsertTableSchema(QueryContext queryContext, VerificationState state, LogicalPlan plan) {
+    StoreType storeType = PlannerUtil.getStoreType(plan);
+    if (storeType != null) {
+      LogicalRootNode rootNode = plan.getRootBlock().getRoot();
+      if (rootNode.getChild().getType() == NodeType.INSERT) {
+        try {
+          TableDesc tableDesc = PlannerUtil.getTableDesc(catalog, rootNode.getChild());
+          InsertNode iNode = rootNode.getChild();
+          Schema outSchema = iNode.getChild().getOutSchema();
+
+          StorageManager.getStorageManager(queryContext.getConf(), storeType)
+              .verifyInsertTableSchema(tableDesc, outSchema);
+        } catch (Throwable t) {
+          state.addVerification(t.getMessage());
+        }
+      }
+    }
   }
 
   /**
@@ -648,7 +725,7 @@ public class GlobalEngine extends AbstractService {
 
       Path warehousePath = new Path(TajoConf.getWarehouseDir(context.getConf()), databaseName);
       TableDesc tableDesc = catalog.getTableDesc(databaseName, simpleTableName);
-      Path tablePath = tableDesc.getPath();
+      Path tablePath = new Path(tableDesc.getPath());
       if (tablePath.getParent() == null ||
           !tablePath.getParent().toUri().getPath().equals(warehousePath.toUri().getPath())) {
         throw new IOException("Can't truncate external table:" + eachTableName + ", data dir=" + tablePath +
@@ -658,7 +735,7 @@ public class GlobalEngine extends AbstractService {
     }
 
     for (TableDesc eachTable: tableDescList) {
-      Path path = eachTable.getPath();
+      Path path = new Path(eachTable.getPath());
       LOG.info("Truncate table: " + eachTable.getName() + ", delete all data files in " + path);
       FileSystem fs = path.getFileSystem(context.getConf());
 
@@ -685,32 +762,18 @@ public class GlobalEngine extends AbstractService {
       meta = CatalogUtil.newTableMeta(createTable.getStorageType());
     }
 
-    if(createTable.isExternal()){
+    if(PlannerUtil.isFileStorageType(createTable.getStorageType()) && createTable.isExternal()){
       Preconditions.checkState(createTable.hasPath(), "ERROR: LOCATION must be given.");
-    } else {
-      String databaseName;
-      String tableName;
-      if (CatalogUtil.isFQTableName(createTable.getTableName())) {
-        databaseName = CatalogUtil.extractQualifier(createTable.getTableName());
-        tableName = CatalogUtil.extractSimpleName(createTable.getTableName());
-      } else {
-        databaseName = queryContext.getCurrentDatabase();
-        tableName = createTable.getTableName();
-      }
-
-      // create a table directory (i.e., ${WAREHOUSE_DIR}/${DATABASE_NAME}/${TABLE_NAME} )
-      Path tablePath = StorageUtil.concatPath(sm.getWarehouseDir(), databaseName, tableName);
-      createTable.setPath(tablePath);
     }
 
-    return createTableOnPath(queryContext, createTable.getTableName(), createTable.getTableSchema(),
-        meta, createTable.getPath(), createTable.isExternal(), createTable.getPartitionMethod(), ifNotExists);
+    return createTable(queryContext, createTable.getTableName(), createTable.getStorageType(),
+        createTable.getTableSchema(), meta, createTable.getPath(), createTable.isExternal(),
+        createTable.getPartitionMethod(), ifNotExists);
   }
 
-  public TableDesc createTableOnPath(QueryContext queryContext, String tableName, Schema schema, TableMeta meta,
-                                     Path path, boolean isExternal, PartitionMethodDesc partitionDesc,
-                                     boolean ifNotExists)
-      throws IOException {
+  public TableDesc createTable(QueryContext queryContext, String tableName, StoreType storeType,
+                               Schema schema, TableMeta meta, Path path, boolean isExternal,
+                               PartitionMethodDesc partitionDesc, boolean ifNotExists) throws IOException {
     String databaseName;
     String simpleTableName;
     if (CatalogUtil.isFQTableName(tableName)) {
@@ -734,38 +797,14 @@ public class GlobalEngine extends AbstractService {
       }
     }
 
-    FileSystem fs = path.getFileSystem(context.getConf());
-
-    if (isExternal) {
-      if(!fs.exists(path)) {
-        LOG.error("ERROR: " + path.toUri() + " does not exist");
-        throw new IOException("ERROR: " + path.toUri() + " does not exist");
-      }
-    } else {
-      fs.mkdirs(path);
-    }
-
-    long totalSize = 0;
-
-    try {
-      totalSize = sm.calculateSize(path);
-    } catch (IOException e) {
-      LOG.warn("Cannot calculate the size of the relation", e);
-    }
-
-    TableStats stats = new TableStats();
-    stats.setNumBytes(totalSize);
-
-    if (isExternal) { // if it is an external table, there is no way to know the exact row number without processing.
-      stats.setNumRows(TajoClient.UNKNOWN_ROW_NUMBER);
-    }
-
     TableDesc desc = new TableDesc(CatalogUtil.buildFQName(databaseName, simpleTableName),
-        schema, meta, path, isExternal);
-    desc.setStats(stats);
+        schema, meta, (path != null ? path.toUri(): null), isExternal);
+    
     if (partitionDesc != null) {
       desc.setPartitionMethod(partitionDesc);
     }
+
+    StorageManager.getStorageManager(queryContext.getConf(), storeType).createTable(desc, ifNotExists);
 
     if (catalog.createTable(desc)) {
       LOG.info("Table " + desc.getName() + " is created (" + desc.getStats().getNumBytes() + ")");
@@ -860,13 +899,13 @@ public class GlobalEngine extends AbstractService {
       }
     }
 
-    Path path = catalog.getTableDesc(qualifiedName).getPath();
+    TableDesc tableDesc = catalog.getTableDesc(qualifiedName);
     catalog.dropTable(qualifiedName);
 
     if (purge) {
       try {
-        FileSystem fs = path.getFileSystem(context.getConf());
-        fs.delete(path, true);
+        StorageManager.getStorageManager(queryContext.getConf(),
+            tableDesc.getMeta().getStoreType()).purgeTable(tableDesc);
       } catch (IOException e) {
         throw new InternalError(e.getMessage());
       }

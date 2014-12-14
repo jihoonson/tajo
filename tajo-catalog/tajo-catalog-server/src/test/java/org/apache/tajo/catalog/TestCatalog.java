@@ -33,6 +33,7 @@ import org.apache.tajo.catalog.proto.CatalogProtos.StoreType;
 import org.apache.tajo.catalog.store.DerbyStore;
 import org.apache.tajo.catalog.store.MySQLStore;
 import org.apache.tajo.catalog.store.MariaDBStore;
+import org.apache.tajo.catalog.store.OracleStore;
 import org.apache.tajo.common.TajoDataTypes;
 import org.apache.tajo.common.TajoDataTypes.Type;
 import org.apache.tajo.conf.TajoConf;
@@ -119,7 +120,8 @@ public class TestCatalog {
   public static boolean isConnectionIdRequired(String driverClass) {
     return driverClass.equals(MySQLStore.class.getCanonicalName()) ||
            driverClass.equals(MariaDBStore.class.getCanonicalName()) ||
-           driverClass.equals(PostgreSQLStore.class.getCanonicalName());
+           driverClass.equals(PostgreSQLStore.class.getCanonicalName()) ||
+	   driverClass.equals(OracleStore.class.getCanonicalName());
   }
 	
 	@AfterClass
@@ -244,7 +246,7 @@ public class TestCatalog {
         CatalogUtil.buildFQName(databaseName, tableName),
         schema1,
         new TableMeta(StoreType.CSV, new KeyValueSet()),
-        path, true);
+        path.toUri(), true);
     return table;
   }
 
@@ -365,7 +367,7 @@ public class TestCatalog {
         schema1,
         StoreType.CSV,
         new KeyValueSet(),
-        path);
+        path.toUri());
 
 		assertFalse(catalog.existsTable(DEFAULT_DATABASE_NAME, "getTable"));
     catalog.createTable(meta);
@@ -405,7 +407,7 @@ public class TestCatalog {
     TableMeta meta = CatalogUtil.newTableMeta(StoreType.CSV);
     return new TableDesc(
         CatalogUtil.buildFQName(TajoConstants.DEFAULT_DATABASE_NAME, tableName), schema, meta,
-        new Path(CommonTestingUtil.getTestDir(), "indexed"));
+        new Path(CommonTestingUtil.getTestDir(), "indexed").toUri());
   }
 
   @Test
@@ -585,7 +587,7 @@ public class TestCatalog {
 
     TableDesc desc =
         new TableDesc(tableName, schema, meta,
-            new Path(CommonTestingUtil.getTestDir(), "addedtable"));
+            new Path(CommonTestingUtil.getTestDir(), "addedtable").toUri());
     desc.setPartitionMethod(partitionDesc);
 
     assertFalse(catalog.existsTable(tableName));
@@ -623,7 +625,7 @@ public class TestCatalog {
 
     TableDesc desc =
         new TableDesc(tableName, schema, meta,
-            new Path(CommonTestingUtil.getTestDir(), "addedtable"));
+            new Path(CommonTestingUtil.getTestDir(), "addedtable").toUri());
     desc.setPartitionMethod(partitionDesc);
 
     assertFalse(catalog.existsTable(tableName));
@@ -661,7 +663,7 @@ public class TestCatalog {
 
     TableDesc desc =
         new TableDesc(tableName, schema, meta,
-            new Path(CommonTestingUtil.getTestDir(), "addedtable"));
+            new Path(CommonTestingUtil.getTestDir(), "addedtable").toUri());
     desc.setPartitionMethod(partitionDesc);
     assertFalse(catalog.existsTable(tableName));
     catalog.createTable(desc);
@@ -698,7 +700,7 @@ public class TestCatalog {
 
     TableDesc desc =
         new TableDesc(tableName, schema, meta,
-            new Path(CommonTestingUtil.getTestDir(), "addedtable"));
+            new Path(CommonTestingUtil.getTestDir(), "addedtable").toUri());
     desc.setPartitionMethod(partitionDesc);
     assertFalse(catalog.existsTable(tableName));
     catalog.createTable(desc);
@@ -736,7 +738,7 @@ public class TestCatalog {
 
     TableDesc desc =
         new TableDesc(tableName, schema, meta,
-            new Path(CommonTestingUtil.getTestDir(), "addedtable"));
+            new Path(CommonTestingUtil.getTestDir(), "addedtable").toUri());
     desc.setPartitionMethod(partitionDesc);
     assertFalse(catalog.existsTable(tableName));
     catalog.createTable(desc);

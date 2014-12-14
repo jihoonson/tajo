@@ -19,6 +19,8 @@
 package org.apache.tajo.worker;
 
 import com.codahale.metrics.Gauge;
+import com.google.common.annotations.VisibleForTesting;
+
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -41,10 +43,15 @@ import org.apache.tajo.master.querymaster.QueryMasterManagerService;
 import org.apache.tajo.master.rm.TajoWorkerResourceManager;
 import org.apache.tajo.pullserver.TajoPullServerService;
 import org.apache.tajo.rpc.RpcChannelFactory;
-import org.apache.tajo.rpc.RpcConnectionPool;
 import org.apache.tajo.rpc.protocolrecords.PrimitiveProtos;
+import org.apache.tajo.rule.EvaluationContext;
+import org.apache.tajo.rule.EvaluationFailedException;
+import org.apache.tajo.rule.SelfDiagnosisRuleEngine;
+import org.apache.tajo.rule.SelfDiagnosisRuleSession;
 import org.apache.tajo.storage.HashShuffleAppenderManager;
 import org.apache.tajo.util.*;
+import org.apache.tajo.util.history.HistoryReader;
+import org.apache.tajo.util.history.HistoryWriter;
 import org.apache.tajo.util.metrics.TajoSystemMetrics;
 import org.apache.tajo.webapp.StaticHttpServer;
 
@@ -113,8 +120,6 @@ public class TajoWorker extends CompositeService {
 
   private ThreadMXBean threadBean = ManagementFactory.getThreadMXBean();
 
-  private RpcConnectionPool connPool;
-
   private String[] cmdArgs;
 
   private DeletionService deletionService;
@@ -128,6 +133,10 @@ public class TajoWorker extends CompositeService {
   private LocalDirAllocator lDirAllocator;
 
   private JvmPauseMonitor pauseMonitor;
+
+  private HistoryWriter taskHistoryWriter;
+
+  private HistoryReader historyReader;
 
   public TajoWorker() throws Exception {
     super(TajoWorker.class.getName());
@@ -176,7 +185,6 @@ public class TajoWorker extends CompositeService {
     this.systemConf = (TajoConf)conf;
     RackResolver.init(systemConf);
 
-    this.connPool = RpcConnectionPool.getPool(systemConf);
     this.workerContext = new WorkerContext();
     this.lDirAllocator = new LocalDirAllocator(ConfVars.WORKER_TEMPORAL_DIR.varname);
 
@@ -253,6 +261,14 @@ public class TajoWorker extends CompositeService {
       LOG.fatal(e.getMessage(), e);
       System.exit(-1);
     }
+
+    taskHistoryWriter = new HistoryWriter(workerContext.getWorkerName(), false);
+    addIfService(taskHistoryWriter);
+    taskHistoryWriter.init(conf);
+
+    historyReader = new HistoryReader(workerContext.getWorkerName(), this.systemConf);
+    
+    diagnoseTajoWorker();
   }
 
   private void initWorkerMetrics() {
@@ -306,6 +322,16 @@ public class TajoWorker extends CompositeService {
       getWorkerContext().cleanupTemporalDirectories();
     }
   }
+  
+  private void diagnoseTajoWorker() throws EvaluationFailedException {
+    SelfDiagnosisRuleEngine ruleEngine = SelfDiagnosisRuleEngine.getInstance();
+    SelfDiagnosisRuleSession ruleSession = ruleEngine.newRuleSession();
+    EvaluationContext context = new EvaluationContext();
+    
+    context.addParameter(TajoConf.class.getName(), systemConf);
+    
+    ruleSession.withCategoryNames("base", "worker").fireRules(context);
+  }
 
   private void startJvmPauseMonitor(){
     pauseMonitor = new JvmPauseMonitor(systemConf);
@@ -357,11 +383,6 @@ public class TajoWorker extends CompositeService {
 
     if (catalogClient != null) {
       catalogClient.close();
-    }
-
-    if(connPool != null) {
-      connPool.shutdown();
-      RpcChannelFactory.shutdown();
     }
 
     if(webServer != null && webServer.isAlive()) {
@@ -541,6 +562,14 @@ public class TajoWorker extends CompositeService {
     public HashShuffleAppenderManager getHashShuffleAppenderManager() {
       return hashShuffleAppenderManager;
     }
+
+    public HistoryWriter getTaskHistoryWriter() {
+      return taskHistoryWriter;
+    }
+
+    public HistoryReader getHistoryReader() {
+      return historyReader;
+    }
   }
 
   private int getStandAlonePullServerPort() {
@@ -565,6 +594,7 @@ public class TajoWorker extends CompositeService {
     return pullServerPort;
   }
 
+  @VisibleForTesting
   public void stopWorkerForce() {
     stop();
   }
@@ -585,6 +615,7 @@ public class TajoWorker extends CompositeService {
         LOG.info("TajoWorker received SIGINT Signal");
         LOG.info("============================================");
         stop();
+        RpcChannelFactory.shutdown();
       }
     }
   }

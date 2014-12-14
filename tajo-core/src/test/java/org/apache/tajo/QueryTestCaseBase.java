@@ -29,14 +29,18 @@ import org.apache.tajo.annotation.Nullable;
 import org.apache.tajo.catalog.CatalogService;
 import org.apache.tajo.catalog.CatalogUtil;
 import org.apache.tajo.catalog.TableDesc;
-import org.apache.tajo.cli.ParsedResult;
-import org.apache.tajo.cli.SimpleParser;
+import org.apache.tajo.cli.tsql.ParsedResult;
+import org.apache.tajo.cli.tsql.SimpleParser;
 import org.apache.tajo.client.TajoClient;
+import org.apache.tajo.client.TajoClientImpl;
 import org.apache.tajo.conf.TajoConf;
 import org.apache.tajo.engine.parser.SQLAnalyzer;
-import org.apache.tajo.engine.planner.*;
 import org.apache.tajo.engine.query.QueryContext;
 import org.apache.tajo.master.GlobalEngine;
+import org.apache.tajo.plan.*;
+import org.apache.tajo.plan.verifier.LogicalPlanVerifier;
+import org.apache.tajo.plan.verifier.PreLogicalPlanVerifier;
+import org.apache.tajo.plan.verifier.VerificationState;
 import org.apache.tajo.storage.StorageUtil;
 import org.apache.tajo.util.FileUtil;
 import org.junit.*;
@@ -165,9 +169,9 @@ public class QueryTestCaseBase {
   private static String currentDatabase;
   private static Set<String> createdTableGlobalSet = new HashSet<String>();
   // queries and results directory corresponding to subclass class.
-  private Path currentQueryPath;
-  private Path currentResultPath;
-  private Path currentDatasetPath;
+  protected Path currentQueryPath;
+  protected Path currentResultPath;
+  protected Path currentDatasetPath;
 
   // for getting a method name
   @Rule public TestName name = new TestName();
@@ -175,7 +179,7 @@ public class QueryTestCaseBase {
   @BeforeClass
   public static void setUpClass() throws IOException {
     conf = testBase.getTestingCluster().getConfiguration();
-    client = new TajoClient(conf);
+    client = new TajoClientImpl(conf);
   }
 
   @AfterClass
@@ -299,7 +303,7 @@ public class QueryTestCaseBase {
     return executeFile(getMethodName() + ".sql");
   }
 
-  private String getMethodName() {
+  protected String getMethodName() {
     String methodName = name.getMethodName();
     // In the case of parameter execution name's pattern is methodName[0]
     if (methodName.endsWith("]")) {
@@ -326,7 +330,13 @@ public class QueryTestCaseBase {
     if (parsedResults.size() > 1) {
       assertNotNull("This script \"" + queryFileName + "\" includes two or more queries");
     }
-    ResultSet result = client.executeQueryAndGetResult(parsedResults.get(0).getHistoryStatement());
+
+    int idx = 0;
+    for (; idx < parsedResults.size() - 1; idx++) {
+      client.executeQueryAndGetResult(parsedResults.get(idx).getHistoryStatement()).close();
+    }
+
+    ResultSet result = client.executeQueryAndGetResult(parsedResults.get(idx).getHistoryStatement());
     assertNotNull("Query succeeded test", result);
     return result;
   }
@@ -528,6 +538,14 @@ public class QueryTestCaseBase {
    *   replaced by the first and second elements of <code>args</code> respectively</li>. It uses zero-based index.
    * </ul>
    *
+   * Example ddl
+   * <pre>
+   *   CREATE EXTERNAL TABLE ${0} (
+   *     t_timestamp  TIMESTAMP,
+   *     t_date    DATE
+   *   ) USING CSV LOCATION ${table.path}
+   * </pre>
+   *
    * @param ddlFileName A file name, containing a data definition statement.
    * @param dataFileName A file name, containing data rows, which columns have to be separated by vertical bar '|'.
    *                     This file name is used for replacing some format string indicating an external table location.
@@ -680,7 +698,7 @@ public class QueryTestCaseBase {
       return null;
     }
 
-    Path path = tableDesc.getPath();
+    Path path = new Path(tableDesc.getPath());
     return getTableFileContents(path);
   }
 
@@ -690,7 +708,7 @@ public class QueryTestCaseBase {
       return null;
     }
 
-    Path path = tableDesc.getPath();
+    Path path = new Path(tableDesc.getPath());
     FileSystem fs = path.getFileSystem(conf);
 
     return listFiles(fs, path);

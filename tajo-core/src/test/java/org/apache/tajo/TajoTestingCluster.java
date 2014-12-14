@@ -22,6 +22,7 @@ import com.google.common.base.Charsets;
 import com.google.common.base.Preconditions;
 import com.google.common.io.Closeables;
 import com.google.common.io.Files;
+import org.apache.commons.lang.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.fs.*;
@@ -32,9 +33,13 @@ import org.apache.hadoop.hdfs.MiniDFSCluster;
 import org.apache.hadoop.util.ShutdownHookManager;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.server.resourcemanager.ResourceManager;
+import org.apache.log4j.Level;
+import org.apache.log4j.Logger;
 import org.apache.tajo.catalog.*;
 import org.apache.tajo.catalog.proto.CatalogProtos;
 import org.apache.tajo.client.TajoClient;
+import org.apache.tajo.client.TajoClientImpl;
+import org.apache.tajo.client.TajoClientUtil;
 import org.apache.tajo.conf.TajoConf;
 import org.apache.tajo.conf.TajoConf.ConfVars;
 import org.apache.tajo.master.TajoMaster;
@@ -54,6 +59,7 @@ import java.net.URL;
 import java.sql.ResultSet;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.TimeZone;
 import java.util.UUID;
 
 public class TajoTestingCluster {
@@ -64,6 +70,7 @@ public class TajoTestingCluster {
   private FileSystem defaultFS;
   private MiniDFSCluster dfsCluster;
 	private MiniCatalogServer catalogServer;
+  private HBaseTestClusterUtil hbaseUtil;
 
   private TajoMaster tajoMaster;
   private List<TajoWorker> tajoWorkers = new ArrayList<TajoWorker>();
@@ -88,6 +95,12 @@ public class TajoTestingCluster {
    */
   public Boolean isHCatalogStoreUse = false;
 
+  private static final String LOG_LEVEL;
+
+  static {
+    LOG_LEVEL = System.getProperty("LOG_LEVEL");
+  }
+
   public TajoTestingCluster() {
     this(false);
   }
@@ -106,6 +119,10 @@ public class TajoTestingCluster {
   }
 
   void initPropertiesAndConfigs() {
+    TimeZone testDefaultTZ = TimeZone.getTimeZone(TajoConstants.DEFAULT_SYSTEM_TIMEZONE);
+    conf.setSystemTimezone(testDefaultTZ);
+    TimeZone.setDefault(testDefaultTZ);
+
     if (System.getProperty(ConfVars.RESOURCE_MANAGER_CLASS.varname) != null) {
       String testResourceManager = System.getProperty(ConfVars.RESOURCE_MANAGER_CLASS.varname);
       Preconditions.checkState(testResourceManager.equals(TajoWorkerResourceManager.class.getCanonicalName()));
@@ -114,8 +131,35 @@ public class TajoTestingCluster {
     conf.setInt(ConfVars.WORKER_RESOURCE_AVAILABLE_MEMORY_MB.varname, 1024);
     conf.setFloat(ConfVars.WORKER_RESOURCE_AVAILABLE_DISKS.varname, 2.0f);
 
+
+    // Client API RPC
+    conf.setIntVar(ConfVars.RPC_CLIENT_WORKER_THREAD_NUM, 2);
+
+    //Client API service RPC Server
+    conf.setIntVar(ConfVars.MASTER_SERVICE_RPC_SERVER_WORKER_THREAD_NUM, 2);
+    conf.setIntVar(ConfVars.WORKER_SERVICE_RPC_SERVER_WORKER_THREAD_NUM, 2);
+
+    // Internal RPC Client
+    conf.setIntVar(ConfVars.INTERNAL_RPC_CLIENT_WORKER_THREAD_NUM, 2);
+    conf.setIntVar(ConfVars.SHUFFLE_RPC_CLIENT_WORKER_THREAD_NUM, 2);
+
+    // Internal RPC Server
+    conf.setIntVar(ConfVars.MASTER_RPC_SERVER_WORKER_THREAD_NUM, 2);
+    conf.setIntVar(ConfVars.QUERY_MASTER_RPC_SERVER_WORKER_THREAD_NUM, 2);
+    conf.setIntVar(ConfVars.WORKER_RPC_SERVER_WORKER_THREAD_NUM, 2);
+    conf.setIntVar(ConfVars.CATALOG_RPC_SERVER_WORKER_THREAD_NUM, 2);
+    conf.setIntVar(ConfVars.SHUFFLE_RPC_SERVER_WORKER_THREAD_NUM, 2);
+
     this.standbyWorkerMode = conf.getVar(ConfVars.RESOURCE_MANAGER_CLASS)
         .indexOf(TajoWorkerResourceManager.class.getName()) >= 0;
+
+    /* Since Travi CI limits the size of standard output log up to 4MB */
+    if (!StringUtils.isEmpty(LOG_LEVEL)) {
+      Level defaultLevel = Logger.getRootLogger().getLevel();
+      Logger.getLogger("org.apache.tajo").setLevel(Level.toLevel(LOG_LEVEL.toUpperCase(), defaultLevel));
+      Logger.getLogger("org.apache.hadoop").setLevel(Level.toLevel(LOG_LEVEL.toUpperCase(), defaultLevel));
+      Logger.getLogger("BlockStateChange").setLevel(Level.toLevel(LOG_LEVEL.toUpperCase(), defaultLevel));
+    }
   }
 
 	public TajoConf getConfiguration() {
@@ -239,6 +283,10 @@ public class TajoTestingCluster {
 
   public FileSystem getDefaultFileSystem() {
     return this.defaultFS;
+  }
+
+  public HBaseTestClusterUtil getHBaseUtil() {
+    return hbaseUtil;
   }
 
   ////////////////////////////////////////////////////////
@@ -464,6 +512,8 @@ public class TajoTestingCluster {
     startMiniDFSCluster(numDataNodes, this.clusterTestBuildDir, dataNodeHosts);
     this.dfsCluster.waitClusterUp();
 
+    hbaseUtil = new HBaseTestClusterUtil(conf, clusterTestBuildDir);
+
     if(!standbyWorkerMode) {
       startMiniYarnCluster();
     }
@@ -551,7 +601,6 @@ public class TajoTestingCluster {
     }
 
     if(this.dfsCluster != null) {
-
       try {
         FileSystem fs = this.dfsCluster.getFileSystem();
         if (fs != null) fs.close();
@@ -570,6 +619,10 @@ public class TajoTestingCluster {
       }
       this.clusterTestBuildDir = null;
     }
+
+    hbaseUtil.stopZooKeeperCluster();
+    hbaseUtil.stopHBaseCluster();
+
     LOG.info("Minicluster is down");
   }
 
@@ -583,7 +636,7 @@ public class TajoTestingCluster {
       Thread.sleep(1000);
     }
     TajoConf conf = util.getConfiguration();
-    return new TajoClient(conf);
+    return new TajoClientImpl(conf);
   }
 
   public static ResultSet run(String[] names,
@@ -620,7 +673,7 @@ public class TajoTestingCluster {
       Thread.sleep(1000);
     }
     TajoConf conf = util.getConfiguration();
-    TajoClient client = new TajoClient(conf);
+    TajoClient client = new TajoClientImpl(conf);
 
     try {
       return run(names, schemas, tableOption, tables, query, client);
@@ -645,7 +698,7 @@ public class TajoTestingCluster {
       Thread.sleep(1000);
     }
     TajoConf conf = util.getConfiguration();
-    TajoClient client = new TajoClient(conf);
+    TajoClient client = new TajoClientImpl(conf);
     try {
       FileSystem fs = util.getDefaultFileSystem();
       Path rootDir = util.getMaster().
@@ -721,7 +774,7 @@ public class TajoTestingCluster {
     QueryMasterTask qmt = null;
 
     int i = 0;
-    while (qmt == null || TajoClient.isInPreNewState(qmt.getState())) {
+    while (qmt == null || TajoClientUtil.isQueryWaitingForSchedule(qmt.getState())) {
       try {
         Thread.sleep(delay);
         if(qmt == null){

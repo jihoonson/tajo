@@ -32,18 +32,22 @@ import org.apache.tajo.ExecutionBlockId;
 import org.apache.tajo.QueryIdFactory;
 import org.apache.tajo.QueryUnitAttemptId;
 import org.apache.tajo.QueryUnitId;
+import org.apache.tajo.TajoProtos.TaskAttemptState;
 import org.apache.tajo.catalog.statistics.TableStats;
-import org.apache.tajo.engine.planner.logical.*;
 import org.apache.tajo.ipc.TajoWorkerProtocol.FailureIntermediateProto;
 import org.apache.tajo.ipc.TajoWorkerProtocol.IntermediateEntryProto;
 import org.apache.tajo.master.FragmentPair;
 import org.apache.tajo.master.TaskState;
 import org.apache.tajo.master.event.*;
 import org.apache.tajo.master.event.QueryUnitAttemptScheduleEvent.QueryUnitAttemptScheduleContext;
+import org.apache.tajo.plan.logical.*;
 import org.apache.tajo.storage.DataLocation;
 import org.apache.tajo.storage.fragment.FileFragment;
+import org.apache.tajo.storage.fragment.Fragment;
+import org.apache.tajo.storage.fragment.FragmentConvertor;
 import org.apache.tajo.util.Pair;
 import org.apache.tajo.util.TajoIdUtils;
+import org.apache.tajo.util.history.QueryUnitHistory;
 import org.apache.tajo.worker.FetchImpl;
 
 import java.net.URI;
@@ -84,6 +88,7 @@ public class QueryUnit implements EventHandler<TaskEvent> {
 
   private QueryUnitAttemptId successfulAttempt;
   private String succeededHost;
+  private int succeededHostPort;
   private int succeededPullServerPort;
 
   private int failedAttempts;
@@ -95,6 +100,8 @@ public class QueryUnit implements EventHandler<TaskEvent> {
   private List<DataLocation> dataLocations = Lists.newArrayList();
 
   private static final AttemptKilledTransition ATTEMPT_KILLED_TRANSITION = new AttemptKilledTransition();
+
+  private QueryUnitHistory finalQueryUnitHistory;
 
   protected static final StateMachineFactory
       <QueryUnit, TaskState, TaskEventType, TaskEvent> stateMachineFactory =
@@ -214,6 +221,81 @@ public class QueryUnit implements EventHandler<TaskEvent> {
     }
   }
 
+  public TaskAttemptState getLastAttemptStatus() {
+    QueryUnitAttempt lastAttempt = getLastAttempt();
+    if (lastAttempt != null) {
+      return lastAttempt.getState();
+    } else {
+      return TaskAttemptState.TA_ASSIGNED;
+    }
+  }
+
+  public QueryUnitHistory getQueryUnitHistory() {
+    if (finalQueryUnitHistory != null) {
+      if (finalQueryUnitHistory.getFinishTime() == 0) {
+        finalQueryUnitHistory = makeQueryUnitHistory();
+      }
+      return finalQueryUnitHistory;
+    } else {
+      return makeQueryUnitHistory();
+    }
+  }
+
+  private QueryUnitHistory makeQueryUnitHistory() {
+    QueryUnitHistory queryUnitHistory = new QueryUnitHistory();
+
+    QueryUnitAttempt lastAttempt = getLastAttempt();
+    if (lastAttempt != null) {
+      queryUnitHistory.setId(lastAttempt.getId().toString());
+      queryUnitHistory.setState(lastAttempt.getState().toString());
+      queryUnitHistory.setProgress(lastAttempt.getProgress());
+    }
+    queryUnitHistory.setHostAndPort(succeededHost + ":" + succeededHostPort);
+    queryUnitHistory.setRetryCount(this.getRetryCount());
+    queryUnitHistory.setLaunchTime(launchTime);
+    queryUnitHistory.setFinishTime(finishTime);
+
+    queryUnitHistory.setNumShuffles(getShuffleOutpuNum());
+    if (!getShuffleFileOutputs().isEmpty()) {
+      ShuffleFileOutput shuffleFileOutputs = getShuffleFileOutputs().get(0);
+      if (queryUnitHistory.getNumShuffles() > 0) {
+        queryUnitHistory.setShuffleKey("" + shuffleFileOutputs.getPartId());
+        queryUnitHistory.setShuffleFileName(shuffleFileOutputs.getFileName());
+      }
+    }
+
+    List<String> fragmentList = new ArrayList<String>();
+    for (FragmentProto eachFragment : getAllFragments()) {
+      try {
+        Fragment fragment = FragmentConvertor.convert(systemConf, eachFragment);
+        fragmentList.add(fragment.toString());
+      } catch (Exception e) {
+        LOG.error(e.getMessage());
+        fragmentList.add("ERROR: " + eachFragment.getStoreType() + "," + eachFragment.getId() + ": " + e.getMessage());
+      }
+    }
+    queryUnitHistory.setFragments(fragmentList.toArray(new String[]{}));
+
+    List<String[]> fetchList = new ArrayList<String[]>();
+    for (Map.Entry<String, Set<FetchImpl>> e : getFetchMap().entrySet()) {
+      for (FetchImpl f : e.getValue()) {
+        for (URI uri : f.getSimpleURIs()){
+          fetchList.add(new String[] {e.getKey(), uri.toString()});
+        }
+      }
+    }
+
+    queryUnitHistory.setFetchs(fetchList.toArray(new String[][]{}));
+
+    List<String> dataLocationList = new ArrayList<String>();
+    for(DataLocation eachLocation: getDataLocations()) {
+      dataLocationList.add(eachLocation.toString());
+    }
+
+    queryUnitHistory.setDataLocations(dataLocationList.toArray(new String[]{}));
+    return queryUnitHistory;
+  }
+
 	public void setLogicalPlan(LogicalNode plan) {
 	  this.plan = plan;
 
@@ -237,15 +319,18 @@ public class QueryUnit implements EventHandler<TaskEvent> {
 	  }
 	}
 
-  private void addDataLocation(FileFragment fragment) {
+  private void addDataLocation(Fragment fragment) {
     String[] hosts = fragment.getHosts();
-    int[] diskIds = fragment.getDiskIds();
+    int[] diskIds = null;
+    if (fragment instanceof FileFragment) {
+      diskIds = ((FileFragment)fragment).getDiskIds();
+    }
     for (int i = 0; i < hosts.length; i++) {
-      dataLocations.add(new DataLocation(hosts[i], diskIds[i]));
+      dataLocations.add(new DataLocation(hosts[i], diskIds == null ? -1 : diskIds[i]));
     }
   }
 
-  public void addFragment(FileFragment fragment, boolean useDataLocation) {
+  public void addFragment(Fragment fragment, boolean useDataLocation) {
     Set<FragmentProto> fragmentProtos;
     if (fragMap.containsKey(fragment.getTableName())) {
       fragmentProtos = fragMap.get(fragment.getTableName());
@@ -260,8 +345,8 @@ public class QueryUnit implements EventHandler<TaskEvent> {
     totalFragmentNum++;
   }
 
-  public void addFragments(Collection<FileFragment> fragments) {
-    for (FileFragment eachFragment: fragments) {
+  public void addFragments(Collection<Fragment> fragments) {
+    for (Fragment eachFragment: fragments) {
       addFragment(eachFragment, false);
     }
   }
@@ -488,6 +573,7 @@ public class QueryUnit implements EventHandler<TaskEvent> {
 
   private void finishTask() {
     this.finishTime = System.currentTimeMillis();
+    finalQueryUnitHistory = makeQueryUnitHistory();
   }
 
   private static class KillNewTaskTransition implements SingleArcTransition<QueryUnit, TaskEvent> {
@@ -527,6 +613,7 @@ public class QueryUnit implements EventHandler<TaskEvent> {
 
       task.successfulAttempt = attemptEvent.getTaskAttemptId();
       task.succeededHost = attempt.getWorkerConnectionInfo().getHost();
+      task.succeededHostPort = attempt.getWorkerConnectionInfo().getPeerRpcPort();
       task.succeededPullServerPort = attempt.getWorkerConnectionInfo().getPullServerPort();
 
       task.finishTask();
@@ -542,6 +629,7 @@ public class QueryUnit implements EventHandler<TaskEvent> {
       QueryUnitAttempt attempt = task.attempts.get(attemptEvent.getTaskAttemptId());
       task.launchTime = System.currentTimeMillis();
       task.succeededHost = attempt.getWorkerConnectionInfo().getHost();
+      task.succeededHostPort = attempt.getWorkerConnectionInfo().getPeerRpcPort();
     }
   }
 
