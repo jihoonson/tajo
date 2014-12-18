@@ -24,6 +24,7 @@ import org.apache.hadoop.io.IOUtils;
 import org.apache.tajo.TajoProtos;
 import org.apache.tajo.conf.TajoConf;
 import org.apache.tajo.pullserver.retriever.FileChunk;
+import org.apache.tajo.util.Pair;
 import org.jboss.netty.bootstrap.ClientBootstrap;
 import org.jboss.netty.buffer.ChannelBuffer;
 import org.jboss.netty.channel.*;
@@ -40,6 +41,7 @@ import java.io.RandomAccessFile;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.channels.FileChannel;
+import java.util.Collection;
 
 import static org.jboss.netty.channel.Channels.pipeline;
 
@@ -68,7 +70,8 @@ public class Fetcher {
 
   private ClientBootstrap bootstrap;
 
-  public Fetcher(TajoConf conf, URI uri, FileChunk chunk, ClientSocketChannelFactory factory, Timer timer) {
+//  public Fetcher(TajoConf conf, URI uri, FileChunk chunk, ClientSocketChannelFactory factory, Timer timer) {
+public Fetcher(TajoConf conf, Collection<Pair<URI,FileChunk>> chunks, ClientSocketChannelFactory factory, Timer timer) {
     this.uri = uri;
     this.fileChunk = chunk;
     this.useLocalFile = !chunk.fromRemote();

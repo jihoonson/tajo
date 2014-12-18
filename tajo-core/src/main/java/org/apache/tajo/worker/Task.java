@@ -39,6 +39,7 @@ import org.apache.tajo.catalog.TableMeta;
 import org.apache.tajo.catalog.proto.CatalogProtos;
 import org.apache.tajo.catalog.statistics.TableStats;
 import org.apache.tajo.conf.TajoConf;
+import org.apache.tajo.conf.TajoConf.ConfVars;
 import org.apache.tajo.engine.json.CoreGsonHelper;
 import org.apache.tajo.master.cluster.WorkerConnectionInfo;
 import org.apache.tajo.plan.util.PlannerUtil;
@@ -55,6 +56,8 @@ import org.apache.tajo.rpc.NullCallback;
 import org.apache.tajo.storage.*;
 import org.apache.tajo.storage.fragment.FileFragment;
 import org.apache.tajo.util.NetUtils;
+import org.apache.tajo.util.Pair;
+import org.apache.tajo.util.TUtil;
 import org.jboss.netty.channel.socket.ClientSocketChannelFactory;
 import org.jboss.netty.handler.codec.http.QueryStringDecoder;
 import org.jboss.netty.util.Timer;
@@ -672,6 +675,9 @@ public class Task {
       File defaultStoreFile;
       FileChunk storeChunk = null;
       List<Fetcher> runnerList = Lists.newArrayList();
+      Map<String, List<Pair<URI,FileChunk>>> hostToFileChunkMap = TUtil.newHashMap();
+      List<Pair<URI,FileChunk>> chunks;
+      int maxChunkNumPerFetcher = ctx.getConf().getIntVar(ConfVars.SHUFFLE_FETCHER_CHUNK_NUM);
 
       for (FetchImpl f : fetches) {
         storeDir = new File(inputDir.toString(), f.getName());
@@ -714,8 +720,38 @@ public class Task {
           // If we decide that intermediate data should be really fetched from a remote host, storeChunk
           // represents a complete file. Otherwise, storeChunk may represent a complete file or only a part of it
           storeChunk.setEbId(f.getName());
-          Fetcher fetcher = new Fetcher(systemConf, uri, storeChunk, channelFactory, timer);
-          LOG.info("Create a new Fetcher with storeChunk:" + storeChunk.toString());
+          String hostName = getHostName(uri);
+          if (!hostToFileChunkMap.containsKey(hostName)) {
+            chunks = TUtil.newList();
+          } else {
+            chunks = hostToFileChunkMap.get(hostName);
+            if (chunks.size() == maxChunkNumPerFetcher) {
+              Fetcher fetcher = new Fetcher(systemConf, uri, chunks, channelFactory, timer);
+              StringBuilder sb = new StringBuilder();
+              sb.append("Create a new Fetcher with storeChunk: ");
+              for (Pair<URI,FileChunk> chunk : chunks) {
+                sb.append(chunk.getSecond().toString()).append(",");
+              }
+              sb.deleteCharAt(sb.length()-1);
+              LOG.info(sb.toString());
+              runnerList.add(fetcher);
+              i++;
+              chunks.clear();
+            }
+          }
+          chunks.add(new Pair<URI, FileChunk>(uri, storeChunk));
+        }
+      }
+      for (List<Pair<URI,FileChunk>> fileChunks : hostToFileChunkMap.values()) {
+        if (fileChunks.size() > 0) {
+          Fetcher fetcher = new Fetcher(systemConf, fileChunks, channelFactory, timer);
+          StringBuilder sb = new StringBuilder();
+          sb.append("Create a new Fetcher with storeChunk: ");
+          for (Pair<URI, FileChunk> chunk : fileChunks) {
+            sb.append(chunk.getSecond().toString()).append(",");
+          }
+          sb.deleteCharAt(sb.length() - 1);
+          LOG.info(sb.toString());
           runnerList.add(fetcher);
           i++;
         }
@@ -725,6 +761,10 @@ public class Task {
     } else {
       return Lists.newArrayList();
     }
+  }
+
+  private static String getHostName(URI uri) {
+    return uri.getHost() + ":" + uri.getPort();
   }
 
   private FileChunk getLocalStoredFileChunk(URI fetchURI, TajoConf conf) throws IOException {
