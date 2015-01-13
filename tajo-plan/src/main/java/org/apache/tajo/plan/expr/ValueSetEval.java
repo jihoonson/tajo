@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,39 +16,52 @@
  * limitations under the License.
  */
 
-package org.apache.tajo.algebra;
+package org.apache.tajo.plan.expr;
 
 import com.google.gson.annotations.Expose;
-import com.google.gson.annotations.SerializedName;
+import org.apache.tajo.common.TajoDataTypes;
+import org.apache.tajo.datum.Datum;
 
-public class InPredicate extends BinaryOperator {
-  @Expose @SerializedName("IsNot")
-  private boolean not;
+public abstract class ValueSetEval extends EvalNode {
+  @Expose protected TajoDataTypes.DataType dataType;
 
-  public InPredicate(Expr predicand, Expr in_values, boolean not) {
-//    super(OpType.InPredicate, predicand, in_values);
-    super(OpType.InPredicate, in_values, predicand);
-    this.not = not;
+  public ValueSetEval(EvalType type) {
+    super(type);
   }
 
-  public boolean isNot() {
-    return this.not;
+  @Override
+  public TajoDataTypes.DataType getValueType() {
+    return dataType;
   }
 
-  public Expr getPredicand() {
-//    return left;
-    return right;
+  public void setDataType(TajoDataTypes.DataType dataType) {
+    this.dataType = dataType;
   }
 
-  public Expr getInValue() {
-//    return right;
-    return left;
+  @Override
+  public int childNum() {
+    return 0;
+  }
+
+  @Override
+  public EvalNode getChild(int idx) {
+    return null;
+  }
+
+  @Override
+  public void preOrder(EvalNodeVisitor visitor) {
+    visitor.visit(this);
+  }
+
+  @Override
+  public void postOrder(EvalNodeVisitor visitor) {
+    visitor.visit(this);
   }
 
   @Override
   public Object clone() throws CloneNotSupportedException {
-    InPredicate inPredicate = (InPredicate) super.clone();
-    inPredicate.not = not;
-    return inPredicate;
+    return super.clone();
   }
+
+  public abstract Datum[] getValues();
 }

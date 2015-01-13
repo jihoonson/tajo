@@ -344,6 +344,9 @@ public class LogicalPlanPreprocessor extends BaseAlgebraVisitor<LogicalPlanner.P
   public LogicalNode visitFilter(LogicalPlanner.PlanContext ctx, Stack<Expr> stack, Selection expr)
       throws PlanningException {
     stack.push(expr);
+    if (expr.getQual().getType() == OpType.InPredicate) {
+      visit(ctx, stack, expr.getQual());
+    }
     LogicalNode child = visit(ctx, stack, expr.getChild());
     stack.pop();
 
@@ -409,6 +412,21 @@ public class LogicalPlanPreprocessor extends BaseAlgebraVisitor<LogicalPlanner.P
     // a table subquery should be dealt as a relation.
     TableSubQueryNode node = ctx.plan.createNode(TableSubQueryNode.class);
     node.init(CatalogUtil.buildFQName(ctx.queryContext.get(SessionVars.CURRENT_DATABASE), expr.getName()), child);
+    ctx.queryBlock.addRelation(node);
+    return node;
+  }
+
+  @Override
+  public LogicalNode visitSimpleTableSubQuery(LogicalPlanner.PlanContext ctx, Stack<Expr> stack,
+                                              SimpleTableSubQuery expr) throws PlanningException {
+    QueryBlock queryBlock = ctx.plan.newQueryBlock();
+    LogicalPlanner.PlanContext newContext = new LogicalPlanner.PlanContext(ctx, queryBlock);
+    LogicalNode child = super.visitSimpleTableSubQuery(newContext, stack, expr);
+    queryBlock.setRoot(child);
+
+    TableSubQueryNode node = ctx.plan.createNode(TableSubQueryNode.class);
+    node.init(CatalogUtil.buildFQName(ctx.queryContext.get(SessionVars.CURRENT_DATABASE), "?"+queryBlock.getName()),
+        child);
     ctx.queryBlock.addRelation(node);
     return node;
   }

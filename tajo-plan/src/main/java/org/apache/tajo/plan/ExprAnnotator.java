@@ -43,6 +43,7 @@ import org.apache.tajo.util.TUtil;
 import org.apache.tajo.util.datetime.DateTimeUtil;
 import org.apache.tajo.util.datetime.TimeMeta;
 
+import java.util.List;
 import java.util.Set;
 import java.util.Stack;
 import java.util.TimeZone;
@@ -366,13 +367,23 @@ public class ExprAnnotator extends BaseAlgebraVisitor<ExprAnnotator.Context, Eva
   @Override
   public EvalNode visitInPredicate(Context ctx, Stack<Expr> stack, InPredicate expr) throws PlanningException {
     stack.push(expr);
-    EvalNode lhs = visit(ctx, stack, expr.getLeft());
-    RowConstantEval rowConstantEval = (RowConstantEval) visit(ctx, stack, expr.getInValue());
+    EvalNode lhs = visit(ctx, stack, expr.getPredicand());
+    ValueSetEval valueSetEval = (ValueSetEval) visit(ctx, stack, expr.getInValue());
+    valueSetEval.setDataType(lhs.getValueType());
     stack.pop();
 
-    Pair<EvalNode, EvalNode> pair = convertTypesIfNecessary(ctx, lhs, rowConstantEval);
+    Pair<EvalNode, EvalNode> pair = convertTypesIfNecessary(ctx, lhs, valueSetEval);
 
-    return new InEval(pair.getFirst(), (RowConstantEval) pair.getSecond(), expr.isNot());
+    return new InEval(pair.getFirst(), (ValueSetEval) pair.getSecond(), expr.isNot());
+  }
+
+  @Override
+  public EvalNode visitSimpleTableSubQuery(Context ctx, Stack<Expr> stack, SimpleTableSubQuery expr)
+      throws PlanningException {
+    List<LogicalPlan.QueryBlock> childBlocks = ctx.plan.getChildBlocks(ctx.currentBlock);
+    assertEval(childBlocks.size() == 1, "The simple table subquery must have only one child query block.");
+
+    return new SubQueryEval(childBlocks.get(0).getName());
   }
 
   @Override

@@ -1055,6 +1055,9 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
     // Visit and Build Child Plan
     ////////////////////////////////////////////////////////
     stack.push(selection);
+    if (selection.getQual().getType() == OpType.InPredicate) {
+      visit(context, stack, selection.getQual());
+    }
     LogicalNode child = visit(context, stack, selection.getChild());
     stack.pop();
     ////////////////////////////////////////////////////////
@@ -1065,13 +1068,27 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
     selectionNode.setOutSchema(child.getOutSchema());
 
     // Create EvalNode for a search condition.
-    EvalNode searchCondition = exprAnnotator.createEvalNode(context, selection.getQual(),
-        NameResolvingMode.RELS_AND_SUBEXPRS);
-    EvalNode simplified = context.evalOptimizer.optimize(context, searchCondition);
-    // set selection condition
-    selectionNode.setQual(simplified);
+//    if (selection.getQual().getType() != OpType.InPredicate) {
+      EvalNode searchCondition = exprAnnotator.createEvalNode(context, selection.getQual(),
+          NameResolvingMode.RELS_AND_SUBEXPRS);
+      EvalNode simplified = context.evalOptimizer.optimize(context, searchCondition);
+      // set selection condition
+      selectionNode.setQual(simplified);
+//    }
 
     return selectionNode;
+  }
+
+  @Override
+  public LogicalNode visitInPredicate(PlanContext context, Stack<Expr> stack, InPredicate inPredicate)
+      throws PlanningException {
+    if (inPredicate.getInValue().getType() == OpType.SimpleTableSubQuery) {
+      // The predicand of the in predicate is always a column reference, so it can be ignored here.
+      return visit(context, stack, inPredicate.getInValue());
+    } else {
+      // If the inValue is not a SimpleTableSubQuery, it must be handled as an EvalNode.
+      return null;
+    }
   }
 
   /*===============================================================================================
@@ -1271,15 +1288,17 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
     Set<String> newlyEvaluatedExprsReferences = new LinkedHashSet<String>();
     for (Iterator<NamedExpr> iterator = block.namedExprsMgr.getIteratorForUnevaluatedExprs(); iterator.hasNext();) {
       NamedExpr rawTarget = iterator.next();
-      try {
-        EvalNode evalNode = exprAnnotator.createEvalNode(context, rawTarget.getExpr(),
-            NameResolvingMode.RELS_ONLY);
-        if (checkIfBeEvaluatedAtRelation(block, evalNode, scanNode)) {
-          block.namedExprsMgr.markAsEvaluated(rawTarget.getAlias(), evalNode);
-          newlyEvaluatedExprsReferences.add(rawTarget.getAlias()); // newly added exr
+//      if (rawTarget.getExpr().getType() != OpType.InPredicate) {
+        try {
+          EvalNode evalNode = exprAnnotator.createEvalNode(context, rawTarget.getExpr(),
+              NameResolvingMode.RELS_ONLY);
+          if (checkIfBeEvaluatedAtRelation(block, evalNode, scanNode)) {
+            block.namedExprsMgr.markAsEvaluated(rawTarget.getAlias(), evalNode);
+            newlyEvaluatedExprsReferences.add(rawTarget.getAlias()); // newly added exr
+          }
+        } catch (VerifyException ve) {
         }
-      } catch (VerifyException ve) {
-      }
+//      }
     }
 
     // Assume that each unique expr is evaluated once.
@@ -1355,6 +1374,45 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
           newlyEvaluatedExprs.add(rawTarget.getAlias()); // newly added exr
         }
       } catch (VerifyException ve) {
+      }
+    }
+
+    // Assume that each unique expr is evaluated once.
+    LinkedHashSet<Target> targets = createFieldTargetsFromRelation(block, subQueryNode, newlyEvaluatedExprs);
+
+    for (String newAddedExpr : newlyEvaluatedExprs) {
+      targets.add(block.namedExprsMgr.getTarget(newAddedExpr, true));
+    }
+
+    subQueryNode.setTargets(targets.toArray(new Target[targets.size()]));
+
+    return subQueryNode;
+  }
+
+  public TableSubQueryNode visitSimpleTableSubQuery(PlanContext context, Stack<Expr> stack, SimpleTableSubQuery expr)
+      throws PlanningException {
+    QueryBlock block = context.queryBlock;
+
+    QueryBlock childBlock = context.plan.getBlock(context.plan.getBlockNameByExpr(expr.getSubQuery()));
+    PlanContext newContext = new PlanContext(context, childBlock);
+    LogicalNode child = visit(newContext, new Stack<Expr>(), expr.getSubQuery());
+    TableSubQueryNode subQueryNode = context.queryBlock.getNodeFromExpr(expr);
+    context.plan.connectBlocks(childBlock, context.queryBlock, BlockType.TableSubQuery);
+    subQueryNode.setSubQuery(child);
+
+    // Add additional expressions required in upper nodes.
+    Set<String> newlyEvaluatedExprs = TUtil.newHashSet();
+    for (NamedExpr rawTarget : block.namedExprsMgr.getAllNamedExprs()) {
+      if (rawTarget.getExpr().getType() != OpType.InPredicate) {
+        try {
+          EvalNode evalNode = exprAnnotator.createEvalNode(context, rawTarget.getExpr(),
+              NameResolvingMode.RELS_ONLY);
+          if (checkIfBeEvaluatedAtRelation(block, evalNode, subQueryNode)) {
+            block.namedExprsMgr.markAsEvaluated(rawTarget.getAlias(), evalNode);
+            newlyEvaluatedExprs.add(rawTarget.getAlias()); // newly added exr
+          }
+        } catch (VerifyException ve) {
+        }
       }
     }
 

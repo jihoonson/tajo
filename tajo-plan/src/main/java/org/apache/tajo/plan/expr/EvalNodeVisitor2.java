@@ -54,6 +54,7 @@ public interface EvalNodeVisitor2<CONTEXT, RESULT> {
   RESULT visitCaseWhen(CONTEXT context, CaseWhenEval evalNode, Stack<EvalNode> stack);
   RESULT visitIfThen(CONTEXT context, CaseWhenEval.IfThenEval evalNode, Stack<EvalNode> stack);
   RESULT visitInPredicate(CONTEXT context, InEval evalNode, Stack<EvalNode> stack);
+  RESULT visitSubQuery(CONTEXT context, SubQueryEval evalNode, Stack<EvalNode> stack);
 
   // String operator and Pattern matching predicates
   RESULT visitLike(CONTEXT context, LikePredicateEval evalNode, Stack<EvalNode> stack);

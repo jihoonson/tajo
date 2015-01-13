@@ -1203,4 +1203,14 @@ public class TestLogicalPlanner {
     assertEquals(NodeType.INSERT, root.getChild().getType());
     return root.getChild();
   }
+
+  @Test
+  public final void testInSubquery() throws PlanningException {
+    QueryContext qc = new QueryContext(util.getConfiguration(), session);
+
+    Expr expr = sqlAnalyzer.parse("select n_name from nation where n_regionkey in (select r_regionkey from region);");
+    System.out.println(expr);
+    LogicalPlan plan = planner.createPlan(qc, expr);
+    System.out.println(plan);
+  }
 }

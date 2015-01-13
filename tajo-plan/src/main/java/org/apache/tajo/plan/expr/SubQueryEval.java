@@ -23,27 +23,24 @@ import org.apache.tajo.catalog.CatalogUtil;
 import org.apache.tajo.catalog.Schema;
 import org.apache.tajo.datum.Datum;
 import org.apache.tajo.datum.NullDatum;
+import org.apache.tajo.exception.UnsupportedException;
 import org.apache.tajo.storage.Tuple;
-import org.apache.tajo.util.TUtil;
 
-import static org.apache.tajo.common.TajoDataTypes.DataType;
+public class SubQueryEval extends ValueSetEval {
+  @Expose String subQueryBlockName;
 
-public class RowConstantEval extends ValueSetEval {
-  @Expose Datum [] values;
-
-  public RowConstantEval(Datum [] values) {
-    super(EvalType.ROW_CONSTANT);
-    this.values = values;
+  public SubQueryEval(String subQueryBlockName) {
+    super(EvalType.SUB_QUERY);
+    this.subQueryBlockName = subQueryBlockName;
   }
 
-//  @Override
-//  public DataType getValueType() {
-//    return CatalogUtil.newSimpleDataType(values[0].type());
-//  }
+  public String getSubQueryBlockName() {
+    return subQueryBlockName;
+  }
 
   @Override
   public String getName() {
-    return "ROW";
+    return "SubQuery";
   }
 
   @Override
@@ -51,31 +48,26 @@ public class RowConstantEval extends ValueSetEval {
     return NullDatum.get();
   }
 
-  public Datum [] getValues() {
-    return values;
-  }
-
   @Override
-  public boolean equals(Object obj) {
-    if (obj instanceof RowConstantEval) {
-      RowConstantEval other = (RowConstantEval) obj;
-      return TUtil.checkEquals(values, other.values);
+  public boolean equals(Object o) {
+    if (o instanceof SubQueryEval) {
+      SubQueryEval other = (SubQueryEval) o;
+      return this.dataType.equals(other.dataType) &&
+          this.subQueryBlockName.equals(other.subQueryBlockName);
     }
-
     return false;
-  }
-
-  public String toString() {
-    return TUtil.arrayToString(values);
   }
 
   @Override
   public Object clone() throws CloneNotSupportedException {
-    RowConstantEval rowConstantEval = (RowConstantEval) super.clone();
-    if (values != null) {
-      rowConstantEval.values = new Datum[values.length];
-      System.arraycopy(values, 0, rowConstantEval.values, 0, values.length);
-    }
-    return rowConstantEval;
+    SubQueryEval clone = (SubQueryEval) super.clone();
+    clone.dataType = CatalogUtil.newSimpleDataType(dataType.getType());
+    clone.subQueryBlockName = new String(subQueryBlockName);
+    return clone;
+  }
+
+  @Override
+  public Datum[] getValues() {
+    throw new UnsupportedException("SubQueryEval does not support the getValues() function");
   }
 }

@@ -18,6 +18,9 @@
 
 package org.apache.tajo.algebra;
 
+/**
+ * This expression is used for in and exists subqueries.
+ */
 public class SimpleTableSubQuery extends UnaryOperator {
 
   public SimpleTableSubQuery(Expr subquery) {

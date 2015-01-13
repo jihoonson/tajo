@@ -75,6 +75,10 @@ public abstract class SimpleEvalNodeVisitor<CONTEXT> {
         result = visitFuncCall(context, (FunctionEval) evalNode, stack);
         break;
 
+      case SUB_QUERY:
+        result = visitSubQuery(context, (SubQueryEval) evalNode, stack);
+        break;
+
       default:
         throw new UnsupportedException("Unknown EvalType: " + evalNode);
       }
@@ -168,5 +172,12 @@ public abstract class SimpleEvalNodeVisitor<CONTEXT> {
 
   protected EvalNode visitFuncCall(CONTEXT context, FunctionEval evalNode, Stack<EvalNode> stack) {
     return visitDefaultFunctionEval(context, stack, evalNode);
+  }
+
+  ///////////////////////////////////////////////////////////////////////////////////////////////
+  // Subquery
+  ///////////////////////////////////////////////////////////////////////////////////////////////
+  protected EvalNode visitSubQuery(CONTEXT context, SubQueryEval evalNode, Stack<EvalNode> stack) {
+    return evalNode;
   }
 }

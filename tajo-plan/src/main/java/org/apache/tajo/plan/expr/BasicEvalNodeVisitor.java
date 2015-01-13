@@ -118,6 +118,11 @@ public class BasicEvalNodeVisitor<CONTEXT, RESULT> implements EvalNodeVisitor2<C
         result = visitConcatenate(context, (BinaryEval) evalNode, stack);
         break;
 
+      // Subquery predicates
+      case SUB_QUERY:
+        result = visitSubQuery(context, (SubQueryEval) evalNode, stack);
+        break;
+
       // Functions
       case FUNCTION:
         result = visitFuncCall(context, (GeneralFunctionEval) evalNode, stack);
@@ -296,6 +301,11 @@ public class BasicEvalNodeVisitor<CONTEXT, RESULT> implements EvalNodeVisitor2<C
   @Override
   public RESULT visitInPredicate(CONTEXT context, InEval evalNode, Stack<EvalNode> stack) {
     return visitDefaultBinaryEval(context, evalNode, stack);
+  }
+
+  @Override
+  public RESULT visitSubQuery(CONTEXT context, SubQueryEval eval, Stack<EvalNode> stack) {
+    return null;
   }
 
   @Override
