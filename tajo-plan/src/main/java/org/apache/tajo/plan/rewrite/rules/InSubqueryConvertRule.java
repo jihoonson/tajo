@@ -23,9 +23,15 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.tajo.OverridableConf;
 import org.apache.tajo.plan.LogicalPlan;
 import org.apache.tajo.plan.PlanningException;
+import org.apache.tajo.plan.expr.EvalTreeUtil;
+import org.apache.tajo.plan.expr.EvalType;
 import org.apache.tajo.plan.logical.LogicalNode;
+import org.apache.tajo.plan.logical.NodeType;
+import org.apache.tajo.plan.logical.SelectionNode;
 import org.apache.tajo.plan.rewrite.LogicalPlanRewriteRule;
 import org.apache.tajo.plan.visitor.BasicLogicalPlanVisitor;
+
+import java.util.Stack;
 
 public class InSubqueryConvertRule
     extends BasicLogicalPlanVisitor<InSubqueryConvertRule.InSubqueryConvertContext, LogicalNode>
@@ -44,6 +50,14 @@ public class InSubqueryConvertRule
 
   @Override
   public boolean isEligible(OverridableConf queryContext, LogicalPlan plan) {
+    for (LogicalPlan.QueryBlock block : plan.getQueryBlocks()) {
+      SelectionNode selectionNode = block.getNode(NodeType.SELECTION);
+      if (selectionNode.hasQual()) {
+        if (EvalTreeUtil.findEvalsByType(selectionNode.getQual(), EvalType.SUB_QUERY).size() > 0) {
+          return true;
+        }
+      }
+    }
     return false;
   }
 
@@ -52,4 +66,12 @@ public class InSubqueryConvertRule
     return null;
   }
 
+  @Override
+  public LogicalNode visitFilter(InSubqueryConvertContext context, LogicalPlan plan, LogicalPlan.QueryBlock block,
+                                 SelectionNode selectionNode, Stack<LogicalNode> stack) throws PlanningException {
+    // replace the filter with a join
+    // the left child is the table subquery
+    // the right child is the child node of the filter
+    return null;
+  }
 }

@@ -2089,6 +2089,10 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
       }
     }
 
+    if (EvalTreeUtil.findEvalsByType(evalNode, EvalType.SUB_QUERY).size() > 0) {
+      return false;
+    }
+
     return true;
   }
 
