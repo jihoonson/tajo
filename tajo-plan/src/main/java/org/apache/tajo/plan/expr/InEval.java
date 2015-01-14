@@ -71,6 +71,14 @@ public class InEval extends BinaryEval {
     return DatumFactory.createBool(not ^ values.contains(leftValue));
   }
 
+  public <T extends ValueSetEval> T getValueSet()  {
+    return getRightExpr();
+  }
+
+  public EvalNode getPredicand() {
+    return getLeftExpr();
+  }
+
   @Override
   public boolean equals(Object obj) {
     if (obj instanceof InEval) {
@@ -81,6 +89,6 @@ public class InEval extends BinaryEval {
   }
 
   public String toString() {
-    return leftExpr + " IN (" + rightExpr + ")";
+    return leftExpr + (not? " NOT" : "") + " IN (" + rightExpr + ")";
   }
 }

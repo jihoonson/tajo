@@ -37,6 +37,7 @@ import org.apache.tajo.engine.function.builtin.SumInt;
 import org.apache.tajo.engine.json.CoreGsonHelper;
 import org.apache.tajo.engine.parser.SQLAnalyzer;
 import org.apache.tajo.engine.query.QueryContext;
+import org.apache.tajo.plan.visitor.ExplainLogicalPlanVisitor;
 import org.apache.tajo.session.Session;
 import org.apache.tajo.plan.*;
 import org.apache.tajo.plan.expr.*;
@@ -1211,6 +1212,39 @@ public class TestLogicalPlanner {
     Expr expr = sqlAnalyzer.parse("select n_name from nation where n_regionkey in (select r_regionkey from region);");
     System.out.println(expr);
     LogicalPlan plan = planner.createPlan(qc, expr);
-    System.out.println(plan);
+    for (LogicalPlan.QueryBlock block : plan.getQueryBlocks()) {
+      System.out.println(block.getName());
+      System.out.println(getLogicalPlanAsString(plan, block));
+    }
+  }
+
+  @Test
+  public final void testRecursiveInSubQuery() throws PlanningException {
+    QueryContext qc = new QueryContext(util.getConfiguration(), session);
+
+    Expr expr = sqlAnalyzer.parse("select n_name from nation where n_regionkey in (select r_regionkey from region where r_name in (select r_name from region where r_regionkey > 1 and r_regionkey < 3));");
+    System.out.println(expr);
+    LogicalPlan plan = planner.createPlan(qc, expr);
+    for (LogicalPlan.QueryBlock block : plan.getQueryBlocks()) {
+      System.out.println(block.getName());
+      System.out.println(getLogicalPlanAsString(plan, block));
+    }
+  }
+
+  private String getLogicalPlanAsString(LogicalPlan plan, LogicalPlan.QueryBlock block) {
+    ExplainLogicalPlanVisitor explain = new ExplainLogicalPlanVisitor();
+
+    StringBuilder explains = new StringBuilder();
+    try {
+      ExplainLogicalPlanVisitor.Context explainContext = explain.getBlockPlanStrings(plan, block.getRoot());
+      while(!explainContext.explains.empty()) {
+        explains.append(
+            ExplainLogicalPlanVisitor.printDepthString(explainContext.getMaxDepth(), explainContext.explains.pop()));
+      }
+    } catch (PlanningException e) {
+      throw new RuntimeException(e);
+    }
+
+    return explains.toString();
   }
 }

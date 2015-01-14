@@ -24,10 +24,12 @@ import org.apache.tajo.catalog.Schema;
 import org.apache.tajo.datum.Datum;
 import org.apache.tajo.datum.NullDatum;
 import org.apache.tajo.exception.UnsupportedException;
+import org.apache.tajo.plan.logical.TableSubQueryNode;
 import org.apache.tajo.storage.Tuple;
 
 public class SubQueryEval extends ValueSetEval {
   @Expose String subQueryBlockName;
+  @Expose TableSubQueryNode subQueryNode;
 
   public SubQueryEval(String subQueryBlockName) {
     super(EvalType.SUB_QUERY);
@@ -36,6 +38,14 @@ public class SubQueryEval extends ValueSetEval {
 
   public String getSubQueryBlockName() {
     return subQueryBlockName;
+  }
+
+  public TableSubQueryNode getSubQueryNode() {
+    return subQueryNode;
+  }
+
+  public void setSubQueryNode(TableSubQueryNode subQueryNode) {
+    this.subQueryNode = subQueryNode;
   }
 
   @Override
@@ -69,5 +79,10 @@ public class SubQueryEval extends ValueSetEval {
   @Override
   public Datum[] getValues() {
     throw new UnsupportedException("SubQueryEval does not support the getValues() function");
+  }
+
+  @Override
+  public String toString() {
+    return "SubQueryEval: " + subQueryBlockName;
   }
 }

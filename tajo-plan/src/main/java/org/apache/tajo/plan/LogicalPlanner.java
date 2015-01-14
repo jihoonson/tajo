@@ -1407,6 +1407,9 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
         try {
           EvalNode evalNode = exprAnnotator.createEvalNode(context, rawTarget.getExpr(),
               NameResolvingMode.RELS_ONLY);
+          if (evalNode.getType() == EvalType.SUB_QUERY) {
+            ((SubQueryEval)evalNode).setSubQueryNode(subQueryNode);
+          }
           if (checkIfBeEvaluatedAtRelation(block, evalNode, subQueryNode)) {
             block.namedExprsMgr.markAsEvaluated(rawTarget.getAlias(), evalNode);
             newlyEvaluatedExprs.add(rawTarget.getAlias()); // newly added exr
