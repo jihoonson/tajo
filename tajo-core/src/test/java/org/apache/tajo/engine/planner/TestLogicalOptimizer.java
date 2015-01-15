@@ -268,4 +268,14 @@ public class TestLogicalOptimizer {
     optimizer.optimize(newPlan);
   }
 
+  @Test
+  public final void testInSubQueryConvert() throws PlanningException {
+    Expr expr = sqlAnalyzer.parse("select name from (select * from employee) as T where deptname in (select deptname from dept);");
+//    "select name from (select * from employee) as T, (select distinct deptname from dept) as T2 where T2.deptname = T.deptname"
+    LogicalPlan newPlan = planner.createPlan(defaultContext, expr);
+    System.out.println(newPlan);
+    optimizer.optimize(defaultContext, newPlan);
+    System.out.println("============================= optimized =============================");
+    System.out.println(newPlan);
+  }
 }

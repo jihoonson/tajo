@@ -1078,6 +1078,12 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
     // set selection condition
     selectionNode.setQual(simplified);
 //    }
+    for (EvalNode eval : EvalTreeUtil.findEvalsByType(simplified, EvalType.SUB_QUERY)) {
+      SubQueryEval subQueryEval = (SubQueryEval) eval;
+      TableSubQueryNode subQueryNode = context.plan.getSubQueryOfQueryBlock(
+          context.plan.getBlock(subQueryEval.getSubQueryBlockName()));
+      subQueryEval.setSubQueryNode(subQueryNode);
+    }
 
     return selectionNode;
   }
@@ -1408,13 +1414,11 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
     // Add additional expressions required in upper nodes.
     Set<String> newlyEvaluatedExprs = TUtil.newHashSet();
     for (NamedExpr rawTarget : block.namedExprsMgr.getAllNamedExprs()) {
+      // The eval node for the IN predicate must be created at the filter node
       if (rawTarget.getExpr().getType() != OpType.InPredicate) {
         try {
           EvalNode evalNode = exprAnnotator.createEvalNode(context, rawTarget.getExpr(),
               NameResolvingMode.RELS_ONLY);
-          if (evalNode.getType() == EvalType.SUB_QUERY) {
-            ((SubQueryEval)evalNode).setSubQueryNode(subQueryNode);
-          }
           if (checkIfBeEvaluatedAtRelation(block, evalNode, subQueryNode)) {
             block.namedExprsMgr.markAsEvaluated(rawTarget.getAlias(), evalNode);
             newlyEvaluatedExprs.add(rawTarget.getAlias()); // newly added exr
@@ -1432,6 +1436,8 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
     }
 
     subQueryNode.setTargets(targets.toArray(new Target[targets.size()]));
+
+    context.plan.registerQueryBlockWithSubQuery(childBlock, subQueryNode);
 
     return subQueryNode;
   }

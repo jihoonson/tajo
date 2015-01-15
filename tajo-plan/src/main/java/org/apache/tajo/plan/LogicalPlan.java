@@ -25,14 +25,11 @@ import org.apache.tajo.algebra.*;
 import org.apache.tajo.annotation.NotThreadSafe;
 import org.apache.tajo.catalog.Column;
 import org.apache.tajo.catalog.Schema;
+import org.apache.tajo.plan.logical.*;
 import org.apache.tajo.util.graph.DirectedGraphCursor;
 import org.apache.tajo.util.graph.SimpleDirectedGraph;
 import org.apache.tajo.plan.expr.ConstEval;
 import org.apache.tajo.plan.expr.EvalNode;
-import org.apache.tajo.plan.logical.LogicalNode;
-import org.apache.tajo.plan.logical.LogicalRootNode;
-import org.apache.tajo.plan.logical.NodeType;
-import org.apache.tajo.plan.logical.RelationNode;
 import org.apache.tajo.plan.nameresolver.NameResolver;
 import org.apache.tajo.plan.nameresolver.NameResolvingMode;
 import org.apache.tajo.plan.visitor.ExplainLogicalPlanVisitor;
@@ -64,6 +61,13 @@ public class LogicalPlan {
   private Map<Integer, QueryBlock> queryBlockByPID = new HashMap<Integer, QueryBlock>();
   private Map<String, String> exprToBlockNameMap = TUtil.newHashMap();
   private SimpleDirectedGraph<String, BlockEdge> queryBlockGraph = new SimpleDirectedGraph<String, BlockEdge>();
+
+  /**
+   * It's a map between simple table subquery expressions and query blocks.
+   * This map is used for creating the query plan of the IN/EXISTS subquery statements.
+   */
+  private final Map<SimpleTableSubQuery, QueryBlock> subQueryToQueryBlockMap = TUtil.newHashMap();
+  private final Map<QueryBlock, TableSubQueryNode> queryblockToSubQueryMap = TUtil.newHashMap();
 
   /** planning and optimization log */
   private List<String> planingHistory = Lists.newArrayList();
@@ -293,6 +297,22 @@ public class LogicalPlan {
 
   public Column resolveColumn(QueryBlock block, ColumnReferenceExpr columnRef) throws PlanningException {
     return NameResolver.resolve(this, block, columnRef, NameResolvingMode.LEGACY);
+  }
+
+  public void registerSubQueryWithQueryBlock(SimpleTableSubQuery subQuery, QueryBlock queryBlock) {
+    subQueryToQueryBlockMap.put(subQuery, queryBlock);
+  }
+
+  public QueryBlock getQueryBlockOfSubquery(SimpleTableSubQuery subQuery) {
+    return subQueryToQueryBlockMap.get(subQuery);
+  }
+
+  public void registerQueryBlockWithSubQuery(QueryBlock queryBlock, TableSubQueryNode tableSubQueryNode) {
+    queryblockToSubQueryMap.put(queryBlock, tableSubQueryNode);
+  }
+
+  public TableSubQueryNode getSubQueryOfQueryBlock(QueryBlock queryBlock) {
+    return queryblockToSubQueryMap.get(queryBlock);
   }
 
   public String getQueryGraphAsString() {

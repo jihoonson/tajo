@@ -27,12 +27,15 @@ import org.apache.tajo.catalog.Schema;
 import org.apache.tajo.catalog.SchemaUtil;
 import org.apache.tajo.plan.LogicalPlan;
 import org.apache.tajo.plan.PlanningException;
+import org.apache.tajo.plan.Target;
 import org.apache.tajo.plan.expr.*;
 import org.apache.tajo.plan.logical.*;
 import org.apache.tajo.plan.rewrite.LogicalPlanRewriteRule;
 import org.apache.tajo.plan.util.PlannerUtil;
 import org.apache.tajo.plan.visitor.BasicLogicalPlanVisitor;
+import org.apache.tajo.util.TUtil;
 
+import java.util.List;
 import java.util.Stack;
 
 public class InSubqueryConvertRule
@@ -42,7 +45,11 @@ public class InSubqueryConvertRule
   private final static String NAME = "InSubQueryConvert";
 
   static class InSubqueryConvertContext {
+    OverridableConf queryContext;
 
+    public InSubqueryConvertContext(OverridableConf queryContext) {
+      this.queryContext = queryContext;
+    }
   }
 
   @Override
@@ -65,7 +72,9 @@ public class InSubqueryConvertRule
 
   @Override
   public LogicalPlan rewrite(OverridableConf queryContext, LogicalPlan plan) throws PlanningException {
-    return null;
+    InSubqueryConvertContext context = new InSubqueryConvertContext(queryContext);
+    this.visit(context, plan, plan.getRootBlock(), plan.getRootBlock().getRoot(), new Stack<LogicalNode>());
+    return plan;
   }
 
   /**
@@ -82,9 +91,9 @@ public class InSubqueryConvertRule
   @Override
   public LogicalNode visitFilter(InSubqueryConvertContext context, LogicalPlan plan, LogicalPlan.QueryBlock block,
                                  SelectionNode selectionNode, Stack<LogicalNode> stack) throws PlanningException {
-    if (selectionNode.getQual().getType() == EvalType.IN) {
-      InEval inEval = (InEval) selectionNode.getQual();
-      if (inEval.getLeftExpr().getType() == EvalType.SUB_QUERY) {
+    for (EvalNode eval : EvalTreeUtil.findEvalsByType(selectionNode.getQual(), EvalType.IN)) {
+      InEval inEval = (InEval) eval;
+      if (inEval.getRightExpr().getType() == EvalType.SUB_QUERY) {
         SubQueryEval subQueryEval = inEval.getValueSet();
 
         // visit the inner subquery first because it can contain another IN subquery
@@ -98,7 +107,13 @@ public class InSubqueryConvertRule
 
         // the left and right children are the child of the filter and the inner subquery, respectively.
         joinNode.setLeftChild(selectionNode.getChild());
-        joinNode.setRightChild(subQueryEval.getSubQueryNode());
+//        joinNode.setRightChild(createTableSubQueryNode(context, plan, block,
+//            plan.getBlock(subQueryEval.getSubQueryBlockName()).getRoot()));
+        joinNode.setRightChild(insertDistinct(plan, block, childBlock, subQueryEval.getSubQueryNode(),
+            subQueryEval.getSubQueryNode().getSubQuery()));
+        ProjectionNode projectionNode = PlannerUtil.findTopNode(subQueryEval.getSubQueryNode(), NodeType.PROJECTION);
+        projectionNode.setDistinct(true);
+//        joinNode.setRightChild(subQueryEval.getSubQueryNode());
 
         // connect the new join with the parent of the filter
         LogicalNode parent = PlannerUtil.findTopParentNode(block.getRoot(), NodeType.SELECTION);
@@ -121,14 +136,47 @@ public class InSubqueryConvertRule
         joinNode.setInSchema(inSchema);
         joinNode.setOutSchema(selectionNode.getOutSchema());
 
+        List<Target> targets = TUtil.newList(PlannerUtil.schemaToTargets(inSchema));
+        joinNode.setTargets(targets.toArray(new Target[targets.size()]));
+
         // join condition
-        EvalNode joinCondition = buildJoinCondition(plan, inEval);
+        EvalNode joinCondition = buildJoinCondition(plan, inEval,
+            joinNode.getRightChild().getOutSchema());
         joinNode.setJoinQual(joinCondition);
+        block.addJoinType(joinType);
+        block.registerNode(joinNode);
+        plan.addHistory("IN subquery is optimized.");
         return joinNode;
       }
     }
 
     return null;
+  }
+
+//  private TableSubQueryNode createTableSubQueryNode(InSubqueryConvertContext context, LogicalPlan plan,
+//                                                    LogicalPlan.QueryBlock queryBlock, LogicalNode child) {
+//    TableSubQueryNode node = plan.createNode(TableSubQueryNode.class);
+//    node.init(CatalogUtil.buildFQName(context.queryContext.get(SessionVars.CURRENT_DATABASE), "?" + queryBlock.getName()),
+//        child);
+//    queryBlock.addRelation(node);
+//    return node;
+//  }
+
+  private TableSubQueryNode insertDistinct(LogicalPlan plan, LogicalPlan.QueryBlock block,
+                                           LogicalPlan.QueryBlock childBlock,
+                                           TableSubQueryNode subQueryNode, LogicalNode child) {
+    Schema outSchema = subQueryNode.getOutSchema();
+    GroupbyNode dupRemoval = plan.createNode(GroupbyNode.class);
+    dupRemoval.setChild(child);
+    dupRemoval.setInSchema(subQueryNode.getInSchema());
+    dupRemoval.setTargets(PlannerUtil.schemaToTargets(outSchema));
+    dupRemoval.setGroupingColumns(outSchema.toArray());
+
+    childBlock.registerNode(dupRemoval);
+
+    subQueryNode.setSubQuery(dupRemoval);
+    subQueryNode.setInSchema(dupRemoval.getOutSchema());
+    return subQueryNode;
   }
 
   /**
@@ -139,30 +187,29 @@ public class InSubqueryConvertRule
    * @param inEval
    * @return
    */
-  private EvalNode buildJoinCondition(LogicalPlan plan, InEval inEval) {
+  private EvalNode buildJoinCondition(LogicalPlan plan, InEval inEval, Schema valueListSchema) {
     SubQueryEval subQueryEval = inEval.getValueSet();
-    Schema subQuerySchema = plan.getBlock(subQueryEval.getSubQueryBlockName()).getSchema();
-    Preconditions.checkArgument(subQuerySchema.size() == 1, "The schema size of the IN subquery must be 1");
-    FieldEval fieldEval = new FieldEval(subQuerySchema.getColumn(0));
+    Preconditions.checkArgument(valueListSchema.size() == 1, "The schema size of the IN subquery must be 1");
+    FieldEval fieldEval = new FieldEval(valueListSchema.getColumn(0));
     BinaryEval equalEval = new BinaryEval(EvalType.EQUAL, inEval.getPredicand(), fieldEval);
     return equalEval;
   }
 
-  /**
-   * Add a distinct node.
-   *
-   * @param context
-   * @param plan
-   * @param block
-   * @param subQueryNode
-   * @param stack
-   * @return
-   * @throws PlanningException
-   */
-  @Override
-  public LogicalNode visitTableSubQuery(InSubqueryConvertContext context, LogicalPlan plan, LogicalPlan.QueryBlock block,
-                                        TableSubQueryNode subQueryNode, Stack<LogicalNode> stack)
-      throws PlanningException {
-    return null;
-  }
+//  /**
+//   * Add a distinct node.
+//   *
+//   * @param context
+//   * @param plan
+//   * @param block
+//   * @param subQueryNode
+//   * @param stack
+//   * @return
+//   * @throws PlanningException
+//   */
+//  @Override
+//  public LogicalNode visitTableSubQuery(InSubqueryConvertContext context, LogicalPlan plan, LogicalPlan.QueryBlock block,
+//                                        TableSubQueryNode subQueryNode, Stack<LogicalNode> stack)
+//      throws PlanningException {
+//    return null;
+//  }
 }

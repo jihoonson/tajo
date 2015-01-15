@@ -1253,7 +1253,7 @@ public class TestLogicalPlanner {
   public final void testMultipleInSubQuery() throws PlanningException {
     QueryContext qc = new QueryContext(util.getConfiguration(), session);
 
-    Expr expr = sqlAnalyzer.parse("select n_name from nation where n_regionkey in (select r_regionkey from region) and n_nationkey in (select r_regionkey from region);");
+    Expr expr = sqlAnalyzer.parse("select n_name from nation where n_regionkey in (select r_regionkey from region) and n_nationkey in (select s_nationkey from supplier);");
     System.out.println(expr);
     LogicalPlan plan = planner.createPlan(qc, expr);
     for (LogicalPlan.QueryBlock block : plan.getQueryBlocks()) {
@@ -1280,6 +1280,19 @@ public class TestLogicalPlanner {
     QueryContext qc = new QueryContext(util.getConfiguration(), session);
 
     Expr expr = sqlAnalyzer.parse("select n_name from (select * from nation) as T where n_regionkey in (select r_regionkey from region);");
+    System.out.println(expr);
+    LogicalPlan plan = planner.createPlan(qc, expr);
+    for (LogicalPlan.QueryBlock block : plan.getQueryBlocks()) {
+      System.out.println(block.getName());
+      System.out.println(getLogicalPlanAsString(plan, block));
+    }
+  }
+
+  @Test
+  public final void testNotInSubQuery() throws PlanningException {
+    QueryContext qc = new QueryContext(util.getConfiguration(), session);
+
+    Expr expr = sqlAnalyzer.parse("select n_name from nation where n_nationkey not in (select r_regionkey from region);");
     System.out.println(expr);
     LogicalPlan plan = planner.createPlan(qc, expr);
     for (LogicalPlan.QueryBlock block : plan.getQueryBlocks()) {

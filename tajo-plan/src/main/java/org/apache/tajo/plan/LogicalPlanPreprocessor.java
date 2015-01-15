@@ -427,6 +427,7 @@ public class LogicalPlanPreprocessor extends BaseAlgebraVisitor<LogicalPlanner.P
     LogicalPlanner.PlanContext newContext = new LogicalPlanner.PlanContext(ctx, queryBlock);
     LogicalNode child = super.visitSimpleTableSubQuery(newContext, stack, expr);
     queryBlock.setRoot(child);
+    ctx.plan.registerSubQueryWithQueryBlock(expr, queryBlock);
 
     TableSubQueryNode node = ctx.plan.createNode(TableSubQueryNode.class);
     node.init(CatalogUtil.buildFQName(ctx.queryContext.get(SessionVars.CURRENT_DATABASE), "?"+queryBlock.getName()),

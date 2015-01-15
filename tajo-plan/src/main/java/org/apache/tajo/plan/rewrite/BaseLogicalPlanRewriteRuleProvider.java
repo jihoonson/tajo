@@ -20,6 +20,7 @@ package org.apache.tajo.plan.rewrite;
 
 import org.apache.tajo.conf.TajoConf;
 import org.apache.tajo.plan.rewrite.rules.FilterPushDownRule;
+import org.apache.tajo.plan.rewrite.rules.InSubqueryConvertRule;
 import org.apache.tajo.plan.rewrite.rules.PartitionedTableRewriter;
 import org.apache.tajo.plan.rewrite.rules.ProjectionPushDownRule;
 import org.apache.tajo.util.TUtil;
@@ -41,6 +42,7 @@ public class BaseLogicalPlanRewriteRuleProvider extends LogicalPlanRewriteRulePr
   public Collection<Class<? extends LogicalPlanRewriteRule>> getPreRules() {
     List<Class<? extends LogicalPlanRewriteRule>> rules = TUtil.newList();
 
+    rules.add(InSubqueryConvertRule.class);
     if (systemConf.getBoolVar(TajoConf.ConfVars.$TEST_FILTER_PUSHDOWN_ENABLED)) {
       rules.add(FilterPushDownRule.class);
     }

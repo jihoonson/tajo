@@ -41,6 +41,10 @@ public class ProjectionNode extends UnaryNode implements Projectable {
     this.targets = targets;
   }
 
+  public void setDistinct(boolean distinct) {
+    this.distinct = distinct;
+  }
+
   public boolean isDistinct() {
     return distinct;
   }
