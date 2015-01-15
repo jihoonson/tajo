@@ -22,6 +22,9 @@ import org.apache.tajo.annotation.Nullable;
 import org.apache.tajo.plan.LogicalPlan;
 import org.apache.tajo.plan.PlanString;
 import org.apache.tajo.plan.PlanningException;
+import org.apache.tajo.plan.expr.EvalType;
+import org.apache.tajo.plan.expr.InEval;
+import org.apache.tajo.plan.expr.SubQueryEval;
 import org.apache.tajo.plan.logical.*;
 
 import java.util.Stack;
@@ -150,6 +153,19 @@ public class ExplainLogicalPlanVisitor extends BasicLogicalPlanVisitor<ExplainLo
   public LogicalNode visitFilter(Context context, LogicalPlan plan, LogicalPlan.QueryBlock block, SelectionNode node,
                                  Stack<LogicalNode> stack) throws PlanningException {
     return visitUnaryNode(context, plan, block, node, stack);
+//    context.depth++;
+//    stack.push(node);
+//    visit(context, plan, block, node.getChild(), stack);
+//    if (node.getQual().getType() == EvalType.IN) {
+//      InEval inQual = (InEval) node.getQual();
+//      if (inQual.getValueSet().getType() == EvalType.SUB_QUERY) {
+//        SubQueryEval subQueryEval = inQual.getValueSet();
+//        visit(context, plan, block, subQueryEval.getSubQueryNode(), stack);
+//      }
+//    }
+//    context.depth--;
+//    context.add(context.depth, node.getPlanString());
+//    return node;
   }
 
   @Override

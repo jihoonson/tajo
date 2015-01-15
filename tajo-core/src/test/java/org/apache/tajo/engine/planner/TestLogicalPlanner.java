@@ -1212,6 +1212,11 @@ public class TestLogicalPlanner {
     Expr expr = sqlAnalyzer.parse("select n_name from nation where n_regionkey in (select r_regionkey from region);");
     System.out.println(expr);
     LogicalPlan plan = planner.createPlan(qc, expr);
+    System.out.println("============================ This is a logical plan ============================");
+    System.out.println(plan);
+    System.out.println();
+
+    System.out.println("============================ These are query blocks ============================");
     for (LogicalPlan.QueryBlock block : plan.getQueryBlocks()) {
       System.out.println(block.getName());
       System.out.println(getLogicalPlanAsString(plan, block));
@@ -1223,6 +1228,58 @@ public class TestLogicalPlanner {
     QueryContext qc = new QueryContext(util.getConfiguration(), session);
 
     Expr expr = sqlAnalyzer.parse("select n_name from nation where n_regionkey in (select r_regionkey from region where r_name in (select r_name from region where r_regionkey > 1 and r_regionkey < 3));");
+    System.out.println(expr);
+    LogicalPlan plan = planner.createPlan(qc, expr);
+    for (LogicalPlan.QueryBlock block : plan.getQueryBlocks()) {
+      System.out.println(block.getName());
+      System.out.println(getLogicalPlanAsString(plan, block));
+    }
+  }
+
+  @Test
+  public final void testInSubQueryWithOtherConditions() throws PlanningException {
+    QueryContext qc = new QueryContext(util.getConfiguration(), session);
+
+    Expr expr = sqlAnalyzer.parse("select n_name from nation where n_regionkey in (select r_regionkey from region) and n_nationkey > 1;");
+    System.out.println(expr);
+    LogicalPlan plan = planner.createPlan(qc, expr);
+    for (LogicalPlan.QueryBlock block : plan.getQueryBlocks()) {
+      System.out.println(block.getName());
+      System.out.println(getLogicalPlanAsString(plan, block));
+    }
+  }
+
+  @Test
+  public final void testMultipleInSubQuery() throws PlanningException {
+    QueryContext qc = new QueryContext(util.getConfiguration(), session);
+
+    Expr expr = sqlAnalyzer.parse("select n_name from nation where n_regionkey in (select r_regionkey from region) and n_nationkey in (select r_regionkey from region);");
+    System.out.println(expr);
+    LogicalPlan plan = planner.createPlan(qc, expr);
+    for (LogicalPlan.QueryBlock block : plan.getQueryBlocks()) {
+      System.out.println(block.getName());
+      System.out.println(getLogicalPlanAsString(plan, block));
+    }
+  }
+
+  @Test
+  public final void testInSubQueryWithJoin() throws PlanningException {
+    QueryContext qc = new QueryContext(util.getConfiguration(), session);
+
+    Expr expr = sqlAnalyzer.parse("select n_name from nation, supplier where n_regionkey in (select r_regionkey from region) and n_nationkey = s_nationkey;");
+    System.out.println(expr);
+    LogicalPlan plan = planner.createPlan(qc, expr);
+    for (LogicalPlan.QueryBlock block : plan.getQueryBlocks()) {
+      System.out.println(block.getName());
+      System.out.println(getLogicalPlanAsString(plan, block));
+    }
+  }
+
+  @Test
+  public final void testInSubQueryWithTableSubQuery() throws PlanningException {
+    QueryContext qc = new QueryContext(util.getConfiguration(), session);
+
+    Expr expr = sqlAnalyzer.parse("select n_name from (select * from nation) as T where n_regionkey in (select r_regionkey from region);");
     System.out.println(expr);
     LogicalPlan plan = planner.createPlan(qc, expr);
     for (LogicalPlan.QueryBlock block : plan.getQueryBlocks()) {

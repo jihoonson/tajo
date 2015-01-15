@@ -31,8 +31,8 @@ import org.apache.tajo.plan.expr.FieldEval;
 import org.apache.tajo.plan.logical.*;
 import org.apache.tajo.plan.nameresolver.NameResolver;
 import org.apache.tajo.plan.nameresolver.NameResolvingMode;
+import org.apache.tajo.plan.util.ExprFinder;
 import org.apache.tajo.plan.util.PlannerUtil;
-import org.apache.tajo.catalog.SchemaUtil;
 import org.apache.tajo.plan.visitor.SimpleAlgebraVisitor;
 import org.apache.tajo.util.TUtil;
 
@@ -344,8 +344,12 @@ public class LogicalPlanPreprocessor extends BaseAlgebraVisitor<LogicalPlanner.P
   public LogicalNode visitFilter(LogicalPlanner.PlanContext ctx, Stack<Expr> stack, Selection expr)
       throws PlanningException {
     stack.push(expr);
-    if (expr.getQual().getType() == OpType.InPredicate) {
-      visit(ctx, stack, expr.getQual());
+
+    Set<Expr> inExprs = ExprFinder.finds(expr.getQual(), OpType.InPredicate);
+    if (inExprs.size() > 0) {
+      for (Expr in : inExprs) {
+        visit(ctx, stack, in);
+      }
     }
     LogicalNode child = visit(ctx, stack, expr.getChild());
     stack.pop();

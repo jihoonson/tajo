@@ -18,6 +18,7 @@
 
 package org.apache.tajo.plan.rewrite.rules;
 
+import com.google.common.base.Preconditions;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.tajo.OverridableConf;
@@ -121,11 +122,30 @@ public class InSubqueryConvertRule
         joinNode.setOutSchema(selectionNode.getOutSchema());
 
         // join condition
-        EvalNode joinCondition = null;
+        EvalNode joinCondition = buildJoinCondition(plan, inEval);
+        joinNode.setJoinQual(joinCondition);
+        return joinNode;
       }
     }
 
     return null;
+  }
+
+  /**
+   * Create the join condition.
+   * The created join condition checks whether the predicand of the InEval equals the result of the inner query.
+   *
+   * @param plan
+   * @param inEval
+   * @return
+   */
+  private EvalNode buildJoinCondition(LogicalPlan plan, InEval inEval) {
+    SubQueryEval subQueryEval = inEval.getValueSet();
+    Schema subQuerySchema = plan.getBlock(subQueryEval.getSubQueryBlockName()).getSchema();
+    Preconditions.checkArgument(subQuerySchema.size() == 1, "The schema size of the IN subquery must be 1");
+    FieldEval fieldEval = new FieldEval(subQuerySchema.getColumn(0));
+    BinaryEval equalEval = new BinaryEval(EvalType.EQUAL, inEval.getPredicand(), fieldEval);
+    return equalEval;
   }
 
   /**

@@ -1055,8 +1055,11 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
     // Visit and Build Child Plan
     ////////////////////////////////////////////////////////
     stack.push(selection);
-    if (selection.getQual().getType() == OpType.InPredicate) {
-      visit(context, stack, selection.getQual());
+    Set<Expr> inExprs = ExprFinder.finds(selection.getQual(), OpType.InPredicate);
+    if (inExprs.size() > 0) {
+      for (Expr in : inExprs) {
+        visit(context, stack, in);
+      }
     }
     LogicalNode child = visit(context, stack, selection.getChild());
     stack.pop();
@@ -1069,11 +1072,11 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
 
     // Create EvalNode for a search condition.
 //    if (selection.getQual().getType() != OpType.InPredicate) {
-      EvalNode searchCondition = exprAnnotator.createEvalNode(context, selection.getQual(),
-          NameResolvingMode.RELS_AND_SUBEXPRS);
-      EvalNode simplified = context.evalOptimizer.optimize(context, searchCondition);
-      // set selection condition
-      selectionNode.setQual(simplified);
+    EvalNode searchCondition = exprAnnotator.createEvalNode(context, selection.getQual(),
+        NameResolvingMode.RELS_AND_SUBEXPRS);
+    EvalNode simplified = context.evalOptimizer.optimize(context, searchCondition);
+    // set selection condition
+    selectionNode.setQual(simplified);
 //    }
 
     return selectionNode;
@@ -1084,7 +1087,9 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
       throws PlanningException {
     if (inPredicate.getInValue().getType() == OpType.SimpleTableSubQuery) {
       // The predicand of the in predicate is always a column reference, so it can be ignored here.
-      return visit(context, stack, inPredicate.getInValue());
+      LogicalNode inValueNode = visit(context, stack, inPredicate.getInValue());
+
+      return inValueNode;
     } else {
       // If the inValue is not a SimpleTableSubQuery, it must be handled as an EvalNode.
       return null;
