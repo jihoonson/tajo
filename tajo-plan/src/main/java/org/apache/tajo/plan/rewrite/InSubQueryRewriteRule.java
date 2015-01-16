@@ -27,6 +27,7 @@ import org.apache.tajo.plan.util.ExprFinder;
 import org.apache.tajo.util.TUtil;
 
 import java.util.Map;
+import java.util.Set;
 import java.util.Stack;
 
 public class InSubQueryRewriteRule implements ExpressionRewriteRule {
@@ -40,10 +41,13 @@ public class InSubQueryRewriteRule implements ExpressionRewriteRule {
 
   @Override
   public boolean isEligible(OverridableConf queryContext, Expr expr) {
-    for (Expr found : ExprFinder.finds(expr, OpType.InPredicate)) {
-      InPredicate inPredicate = (InPredicate) found;
-      if (inPredicate.getInValue().getType() == OpType.SimpleTableSubQuery) {
-        return true;
+    for (Expr foundFilter : ExprFinder.finds(expr, OpType.Filter)) {
+      Selection selection = (Selection) foundFilter;
+      for (Expr foundIn : ExprFinder.finds(selection.getQual(), OpType.InPredicate)) {
+        InPredicate inPredicate = (InPredicate) foundIn;
+        if (inPredicate.getInValue().getType() == OpType.SimpleTableSubQuery) {
+          return true;
+        }
       }
     }
 
@@ -69,13 +73,15 @@ public class InSubQueryRewriteRule implements ExpressionRewriteRule {
   class Rewriter extends BaseAlgebraVisitor<Context, Expr> {
 
     private final static String SUBQUERY_NAME_PREFIX = "SQ_";
+    private final static String ALIAS_PREFIX = "generated_";
     private int subQueryNamePostfix = 0;
+    private int aliasPostfix = 0;
 
     private int getSubQueryNamePostfix() {
       return subQueryNamePostfix++;
     }
 
-    public String getNextSubQueryName() {
+    private String getNextSubQueryName() {
       return SUBQUERY_NAME_PREFIX + getSubQueryNamePostfix();
     }
 
@@ -121,20 +127,15 @@ public class InSubQueryRewriteRule implements ExpressionRewriteRule {
           SimpleTableSubQuery subQuery = (SimpleTableSubQuery) inPredicate.getInValue();
           TablePrimarySubQuery primarySubQuery = new TablePrimarySubQuery(getNextSubQueryName(),
               subQuery.getSubQuery());
-//          // assume that the most top expression of the subquery is the projection
-//          Projection projection = (Projection) primarySubQuery.getSubQuery();
-//          NamedExpr projectExpr = projection.getNamedExprs()[0];
-//          projectExpr.setAlias("sub");
-          // if the child expression does not have any group bys, set distinct
+          Projection projection = ExprFinder.findTopExpr(primarySubQuery.getSubQuery(), OpType.Projection);
+          updateProjection(projection);
 
           Join join = new Join(inPredicate.isNot() ? JoinType.LEFT_OUTER : JoinType.INNER);
           join.setLeft(expr.getChild());
           join.setRight(primarySubQuery);
 
           // join condition
-          ColumnReferenceExpr rhs = new ColumnReferenceExpr(primarySubQuery.getName(), projectExpr.getAlias());
-          BinaryOperator joinCondition = new BinaryOperator(OpType.Equals, predicand, rhs);
-          join.setQual(joinCondition);
+          join.setQual(buildJoinCondition(primarySubQuery, predicand, projection));
 
           child = super.visitJoin(ctx, stack, join);
         }
@@ -142,10 +143,37 @@ public class InSubQueryRewriteRule implements ExpressionRewriteRule {
       return child;
     }
 
-    @Override
-    public Expr visitProjection(Context ctx, Stack<Expr> stack, Projection expr) throws PlanningException {
-      
-      return super.visitProjection(ctx, stack, expr);
+    private void updateProjection(Projection projection) {
+      // if the child expression does not have any group bys, set distinct
+      Set<Aggregation> aggregations = ExprFinder.finds(projection, OpType.Aggregation);
+      if (aggregations.size() == 0) {
+        projection.setDistinct();
+      }
+
+      // if the named expression is not a column reference and does not have an alias, set its alias
+      NamedExpr projectExpr = projection.getNamedExprs()[0];
+      if (projectExpr.getExpr().getType() != OpType.Column &&
+          !projectExpr.hasAlias()) {
+        projectExpr.setAlias(generateAlias());
+      }
+    }
+
+    private BinaryOperator buildJoinCondition(TablePrimarySubQuery subQuery,
+                                              ColumnReferenceExpr predicand, Projection projection) {
+      NamedExpr projectExpr = projection.getNamedExprs()[0];
+      Expr rhs;
+      if (projectExpr.getExpr().getType() == OpType.Column) {
+        ColumnReferenceExpr projectCol = (ColumnReferenceExpr) projectExpr.getExpr();
+        rhs = new ColumnReferenceExpr(subQuery.getName(), projectCol.getName());
+      } else {
+        rhs = new ColumnReferenceExpr(subQuery.getName(), projectExpr.getAlias());
+      }
+      BinaryOperator joinCondition = new BinaryOperator(OpType.Equals, predicand, rhs);
+      return joinCondition;
+    }
+
+    private String generateAlias() {
+      return ALIAS_PREFIX + aliasPostfix++;
     }
   }
 }

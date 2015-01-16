@@ -34,9 +34,15 @@ public class ExprFinder extends SimpleAlgebraVisitor<ExprFinder.Context, Object>
   static class Context {
     Set<Expr> set = new HashSet<Expr>();
     OpType targetType;
+    boolean findTopOnly;
 
     Context(OpType type) {
+      this(type, false);
+    }
+
+    Context(OpType type, boolean findTopOnly) {
       this.targetType = type;
+      this.findTopOnly = findTopOnly;
     }
   }
 
@@ -54,7 +60,32 @@ public class ExprFinder extends SimpleAlgebraVisitor<ExprFinder.Context, Object>
     return (Set<T>) context.set;
   }
 
+  public static <T extends Expr> T findTopExpr(Expr expr, OpType type) {
+    Context context = new Context(type, true);
+    ExprFinder finder = new ExprFinder();
+    Stack<Expr> stack = new Stack<Expr>();
+    stack.push(expr);
+    try {
+      finder.visit(context, new Stack<Expr>(), expr);
+    } catch (PlanningException e) {
+      throw new RuntimeException(e);
+    }
+    stack.pop();
+    if (context.set.size() > 0) {
+      return (T) context.set.iterator().next();
+    } else {
+      return null;
+    }
+  }
+
   public Object visit(Context ctx, Stack<Expr> stack, Expr expr) throws PlanningException {
+    if (ctx.targetType == expr.getType()) {
+      ctx.set.add(expr);
+      if (ctx.findTopOnly) {
+        return null;
+      }
+    }
+
     if (expr instanceof UnaryOperator) {
       preHook(ctx, stack, expr);
       visitUnaryOperator(ctx, stack, (UnaryOperator) expr);
@@ -67,9 +98,9 @@ public class ExprFinder extends SimpleAlgebraVisitor<ExprFinder.Context, Object>
       super.visit(ctx, stack, expr);
     }
 
-    if (ctx.targetType == expr.getType()) {
-      ctx.set.add(expr);
-    }
+//    if (ctx.targetType == expr.getType()) {
+//      ctx.set.add(expr);
+//    }
 
     return null;
   }

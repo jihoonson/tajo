@@ -22,6 +22,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import org.apache.tajo.LocalTajoTestingUtility;
+import org.apache.tajo.OverridableConf;
 import org.apache.tajo.TajoConstants;
 import org.apache.tajo.TajoTestingCluster;
 import org.apache.tajo.algebra.Expr;
@@ -37,6 +38,7 @@ import org.apache.tajo.engine.function.builtin.SumInt;
 import org.apache.tajo.engine.json.CoreGsonHelper;
 import org.apache.tajo.engine.parser.SQLAnalyzer;
 import org.apache.tajo.engine.query.QueryContext;
+import org.apache.tajo.plan.rewrite.InSubQueryRewriteRule;
 import org.apache.tajo.plan.visitor.ExplainLogicalPlanVisitor;
 import org.apache.tajo.session.Session;
 import org.apache.tajo.plan.*;
@@ -1211,16 +1213,17 @@ public class TestLogicalPlanner {
 
     Expr expr = sqlAnalyzer.parse("select n_name from nation where n_regionkey in (select r_regionkey from region);");
     System.out.println(expr);
+    InSubQueryRewriteRule rule = new InSubQueryRewriteRule();
+    OverridableConf overridableConf = new OverridableConf(util.getConfiguration());
+    assertTrue(rule.isEligible(overridableConf, expr));
+    rule.rewrite(overridableConf, expr);
+    System.out.println("============================ Rewritten expr ============================");
+    System.out.println(expr);
+
     LogicalPlan plan = planner.createPlan(qc, expr);
     System.out.println("============================ This is a logical plan ============================");
     System.out.println(plan);
     System.out.println();
-
-    System.out.println("============================ These are query blocks ============================");
-    for (LogicalPlan.QueryBlock block : plan.getQueryBlocks()) {
-      System.out.println(block.getName());
-      System.out.println(getLogicalPlanAsString(plan, block));
-    }
   }
 
   @Test
@@ -1318,7 +1321,7 @@ public class TestLogicalPlanner {
   public final void testJoin() throws PlanningException {
     QueryContext qc = new QueryContext(util.getConfiguration(), session);
 
-    Expr expr = sqlAnalyzer.parse("select n_name from nation inner join region on n_regionkey = r_regionkey");
+    Expr expr = sqlAnalyzer.parse("select n_name from nation inner join (count(*) as c from region) as T on n_regionkey = T.c");
     System.out.println(expr);
   }
 
@@ -1326,7 +1329,7 @@ public class TestLogicalPlanner {
   public final void testTableSubQuery() throws PlanningException {
     QueryContext qc = new QueryContext(util.getConfiguration(), session);
 
-    Expr expr = sqlAnalyzer.parse("select n_name from (select * from nation) as t");
+    Expr expr = sqlAnalyzer.parse("select n_name from (select count(*) as c from nation) as t");
     System.out.println(expr);
   }
 
