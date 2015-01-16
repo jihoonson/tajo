@@ -158,6 +158,8 @@ public class GlobalEngine extends AbstractService {
         planningContext = buildExpressionFromSql(query);
       }
 
+      // TODO: rewrite the query expression
+
       String jsonExpr = planningContext.toJson();
       LogicalPlan plan = createLogicalPlan(queryContext, planningContext);
       SubmitQueryResponse response = queryExecutor.execute(queryContext, session, query, jsonExpr, plan);
