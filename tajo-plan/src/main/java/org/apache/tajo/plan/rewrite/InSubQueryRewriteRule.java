@@ -58,45 +58,93 @@ public class InSubQueryRewriteRule implements ExpressionRewriteRule {
 
   static class Context {
     OverridableConf queryContext;
-    boolean needDistinct;
-    Map<SimpleTableSubQuery, Selection> replacedMap;
+    Map<Selection, TablePrimarySubQuery> replacedMap;
 
     public Context(OverridableConf queryContext) {
       this.queryContext = queryContext;
-      this.needDistinct = false;
       this.replacedMap = TUtil.newHashMap();
     }
   }
 
   class Rewriter extends BaseAlgebraVisitor<Context, Expr> {
 
+    private final static String SUBQUERY_NAME_PREFIX = "SQ_";
+    private int subQueryNamePostfix = 0;
+
+    private int getSubQueryNamePostfix() {
+      return subQueryNamePostfix++;
+    }
+
+    public String getNextSubQueryName() {
+      return SUBQUERY_NAME_PREFIX + getSubQueryNamePostfix();
+    }
+
+    public Expr postHook(Context ctx, Stack<Expr> stack, Expr expr, Expr current) throws PlanningException {
+      if (current instanceof UnaryOperator) {
+        UnaryOperator unary = (UnaryOperator) current;
+        if (unary.getChild().getType() == OpType.Filter) {
+          if (ctx.replacedMap.containsKey(unary.getChild())) {
+            unary.setChild(ctx.replacedMap.get(unary.getChild()));
+          }
+        }
+      } else if (current instanceof BinaryOperator) {
+        BinaryOperator binary = (BinaryOperator) current;
+        if (binary.getLeft().getType() == OpType.Filter) {
+          if (ctx.replacedMap.containsKey(binary.getLeft())) {
+            binary.setLeft(ctx.replacedMap.get(binary.getLeft()));
+          }
+        } else if (binary.getRight().getType() == OpType.Filter) {
+          if (ctx.replacedMap.containsKey(binary.getRight())) {
+            binary.setRight(ctx.replacedMap.get(binary.getRight()));
+          }
+        }
+      } else if (current instanceof TablePrimarySubQuery) {
+        TablePrimarySubQuery subQuery = (TablePrimarySubQuery) current;
+        if (subQuery.getSubQuery().getType() == OpType.Filter) {
+          if (ctx.replacedMap.containsKey(subQuery.getSubQuery())) {
+            subQuery.setSubquery(ctx.replacedMap.get(subQuery.getSubQuery()));
+          }
+        }
+      }
+      return current;
+    }
+
     @Override
     public Expr visitFilter(Context ctx, Stack<Expr> stack, Selection expr) throws PlanningException {
+      Expr child = super.visitFilter(ctx, stack, expr);
+
       for (Expr found : ExprFinder.finds(expr.getQual(), OpType.InPredicate)) {
         InPredicate inPredicate = (InPredicate) found;
         if (inPredicate.getInValue().getType() == OpType.SimpleTableSubQuery) {
           Preconditions.checkArgument(inPredicate.getPredicand().getType() == OpType.Column);
           ColumnReferenceExpr predicand = (ColumnReferenceExpr) inPredicate.getPredicand();
           SimpleTableSubQuery subQuery = (SimpleTableSubQuery) inPredicate.getInValue();
+          TablePrimarySubQuery primarySubQuery = new TablePrimarySubQuery(getNextSubQueryName(),
+              subQuery.getSubQuery());
+//          // assume that the most top expression of the subquery is the projection
+//          Projection projection = (Projection) primarySubQuery.getSubQuery();
+//          NamedExpr projectExpr = projection.getNamedExprs()[0];
+//          projectExpr.setAlias("sub");
+          // if the child expression does not have any group bys, set distinct
 
           Join join = new Join(inPredicate.isNot() ? JoinType.LEFT_OUTER : JoinType.INNER);
           join.setLeft(expr.getChild());
-          join.setRight(subQuery);
-          ctx.needDistinct = true;
+          join.setRight(primarySubQuery);
 
           // join condition
+          ColumnReferenceExpr rhs = new ColumnReferenceExpr(primarySubQuery.getName(), projectExpr.getAlias());
+          BinaryOperator joinCondition = new BinaryOperator(OpType.Equals, predicand, rhs);
+          join.setQual(joinCondition);
+
+          child = super.visitJoin(ctx, stack, join);
         }
       }
-      super.visitFilter(ctx, stack, expr);
-      return null;
+      return child;
     }
 
     @Override
     public Expr visitProjection(Context ctx, Stack<Expr> stack, Projection expr) throws PlanningException {
-      if (ctx.needDistinct) {
-        expr.setDistinct();
-        ctx.needDistinct = false;
-      }
+      
       return super.visitProjection(ctx, stack, expr);
     }
   }

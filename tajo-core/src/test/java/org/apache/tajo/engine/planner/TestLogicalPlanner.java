@@ -1302,10 +1302,31 @@ public class TestLogicalPlanner {
   }
 
   @Test
+  public final void testInSubQuery2() throws PlanningException {
+    QueryContext qc = new QueryContext(util.getConfiguration(), session);
+
+    Expr expr = sqlAnalyzer.parse("select n_name from nation where n_nationkey in (select count(*) from region);");
+    System.out.println(expr);
+    LogicalPlan plan = planner.createPlan(qc, expr);
+    for (LogicalPlan.QueryBlock block : plan.getQueryBlocks()) {
+      System.out.println(block.getName());
+      System.out.println(getLogicalPlanAsString(plan, block));
+    }
+  }
+
+  @Test
   public final void testJoin() throws PlanningException {
     QueryContext qc = new QueryContext(util.getConfiguration(), session);
 
     Expr expr = sqlAnalyzer.parse("select n_name from nation inner join region on n_regionkey = r_regionkey");
+    System.out.println(expr);
+  }
+
+  @Test
+  public final void testTableSubQuery() throws PlanningException {
+    QueryContext qc = new QueryContext(util.getConfiguration(), session);
+
+    Expr expr = sqlAnalyzer.parse("select n_name from (select * from nation) as t");
     System.out.println(expr);
   }
 
