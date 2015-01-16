@@ -380,9 +380,6 @@ public class ExprAnnotator extends BaseAlgebraVisitor<ExprAnnotator.Context, Eva
   @Override
   public EvalNode visitSimpleTableSubQuery(Context ctx, Stack<Expr> stack, SimpleTableSubQuery expr)
       throws PlanningException {
-//    List<LogicalPlan.QueryBlock> childBlocks = ctx.plan.getChildBlocks(ctx.currentBlock);
-//    assertEval(childBlocks.size() == 1, "The simple table subquery must have only one child query block.");
-
     return new SubQueryEval(ctx.plan.getQueryBlockOfSubquery(expr).getName());
   }
 

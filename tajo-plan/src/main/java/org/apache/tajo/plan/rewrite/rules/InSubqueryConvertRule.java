@@ -22,6 +22,7 @@ import com.google.common.base.Preconditions;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.tajo.OverridableConf;
+import org.apache.tajo.algebra.Expr;
 import org.apache.tajo.algebra.JoinType;
 import org.apache.tajo.catalog.Schema;
 import org.apache.tajo.catalog.SchemaUtil;
@@ -107,12 +108,10 @@ public class InSubqueryConvertRule
 
         // the left and right children are the child of the filter and the inner subquery, respectively.
         joinNode.setLeftChild(selectionNode.getChild());
-//        joinNode.setRightChild(createTableSubQueryNode(context, plan, block,
-//            plan.getBlock(subQueryEval.getSubQueryBlockName()).getRoot()));
-        joinNode.setRightChild(insertDistinct(plan, block, childBlock, subQueryEval.getSubQueryNode(),
-            subQueryEval.getSubQueryNode().getSubQuery()));
+        joinNode.setRightChild(subQueryEval.getSubQueryNode());
         ProjectionNode projectionNode = PlannerUtil.findTopNode(subQueryEval.getSubQueryNode(), NodeType.PROJECTION);
         projectionNode.setDistinct(true);
+        insertDistinctOperator(plan, childBlock, projectionNode, projectionNode.getChild());
 //        joinNode.setRightChild(subQueryEval.getSubQueryNode());
 
         // connect the new join with the parent of the filter
@@ -162,21 +161,36 @@ public class InSubqueryConvertRule
 //    return node;
 //  }
 
-  private TableSubQueryNode insertDistinct(LogicalPlan plan, LogicalPlan.QueryBlock block,
-                                           LogicalPlan.QueryBlock childBlock,
-                                           TableSubQueryNode subQueryNode, LogicalNode child) {
-    Schema outSchema = subQueryNode.getOutSchema();
+//  private TableSubQueryNode insertDistinct(LogicalPlan plan, LogicalPlan.QueryBlock block,
+//                                           LogicalPlan.QueryBlock childBlock,
+//                                           ProjectionNode projectionNode, LogicalNode child) {
+//    Schema outSchema = subQueryNode.getOutSchema();
+//    GroupbyNode dupRemoval = plan.createNode(GroupbyNode.class);
+//    dupRemoval.setChild(child);
+//    dupRemoval.setInSchema(subQueryNode.getInSchema());
+//    dupRemoval.setTargets(PlannerUtil.schemaToTargets(outSchema));
+//    dupRemoval.setGroupingColumns(outSchema.toArray());
+//
+//    childBlock.registerNode(dupRemoval);
+//
+//    subQueryNode.setSubQuery(dupRemoval);
+//    subQueryNode.setInSchema(dupRemoval.getOutSchema());
+//    return subQueryNode;
+//  }
+
+  private void insertDistinctOperator(LogicalPlan plan, LogicalPlan.QueryBlock block,
+                                      ProjectionNode projectionNode, LogicalNode child) throws PlanningException {
+    Schema outSchema = projectionNode.getOutSchema();
     GroupbyNode dupRemoval = plan.createNode(GroupbyNode.class);
     dupRemoval.setChild(child);
-    dupRemoval.setInSchema(subQueryNode.getInSchema());
+    dupRemoval.setInSchema(projectionNode.getInSchema());
     dupRemoval.setTargets(PlannerUtil.schemaToTargets(outSchema));
     dupRemoval.setGroupingColumns(outSchema.toArray());
 
-    childBlock.registerNode(dupRemoval);
+    block.registerNode(dupRemoval);
 
-    subQueryNode.setSubQuery(dupRemoval);
-    subQueryNode.setInSchema(dupRemoval.getOutSchema());
-    return subQueryNode;
+    projectionNode.setChild(dupRemoval);
+    projectionNode.setInSchema(dupRemoval.getOutSchema());
   }
 
   /**

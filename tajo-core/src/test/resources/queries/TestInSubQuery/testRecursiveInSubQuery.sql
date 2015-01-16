@@ -1,0 +1,1 @@
+select n_name from nation where n_regionkey in (select r_regionkey from region where r_name in (select r_name from region where r_regionkey > 1 and r_regionkey < 3))
