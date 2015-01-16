@@ -62,7 +62,7 @@ public class InSubqueryConvertRule
   public boolean isEligible(OverridableConf queryContext, LogicalPlan plan) {
     for (LogicalPlan.QueryBlock block : plan.getQueryBlocks()) {
       SelectionNode selectionNode = block.getNode(NodeType.SELECTION);
-      if (selectionNode.hasQual()) {
+      if (selectionNode != null && selectionNode.hasQual()) {
         if (EvalTreeUtil.findEvalsByType(selectionNode.getQual(), EvalType.SUB_QUERY).size() > 0) {
           return true;
         }
