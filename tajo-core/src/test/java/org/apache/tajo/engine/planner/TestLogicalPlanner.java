@@ -1216,7 +1216,7 @@ public class TestLogicalPlanner {
     InSubQueryRewriteRule rule = new InSubQueryRewriteRule();
     OverridableConf overridableConf = new OverridableConf(util.getConfiguration());
     assertTrue(rule.isEligible(overridableConf, expr));
-    rule.rewrite(overridableConf, expr);
+    expr = rule.rewrite(overridableConf, expr);
     System.out.println("============================ Rewritten expr ============================");
     System.out.println(expr);
 
@@ -1227,10 +1227,14 @@ public class TestLogicalPlanner {
   }
 
   @Test
-  public final void testRecursiveInSubQuery() throws PlanningException {
+  public final void testNestedInSubQuery() throws PlanningException {
     QueryContext qc = new QueryContext(util.getConfiguration(), session);
 
     Expr expr = sqlAnalyzer.parse("select n_name from nation where n_regionkey in (select r_regionkey from region where r_name in (select r_name from region where r_regionkey > 1 and r_regionkey < 3));");
+    InSubQueryRewriteRule rule = new InSubQueryRewriteRule();
+    OverridableConf overridableConf = new OverridableConf(util.getConfiguration());
+    assertTrue(rule.isEligible(overridableConf, expr));
+    expr = rule.rewrite(overridableConf, expr);
     System.out.println(expr);
     LogicalPlan plan = planner.createPlan(qc, expr);
     for (LogicalPlan.QueryBlock block : plan.getQueryBlocks()) {
@@ -1244,6 +1248,10 @@ public class TestLogicalPlanner {
     QueryContext qc = new QueryContext(util.getConfiguration(), session);
 
     Expr expr = sqlAnalyzer.parse("select n_name from nation where n_regionkey in (select r_regionkey from region) and n_nationkey > 1;");
+    InSubQueryRewriteRule rule = new InSubQueryRewriteRule();
+    OverridableConf overridableConf = new OverridableConf(util.getConfiguration());
+    assertTrue(rule.isEligible(overridableConf, expr));
+    expr = rule.rewrite(overridableConf, expr);
     System.out.println(expr);
     LogicalPlan plan = planner.createPlan(qc, expr);
     for (LogicalPlan.QueryBlock block : plan.getQueryBlocks()) {
@@ -1257,6 +1265,10 @@ public class TestLogicalPlanner {
     QueryContext qc = new QueryContext(util.getConfiguration(), session);
 
     Expr expr = sqlAnalyzer.parse("select n_name from nation where n_regionkey in (select r_regionkey from region) and n_nationkey in (select s_nationkey from supplier);");
+    InSubQueryRewriteRule rule = new InSubQueryRewriteRule();
+    OverridableConf overridableConf = new OverridableConf(util.getConfiguration());
+    assertTrue(rule.isEligible(overridableConf, expr));
+    expr = rule.rewrite(overridableConf, expr);
     System.out.println(expr);
     LogicalPlan plan = planner.createPlan(qc, expr);
     for (LogicalPlan.QueryBlock block : plan.getQueryBlocks()) {
@@ -1270,6 +1282,10 @@ public class TestLogicalPlanner {
     QueryContext qc = new QueryContext(util.getConfiguration(), session);
 
     Expr expr = sqlAnalyzer.parse("select n_name from nation, supplier where n_regionkey in (select r_regionkey from region) and n_nationkey = s_nationkey;");
+    InSubQueryRewriteRule rule = new InSubQueryRewriteRule();
+    OverridableConf overridableConf = new OverridableConf(util.getConfiguration());
+    assertTrue(rule.isEligible(overridableConf, expr));
+    expr = rule.rewrite(overridableConf, expr);
     System.out.println(expr);
     LogicalPlan plan = planner.createPlan(qc, expr);
     for (LogicalPlan.QueryBlock block : plan.getQueryBlocks()) {
@@ -1283,6 +1299,10 @@ public class TestLogicalPlanner {
     QueryContext qc = new QueryContext(util.getConfiguration(), session);
 
     Expr expr = sqlAnalyzer.parse("select n_name from (select * from nation) as T where n_regionkey in (select r_regionkey from region);");
+    InSubQueryRewriteRule rule = new InSubQueryRewriteRule();
+    OverridableConf overridableConf = new OverridableConf(util.getConfiguration());
+    assertTrue(rule.isEligible(overridableConf, expr));
+    expr = rule.rewrite(overridableConf, expr);
     System.out.println(expr);
     LogicalPlan plan = planner.createPlan(qc, expr);
     for (LogicalPlan.QueryBlock block : plan.getQueryBlocks()) {
@@ -1296,6 +1316,10 @@ public class TestLogicalPlanner {
     QueryContext qc = new QueryContext(util.getConfiguration(), session);
 
     Expr expr = sqlAnalyzer.parse("select n_name from nation where n_nationkey not in (select r_regionkey from region);");
+    InSubQueryRewriteRule rule = new InSubQueryRewriteRule();
+    OverridableConf overridableConf = new OverridableConf(util.getConfiguration());
+    assertTrue(rule.isEligible(overridableConf, expr));
+    expr = rule.rewrite(overridableConf, expr);
     System.out.println(expr);
     LogicalPlan plan = planner.createPlan(qc, expr);
     for (LogicalPlan.QueryBlock block : plan.getQueryBlocks()) {
@@ -1309,6 +1333,10 @@ public class TestLogicalPlanner {
     QueryContext qc = new QueryContext(util.getConfiguration(), session);
 
     Expr expr = sqlAnalyzer.parse("select n_name from nation where n_nationkey in (select count(*) from region);");
+    InSubQueryRewriteRule rule = new InSubQueryRewriteRule();
+    OverridableConf overridableConf = new OverridableConf(util.getConfiguration());
+    assertTrue(rule.isEligible(overridableConf, expr));
+    expr = rule.rewrite(overridableConf, expr);
     System.out.println(expr);
     LogicalPlan plan = planner.createPlan(qc, expr);
     for (LogicalPlan.QueryBlock block : plan.getQueryBlocks()) {

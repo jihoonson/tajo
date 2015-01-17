@@ -27,7 +27,7 @@ import org.apache.tajo.catalog.CatalogService;
 import org.apache.tajo.catalog.CatalogUtil;
 import org.apache.tajo.catalog.TableDesc;
 import org.apache.tajo.catalog.proto.CatalogProtos;
-import org.apache.tajo.plan.util.ExprFinder;
+import org.apache.tajo.plan.util.ExprTreeUtil;
 import org.apache.tajo.plan.PlanningException;
 import org.apache.tajo.plan.algebra.BaseAlgebraVisitor;
 import org.apache.tajo.util.TUtil;
@@ -96,7 +96,7 @@ public class PreLogicalPlanVerifier extends BaseAlgebraVisitor<PreLogicalPlanVer
         }
       }
 
-      Set<GeneralSetFunctionExpr> exprs = ExprFinder.finds(namedExpr.getExpr(), OpType.GeneralSetFunction);
+      Set<GeneralSetFunctionExpr> exprs = ExprTreeUtil.finds(namedExpr.getExpr(), OpType.GeneralSetFunction);
 
       // Currently, avg functions with distinct aggregation are not supported.
       // This code does not allow users to use avg functions with distinct aggregation.
@@ -119,7 +119,7 @@ public class PreLogicalPlanVerifier extends BaseAlgebraVisitor<PreLogicalPlanVer
   public Expr visitLimit(Context context, Stack<Expr> stack, Limit expr) throws PlanningException {
     stack.push(expr);
 
-    if (ExprFinder.finds(expr.getFetchFirstNum(), OpType.Column).size() > 0) {
+    if (ExprTreeUtil.finds(expr.getFetchFirstNum(), OpType.Column).size() > 0) {
       context.state.addVerification("argument of LIMIT must not contain variables");
     }
 

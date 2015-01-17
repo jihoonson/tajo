@@ -23,7 +23,8 @@ import org.apache.tajo.OverridableConf;
 import org.apache.tajo.algebra.*;
 import org.apache.tajo.plan.PlanningException;
 import org.apache.tajo.plan.algebra.BaseAlgebraVisitor;
-import org.apache.tajo.plan.util.ExprFinder;
+import org.apache.tajo.plan.util.ExprTreeUtil;
+import org.apache.tajo.plan.visitor.SimpleAlgebraVisitor;
 import org.apache.tajo.util.TUtil;
 
 import java.util.Map;
@@ -32,7 +33,7 @@ import java.util.Stack;
 
 public class InSubQueryRewriteRule implements ExpressionRewriteRule {
   private final static String NAME = "InSubQueryRewriter";
-  private Rewriter rewriter = new Rewriter();
+  private Preprocessor preprocessor = new Preprocessor();
 
   @Override
   public String getName() {
@@ -41,9 +42,9 @@ public class InSubQueryRewriteRule implements ExpressionRewriteRule {
 
   @Override
   public boolean isEligible(OverridableConf queryContext, Expr expr) {
-    for (Expr foundFilter : ExprFinder.finds(expr, OpType.Filter)) {
+    for (Expr foundFilter : ExprTreeUtil.finds(expr, OpType.Filter)) {
       Selection selection = (Selection) foundFilter;
-      for (Expr foundIn : ExprFinder.finds(selection.getQual(), OpType.InPredicate)) {
+      for (Expr foundIn : ExprTreeUtil.finds(selection.getQual(), OpType.InPredicate)) {
         InPredicate inPredicate = (InPredicate) foundIn;
         if (inPredicate.getInValue().getType() == OpType.SimpleTableSubQuery) {
           return true;
@@ -57,12 +58,44 @@ public class InSubQueryRewriteRule implements ExpressionRewriteRule {
   @Override
   public Expr rewrite(OverridableConf queryContext, Expr expr) throws PlanningException {
     Context context = new Context(queryContext);
-    return rewriter.visit(context, new Stack<Expr>(), expr);
+    Expr rewritten;
+    try {
+      rewritten = (Expr) expr.clone();
+    } catch (CloneNotSupportedException e) {
+      throw new PlanningException(e);
+    }
+    preprocessor.visit(context, new Stack<Expr>(), rewritten);
+
+    for (Map.Entry<Selection, Join> entry : context.replacedMap.entrySet()) {
+      Expr parent = ExprTreeUtil.findParent(rewritten, entry.getKey());
+
+      if (parent == null) {
+        throw new PlanningException("No such parent who has " + entry.getKey() + " as its child");
+      }
+
+      if (parent instanceof UnaryOperator) {
+        ((UnaryOperator) parent).setChild(entry.getValue());
+      } else if (parent instanceof BinaryOperator) {
+        BinaryOperator binary = (BinaryOperator) parent;
+        if (binary.getLeft().equals(entry.getKey())) {
+          binary.setLeft(entry.getValue());
+        } else if (binary.getRight().equals(entry.getKey())) {
+          binary.setRight(entry.getValue());
+        }
+      } else if (parent instanceof TablePrimarySubQuery) {
+        TablePrimarySubQuery subQuery = (TablePrimarySubQuery) parent;
+        subQuery.setSubquery(entry.getValue());
+      } else {
+        throw new PlanningException("No such parent who has " + entry.getKey() + " as its child");
+      }
+    }
+    return rewritten;
   }
 
   static class Context {
     OverridableConf queryContext;
-    Map<Selection, TablePrimarySubQuery> replacedMap;
+//    Map<Selection, TablePrimarySubQuery> replacedMap;
+    Map<Selection, Join> replacedMap;
 
     public Context(OverridableConf queryContext) {
       this.queryContext = queryContext;
@@ -70,7 +103,7 @@ public class InSubQueryRewriteRule implements ExpressionRewriteRule {
     }
   }
 
-  class Rewriter extends BaseAlgebraVisitor<Context, Expr> {
+  class Preprocessor extends BaseAlgebraVisitor<Context, Expr> {
 
     private final static String SUBQUERY_NAME_PREFIX = "SQ_";
     private final static String ALIAS_PREFIX = "generated_";
@@ -85,59 +118,73 @@ public class InSubQueryRewriteRule implements ExpressionRewriteRule {
       return SUBQUERY_NAME_PREFIX + getSubQueryNamePostfix();
     }
 
-    public Expr postHook(Context ctx, Stack<Expr> stack, Expr expr, Expr current) throws PlanningException {
-      if (current instanceof UnaryOperator) {
-        UnaryOperator unary = (UnaryOperator) current;
-        if (unary.getChild().getType() == OpType.Filter) {
-          if (ctx.replacedMap.containsKey(unary.getChild())) {
-            unary.setChild(ctx.replacedMap.get(unary.getChild()));
-          }
-        }
-      } else if (current instanceof BinaryOperator) {
-        BinaryOperator binary = (BinaryOperator) current;
-        if (binary.getLeft().getType() == OpType.Filter) {
-          if (ctx.replacedMap.containsKey(binary.getLeft())) {
-            binary.setLeft(ctx.replacedMap.get(binary.getLeft()));
-          }
-        } else if (binary.getRight().getType() == OpType.Filter) {
-          if (ctx.replacedMap.containsKey(binary.getRight())) {
-            binary.setRight(ctx.replacedMap.get(binary.getRight()));
-          }
-        }
-      } else if (current instanceof TablePrimarySubQuery) {
-        TablePrimarySubQuery subQuery = (TablePrimarySubQuery) current;
-        if (subQuery.getSubQuery().getType() == OpType.Filter) {
-          if (ctx.replacedMap.containsKey(subQuery.getSubQuery())) {
-            subQuery.setSubquery(ctx.replacedMap.get(subQuery.getSubQuery()));
-          }
-        }
-      }
-      return current;
-    }
+//    public Expr postHook(Context ctx, Stack<Expr> stack, Expr expr, Expr current) throws PlanningException {
+//      if (current instanceof UnaryOperator) {
+//        UnaryOperator unary = (UnaryOperator) current;
+//        if (unary.getChild().getType() == OpType.Filter) {
+//          if (ctx.replacedMap.containsKey(unary.getChild())) {
+//            unary.setChild(ctx.replacedMap.get(unary.getChild()));
+//          }
+//        }
+//      } else if (current instanceof BinaryOperator) {
+//        BinaryOperator binary = (BinaryOperator) current;
+//        if (binary.getLeft().getType() == OpType.Filter) {
+//          if (ctx.replacedMap.containsKey(binary.getLeft())) {
+//            binary.setLeft(ctx.replacedMap.get(binary.getLeft()));
+//          }
+//        } else if (binary.getRight().getType() == OpType.Filter) {
+//          if (ctx.replacedMap.containsKey(binary.getRight())) {
+//            binary.setRight(ctx.replacedMap.get(binary.getRight()));
+//          }
+//        }
+//      } else if (current instanceof TablePrimarySubQuery) {
+//        TablePrimarySubQuery subQuery = (TablePrimarySubQuery) current;
+//        if (subQuery.getSubQuery().getType() == OpType.Filter) {
+//          if (ctx.replacedMap.containsKey(subQuery.getSubQuery())) {
+//            subQuery.setSubquery(ctx.replacedMap.get(subQuery.getSubQuery()));
+//          }
+//        }
+//      }
+//      return current;
+//    }
 
     @Override
     public Expr visitFilter(Context ctx, Stack<Expr> stack, Selection expr) throws PlanningException {
       Expr child = super.visitFilter(ctx, stack, expr);
 
-      for (Expr found : ExprFinder.finds(expr.getQual(), OpType.InPredicate)) {
+      for (Expr found : ExprTreeUtil.finds(expr.getQual(), OpType.InPredicate)) {
         InPredicate inPredicate = (InPredicate) found;
         if (inPredicate.getInValue().getType() == OpType.SimpleTableSubQuery) {
           Preconditions.checkArgument(inPredicate.getPredicand().getType() == OpType.Column);
           ColumnReferenceExpr predicand = (ColumnReferenceExpr) inPredicate.getPredicand();
           SimpleTableSubQuery subQuery = (SimpleTableSubQuery) inPredicate.getInValue();
-          TablePrimarySubQuery primarySubQuery = new TablePrimarySubQuery(getNextSubQueryName(),
-              subQuery.getSubQuery());
-          Projection projection = ExprFinder.findTopExpr(primarySubQuery.getSubQuery(), OpType.Projection);
+          TablePrimarySubQuery primarySubQuery = null;
+          try {
+            primarySubQuery = new TablePrimarySubQuery(getNextSubQueryName(),
+                (Expr) subQuery.getSubQuery().clone());
+          } catch (CloneNotSupportedException e) {
+            throw new PlanningException(e);
+          }
+          Projection projection = ExprTreeUtil.findTopExpr(primarySubQuery.getSubQuery(), OpType.Projection);
           updateProjection(projection);
 
           Join join = new Join(inPredicate.isNot() ? JoinType.LEFT_OUTER : JoinType.INNER);
-          join.setLeft(expr.getChild());
-          join.setRight(primarySubQuery);
+          if (ctx.replacedMap.containsKey(expr)) {
+            join.setLeft(ctx.replacedMap.get(expr));
+            join.setRight(primarySubQuery);
 
-          // join condition
-          join.setQual(buildJoinCondition(primarySubQuery, predicand, projection));
+            join.setQual(buildJoinCondition(primarySubQuery, predicand, projection));
+            ctx.replacedMap.put(expr, join);
+          } else {
+            join.setLeft(expr.getChild());
+            join.setRight(primarySubQuery);
 
-          child = super.visitJoin(ctx, stack, join);
+            // join condition
+            join.setQual(buildJoinCondition(primarySubQuery, predicand, projection));
+            ctx.replacedMap.put(expr, join);
+          }
+
+//          child = super.visitJoin(ctx, stack, join);
         }
       }
       return child;
@@ -145,9 +192,17 @@ public class InSubQueryRewriteRule implements ExpressionRewriteRule {
 
     private void updateProjection(Projection projection) {
       // if the child expression does not have any group bys, set distinct
-      Set<Aggregation> aggregations = ExprFinder.finds(projection, OpType.Aggregation);
+      boolean needDistinct = true;
+      Set<Aggregation> aggregations = ExprTreeUtil.finds(projection, OpType.Aggregation);
       if (aggregations.size() == 0) {
-        projection.setDistinct();
+        for (NamedExpr namedExpr : projection.getNamedExprs()) {
+          if (namedExpr.getExpr().getType() == OpType.CountRowsFunction) {
+            needDistinct = false;
+          }
+        }
+        if (needDistinct) {
+          projection.setDistinct();
+        }
       }
 
       // if the named expression is not a column reference and does not have an alias, set its alias
