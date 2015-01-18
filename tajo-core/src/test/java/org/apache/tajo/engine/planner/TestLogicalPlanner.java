@@ -38,13 +38,16 @@ import org.apache.tajo.engine.function.builtin.SumInt;
 import org.apache.tajo.engine.json.CoreGsonHelper;
 import org.apache.tajo.engine.parser.SQLAnalyzer;
 import org.apache.tajo.engine.query.QueryContext;
-import org.apache.tajo.plan.rewrite.InSubQueryRewriteRule;
-import org.apache.tajo.plan.visitor.ExplainLogicalPlanVisitor;
-import org.apache.tajo.session.Session;
-import org.apache.tajo.plan.*;
+import org.apache.tajo.plan.LogicalOptimizer;
+import org.apache.tajo.plan.LogicalPlan;
+import org.apache.tajo.plan.LogicalPlanner;
+import org.apache.tajo.plan.PlanningException;
 import org.apache.tajo.plan.expr.*;
 import org.apache.tajo.plan.logical.*;
+import org.apache.tajo.plan.rewrite.InSubQueryRewriteRule;
 import org.apache.tajo.plan.util.PlannerUtil;
+import org.apache.tajo.plan.visitor.ExplainLogicalPlanVisitor;
+import org.apache.tajo.session.Session;
 import org.apache.tajo.util.CommonTestingUtil;
 import org.apache.tajo.util.FileUtil;
 import org.apache.tajo.util.KeyValueSet;
@@ -60,7 +63,6 @@ import java.util.*;
 import static org.apache.tajo.TajoConstants.DEFAULT_DATABASE_NAME;
 import static org.apache.tajo.TajoConstants.DEFAULT_TABLESPACE_NAME;
 import static org.junit.Assert.*;
-import static org.junit.Assert.assertEquals;
 
 public class TestLogicalPlanner {
   private static TajoTestingCluster util;
@@ -1349,8 +1351,10 @@ public class TestLogicalPlanner {
   public final void testJoin() throws PlanningException {
     QueryContext qc = new QueryContext(util.getConfiguration(), session);
 
-    Expr expr = sqlAnalyzer.parse("select n_name from nation inner join (count(*) as c from region) as T on n_regionkey = T.c");
+    Expr expr = sqlAnalyzer.parse("select n_name from nation left outer join region on n_regionkey = r_regionkey where n_regionkey is null");
     System.out.println(expr);
+    LogicalPlan plan = planner.createPlan(qc, expr);
+    System.out.println(plan);
   }
 
   @Test
@@ -1359,6 +1363,8 @@ public class TestLogicalPlanner {
 
     Expr expr = sqlAnalyzer.parse("select n_name from (select count(*) as c from nation) as t");
     System.out.println(expr);
+    LogicalPlan plan = planner.createPlan(qc, expr);
+    System.out.println(plan);
   }
 
   private String getLogicalPlanAsString(LogicalPlan plan, LogicalPlan.QueryBlock block) {

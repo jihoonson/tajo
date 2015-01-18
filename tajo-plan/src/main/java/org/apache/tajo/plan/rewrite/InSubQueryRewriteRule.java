@@ -24,7 +24,6 @@ import org.apache.tajo.algebra.*;
 import org.apache.tajo.plan.PlanningException;
 import org.apache.tajo.plan.algebra.BaseAlgebraVisitor;
 import org.apache.tajo.plan.util.ExprTreeUtil;
-import org.apache.tajo.plan.visitor.SimpleAlgebraVisitor;
 import org.apache.tajo.util.TUtil;
 
 import java.util.Map;
@@ -66,7 +65,7 @@ public class InSubQueryRewriteRule implements ExpressionRewriteRule {
     }
     preprocessor.visit(context, new Stack<Expr>(), rewritten);
 
-    for (Map.Entry<Selection, Join> entry : context.replacedMap.entrySet()) {
+    for (Map.Entry<Selection, Expr> entry : context.replacedMap.entrySet()) {
       Expr parent = ExprTreeUtil.findParent(rewritten, entry.getKey());
 
       if (parent == null) {
@@ -94,8 +93,7 @@ public class InSubQueryRewriteRule implements ExpressionRewriteRule {
 
   static class Context {
     OverridableConf queryContext;
-//    Map<Selection, TablePrimarySubQuery> replacedMap;
-    Map<Selection, Join> replacedMap;
+    Map<Selection, Expr> replacedMap;
 
     public Context(OverridableConf queryContext) {
       this.queryContext = queryContext;
@@ -158,29 +156,40 @@ public class InSubQueryRewriteRule implements ExpressionRewriteRule {
           Preconditions.checkArgument(inPredicate.getPredicand().getType() == OpType.Column);
           ColumnReferenceExpr predicand = (ColumnReferenceExpr) inPredicate.getPredicand();
           SimpleTableSubQuery subQuery = (SimpleTableSubQuery) inPredicate.getInValue();
-          TablePrimarySubQuery primarySubQuery = null;
-          try {
-            primarySubQuery = new TablePrimarySubQuery(getNextSubQueryName(),
-                (Expr) subQuery.getSubQuery().clone());
-          } catch (CloneNotSupportedException e) {
-            throw new PlanningException(e);
-          }
+          TablePrimarySubQuery primarySubQuery = new TablePrimarySubQuery(getNextSubQueryName(), subQuery.getSubQuery());
+
           Projection projection = ExprTreeUtil.findTopExpr(primarySubQuery.getSubQuery(), OpType.Projection);
           updateProjection(projection);
 
           Join join = new Join(inPredicate.isNot() ? JoinType.LEFT_OUTER : JoinType.INNER);
           if (ctx.replacedMap.containsKey(expr)) {
+            // This selection has multiple IN subqueries.
+            // In this case, the new join must have the join corresponding to the other IN subquery as its child.
             join.setLeft(ctx.replacedMap.get(expr));
-            join.setRight(primarySubQuery);
-
-            join.setQual(buildJoinCondition(primarySubQuery, predicand, projection));
-            ctx.replacedMap.put(expr, join);
+//            join.setRight(primarySubQuery);
+//
+//            join.setQual(buildJoinCondition(primarySubQuery, predicand, projection));
+//            ctx.replacedMap.put(expr, join);
           } else {
-            join.setLeft(expr.getChild());
-            join.setRight(primarySubQuery);
+            if (isRemovable(expr)) {
+              join.setLeft(expr.getChild());
+            } else {
+              removeInQual(expr, inPredicate);
+              join.setLeft(expr);
+            }
+          }
 
-            // join condition
-            join.setQual(buildJoinCondition(primarySubQuery, predicand, projection));
+          join.setRight(primarySubQuery);
+
+          // join condition
+          join.setQual(buildJoinCondition(primarySubQuery, predicand, projection));
+
+          if (inPredicate.isNot()) {
+//            addQual(expr, buildFilterForNotInQuery(predicand));
+            Selection newFilter = new Selection(buildFilterForNotInQuery(join.getQual()));
+            newFilter.setChild(join);
+            ctx.replacedMap.put(expr, newFilter);
+          } else {
             ctx.replacedMap.put(expr, join);
           }
 
@@ -188,6 +197,48 @@ public class InSubQueryRewriteRule implements ExpressionRewriteRule {
         }
       }
       return child;
+    }
+
+    private boolean isRemovable(Selection expr) {
+      // if the selection has only one IN subquery qual, it can be removed.
+      if (expr.getQual().getType() == OpType.InPredicate) {
+        return true;
+      } else {
+        return false;
+      }
+    }
+
+    private Selection removeInQual(Selection expr, InPredicate target) throws PlanningException {
+      // assume that the target's parent is the binary operator
+      BinaryOperator binaryParent = ExprTreeUtil.findParent(expr.getQual(), target);
+      if (binaryParent == null) {
+        throw new PlanningException("No such parent expression who has " + target + " as its child");
+      } else {
+        Expr willBeRemained = null;
+        if (binaryParent.getLeft().equals(target)) {
+          willBeRemained = binaryParent.getRight();
+        } else if (binaryParent.getRight().equals(target)) {
+          willBeRemained = binaryParent.getLeft();
+        } else {
+          throw new PlanningException("No such parent expression who has " + target + " as its child");
+        }
+        // find the grand parent because we should remove the binary parent
+        BinaryOperator grandParent = ExprTreeUtil.findParent(expr.getQual(), binaryParent);
+        if (grandParent == null) {
+          // the binary parent is root
+          expr.setQual(willBeRemained);
+        } else {
+          // connect the grand parent and the remaining predicate
+          if (grandParent.getLeft().equals(binaryParent)) {
+            grandParent.setLeft(willBeRemained);
+          } else if (grandParent.getRight().equals(binaryParent)) {
+            grandParent.setRight(willBeRemained);
+          } else {
+            throw new PlanningException("No such parent expression who has " + binaryParent + " as its child");
+          }
+        }
+      }
+      return expr;
     }
 
     private void updateProjection(Projection projection) {
@@ -213,8 +264,8 @@ public class InSubQueryRewriteRule implements ExpressionRewriteRule {
       }
     }
 
-    private BinaryOperator buildJoinCondition(TablePrimarySubQuery subQuery,
-                                              ColumnReferenceExpr predicand, Projection projection) {
+    private BinaryOperator buildJoinCondition(TablePrimarySubQuery subQuery, ColumnReferenceExpr predicand,
+                                              Projection projection) {
       NamedExpr projectExpr = projection.getNamedExprs()[0];
       Expr rhs;
       if (projectExpr.getExpr().getType() == OpType.Column) {
@@ -225,6 +276,11 @@ public class InSubQueryRewriteRule implements ExpressionRewriteRule {
       }
       BinaryOperator joinCondition = new BinaryOperator(OpType.Equals, predicand, rhs);
       return joinCondition;
+    }
+
+    private IsNullPredicate buildFilterForNotInQuery(Expr joinQual) {
+      BinaryOperator binaryQual = (BinaryOperator) joinQual;
+      return new IsNullPredicate(false, binaryQual.getRight());
     }
 
     private String generateAlias() {
