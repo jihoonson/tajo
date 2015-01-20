@@ -127,18 +127,18 @@ public class ExprTreeUtil {
     public void preHook(ParentFinderContext ctx, Stack<Expr> stack, Expr expr) throws PlanningException {
       if (expr instanceof UnaryOperator) {
         UnaryOperator unary = (UnaryOperator) expr;
-        if (unary.getChild().equals(ctx.target)) {
+        if (unary.getChild().identical(ctx.target)) {
           ctx.found = unary;
         }
       } else if (expr instanceof BinaryOperator) {
         BinaryOperator binary = (BinaryOperator) expr;
-        if (binary.getLeft().equals(ctx.target) ||
-            binary.getRight().equals(ctx.target)) {
+        if (binary.getLeft().identical(ctx.target) ||
+            binary.getRight().identical(ctx.target)) {
           ctx.found = binary;
         }
       } else if (expr instanceof TablePrimarySubQuery) {
         TablePrimarySubQuery subQuery = (TablePrimarySubQuery) expr;
-        if (subQuery.getSubQuery().equals(ctx.target)) {
+        if (subQuery.getSubQuery().identical(ctx.target)) {
           ctx.found = subQuery;
         }
     }
