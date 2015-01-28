@@ -25,6 +25,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.*;
+import org.apache.hadoop.fs.swift.snative.SwiftNativeFileSystem;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.tajo.OverridableConf;
@@ -41,6 +42,8 @@ import org.apache.tajo.storage.fragment.Fragment;
 import org.apache.tajo.util.Bytes;
 
 import java.io.IOException;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.text.NumberFormat;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -497,6 +500,18 @@ public class FileStorageManager extends StorageManager {
 
     return volumeMap;
   }
+
+  private static Path getSegmentPathForSwift(Path path) throws URISyntaxException {
+    URI originalPath = path.toUri();
+    String segmentHost = originalPath.getHost().split(".")[0] + "-segments";
+    URI segmentPath = new URI(originalPath.getScheme(), segmentHost, originalPath.getPath(), originalPath.getFragment());
+    return new Path(segmentPath);
+  }
+
+  private static long getStartForSwiftBlock(Path segmentPath) {
+    return 128*1024*1024l * Integer.valueOf(segmentPath.getName());
+  }
+
   /**
    * Generate the list of files and make them into FileSplits.
    *
@@ -513,73 +528,107 @@ public class FileStorageManager extends StorageManager {
     for (Path p : inputs) {
       FileSystem fs = p.getFileSystem(conf);
 
-      ArrayList<FileStatus> files = Lists.newArrayList();
-      if (fs.isFile(p)) {
-        files.addAll(Lists.newArrayList(fs.getFileStatus(p)));
+      if (fs instanceof SwiftNativeFileSystem) {
+        try {
+          // 1. Get the path to the segment files
+          Path segmentPath = getSegmentPathForSwift(p);
+          if (!fs.exists(segmentPath)) {
+            // If the relation size is small, the segment path does not exist.
+            segmentPath = p;
+          }
+
+          LOG.info("segmentPath: " + segmentPath);
+
+          // 2. Get the list of the all segment files
+          for (FileStatus file : fs.listStatus(segmentPath)) {
+            Path path = file.getPath();
+            long length = file.getLen();
+            FileFragment fragment;
+            if (length > 0) {
+              // 3. Get the locations of all segment files
+              BlockLocation[] segmentBlkLocations = fs.getFileBlockLocations(file, 0, length);
+              // 4. Make splits for the original path
+              fragment = makeSplit(tableName, path, getStartForSwiftBlock(path), length, segmentBlkLocations[0].getHosts());
+              splits.add(fragment);
+            } else {
+              //for zero length files
+              fragment = makeSplit(tableName, path, 0, length);
+              splits.add(fragment);
+            }
+            LOG.info("fragment: " + fragment);
+          }
+        } catch (URISyntaxException e) {
+          throw new IOException(e);
+        }
       } else {
-        files.addAll(listStatus(p));
-      }
+        ArrayList<FileStatus> files = Lists.newArrayList();
+        if (fs.isFile(p)) {
+          files.addAll(Lists.newArrayList(fs.getFileStatus(p)));
+        } else {
+          files.addAll(listStatus(p));
+        }
 
-      int previousSplitSize = splits.size();
-      for (FileStatus file : files) {
-        Path path = file.getPath();
-        long length = file.getLen();
-        if (length > 0) {
-          // Get locations of blocks of file
-          BlockLocation[] blkLocations = fs.getFileBlockLocations(file, 0, length);
-          boolean splittable = isSplittable(meta, schema, path, file);
-          if (blocksMetadataEnabled && fs instanceof DistributedFileSystem) {
+        int previousSplitSize = splits.size();
+        for (FileStatus file : files) {
+          Path path = file.getPath();
+          long length = file.getLen();
+          if (length > 0) {
+            // Get locations of blocks of file
+            BlockLocation[] blkLocations = fs.getFileBlockLocations(file, 0, length);
+            boolean splittable = isSplittable(meta, schema, path, file);
+            if (blocksMetadataEnabled && fs instanceof DistributedFileSystem) {
 
-            if (splittable) {
-              for (BlockLocation blockLocation : blkLocations) {
-                volumeSplits.add(makeSplit(tableName, path, blockLocation));
-              }
-              blockLocations.addAll(Arrays.asList(blkLocations));
-
-            } else { // Non splittable
-              long blockSize = blkLocations[0].getLength();
-              if (blockSize >= length) {
-                blockLocations.addAll(Arrays.asList(blkLocations));
+              if (splittable) {
                 for (BlockLocation blockLocation : blkLocations) {
                   volumeSplits.add(makeSplit(tableName, path, blockLocation));
                 }
-              } else {
+                blockLocations.addAll(Arrays.asList(blkLocations));
+
+              } else { // Non splittable
+                long blockSize = blkLocations[0].getLength();
+                if (blockSize >= length) {
+                  blockLocations.addAll(Arrays.asList(blkLocations));
+                  for (BlockLocation blockLocation : blkLocations) {
+                    volumeSplits.add(makeSplit(tableName, path, blockLocation));
+                  }
+                } else {
+                  splits.add(makeNonSplit(tableName, path, 0, length, blkLocations));
+                }
+              }
+
+            } else {
+              if (splittable) {
+
+                long minSize = Math.max(getMinSplitSize(), 1);
+
+                long blockSize = file.getBlockSize(); // s3n rest api contained block size but blockLocations is one
+                long splitSize = Math.max(minSize, blockSize);
+                long bytesRemaining = length;
+
+                // for s3
+                while (((double) bytesRemaining) / splitSize > SPLIT_SLOP) {
+                  int blkIndex = getBlockIndex(blkLocations, length - bytesRemaining);
+                  splits.add(makeSplit(tableName, path, length - bytesRemaining, splitSize,
+                      blkLocations[blkIndex].getHosts()));
+                  bytesRemaining -= splitSize;
+                }
+                if (bytesRemaining > 0) {
+                  int blkIndex = getBlockIndex(blkLocations, length - bytesRemaining);
+                  splits.add(makeSplit(tableName, path, length - bytesRemaining, bytesRemaining,
+                      blkLocations[blkIndex].getHosts()));
+                }
+              } else { // Non splittable
                 splits.add(makeNonSplit(tableName, path, 0, length, blkLocations));
               }
             }
-
           } else {
-            if (splittable) {
-
-              long minSize = Math.max(getMinSplitSize(), 1);
-
-              long blockSize = file.getBlockSize(); // s3n rest api contained block size but blockLocations is one
-              long splitSize = Math.max(minSize, blockSize);
-              long bytesRemaining = length;
-
-              // for s3
-              while (((double) bytesRemaining) / splitSize > SPLIT_SLOP) {
-                int blkIndex = getBlockIndex(blkLocations, length - bytesRemaining);
-                splits.add(makeSplit(tableName, path, length - bytesRemaining, splitSize,
-                    blkLocations[blkIndex].getHosts()));
-                bytesRemaining -= splitSize;
-              }
-              if (bytesRemaining > 0) {
-                int blkIndex = getBlockIndex(blkLocations, length - bytesRemaining);
-                splits.add(makeSplit(tableName, path, length - bytesRemaining, bytesRemaining,
-                    blkLocations[blkIndex].getHosts()));
-              }
-            } else { // Non splittable
-              splits.add(makeNonSplit(tableName, path, 0, length, blkLocations));
-            }
+            //for zero length files
+            splits.add(makeSplit(tableName, path, 0, length));
           }
-        } else {
-          //for zero length files
-          splits.add(makeSplit(tableName, path, 0, length));
         }
-      }
-      if(LOG.isDebugEnabled()){
-        LOG.debug("# of splits per partition: " + (splits.size() - previousSplitSize));
+        if(LOG.isDebugEnabled()){
+          LOG.debug("# of splits per partition: " + (splits.size() - previousSplitSize));
+        }
       }
     }
 
