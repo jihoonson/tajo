@@ -25,6 +25,8 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.*;
+import org.apache.hadoop.fs.swift.exceptions.SwiftConfigurationException;
+import org.apache.hadoop.fs.swift.http.RestClientBindings;
 import org.apache.hadoop.fs.swift.snative.SwiftNativeFileSystem;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
@@ -40,6 +42,7 @@ import org.apache.tajo.plan.logical.ScanNode;
 import org.apache.tajo.storage.fragment.FileFragment;
 import org.apache.tajo.storage.fragment.Fragment;
 import org.apache.tajo.util.Bytes;
+import org.apache.tajo.util.TUtil;
 
 import java.io.IOException;
 import java.net.URI;
@@ -501,15 +504,31 @@ public class FileStorageManager extends StorageManager {
     return volumeMap;
   }
 
-  private static Path getSegmentPathForSwift(Path path) throws URISyntaxException {
+  private Path getSegmentPathForSwift(Path path) throws URISyntaxException, SwiftConfigurationException {
     URI originalPath = path.toUri();
-    String segmentHost = originalPath.getHost().split(".")[0] + "-segments";
+    LOG.info("originalPath: " + originalPath);
+    String segmentHost = RestClientBindings.extractContainerName(originalPath.getHost()) + "segments." +
+        RestClientBindings.extractServiceName(originalPath.getHost());
+    LOG.info("segmentHost: " + segmentHost);
     URI segmentPath = new URI(originalPath.getScheme(), segmentHost, originalPath.getPath(), originalPath.getFragment());
+    LOG.info("segmentPath: " + segmentPath);
     return new Path(segmentPath);
   }
 
   private static long getStartForSwiftBlock(Path segmentPath) {
     return 128*1024*1024l * Integer.valueOf(segmentPath.getName());
+  }
+
+  private static String[] extractValidHosts(BlockLocation[] blockLocations) throws IOException {
+    List<String> validHosts = TUtil.newList();
+    for (BlockLocation blockLocation : blockLocations) {
+      for (String host : blockLocation.getHosts()) {
+        if (host != null) {
+          validHosts.add(host);
+        }
+      }
+    }
+    return validHosts.toArray(new String[validHosts.size()]);
   }
 
   /**
@@ -532,30 +551,35 @@ public class FileStorageManager extends StorageManager {
         try {
           // 1. Get the path to the segment files
           Path segmentPath = getSegmentPathForSwift(p);
-          if (!fs.exists(segmentPath)) {
+          FileSystem segmentFs = segmentPath.getFileSystem(conf);
+          if (!segmentFs.exists(segmentPath)) {
             // If the relation size is small, the segment path does not exist.
             segmentPath = p;
+            segmentFs = fs;
           }
 
-          LOG.info("segmentPath: " + segmentPath);
-
           // 2. Get the list of the all segment files
-          for (FileStatus file : fs.listStatus(segmentPath)) {
+          for (FileStatus file : segmentFs.listStatus(segmentPath)) {
             Path path = file.getPath();
             long length = file.getLen();
             FileFragment fragment;
             if (length > 0) {
               // 3. Get the locations of all segment files
-              BlockLocation[] segmentBlkLocations = fs.getFileBlockLocations(file, 0, length);
+              BlockLocation[] segmentBlkLocations = segmentFs.getFileBlockLocations(file, 0, length);
               // 4. Make splits for the original path
-              fragment = makeSplit(tableName, path, getStartForSwiftBlock(path), length, segmentBlkLocations[0].getHosts());
+              fragment = makeSplit(tableName, p, getStartForSwiftBlock(path), length,
+                  extractValidHosts(segmentBlkLocations));
               splits.add(fragment);
             } else {
               //for zero length files
-              fragment = makeSplit(tableName, path, 0, length);
+              fragment = makeSplit(tableName, p, 0, length);
               splits.add(fragment);
             }
             LOG.info("fragment: " + fragment);
+            LOG.info("hosts");
+            for (String host : fragment.getHosts()) {
+              LOG.info(host);
+            }
           }
         } catch (URISyntaxException e) {
           throw new IOException(e);
