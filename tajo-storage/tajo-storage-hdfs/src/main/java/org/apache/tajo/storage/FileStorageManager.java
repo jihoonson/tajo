@@ -21,13 +21,17 @@ package org.apache.tajo.storage;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import org.apache.commons.httpclient.Header;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.*;
 import org.apache.hadoop.fs.swift.exceptions.SwiftConfigurationException;
 import org.apache.hadoop.fs.swift.http.RestClientBindings;
+import org.apache.hadoop.fs.swift.http.SwiftRestClient;
+import org.apache.hadoop.fs.swift.snative.SwiftFileStatus;
 import org.apache.hadoop.fs.swift.snative.SwiftNativeFileSystem;
+import org.apache.hadoop.fs.swift.util.SwiftObjectPath;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.tajo.OverridableConf;
@@ -504,14 +508,16 @@ public class FileStorageManager extends StorageManager {
     return volumeMap;
   }
 
-  private Path getSegmentPathForSwift(Path path) throws URISyntaxException, SwiftConfigurationException {
-    URI originalPath = path.toUri();
-    LOG.info("originalPath: " + originalPath);
-    String segmentHost = RestClientBindings.extractContainerName(originalPath.getHost()) + "segments." +
-        RestClientBindings.extractServiceName(originalPath.getHost());
-    LOG.info("segmentHost: " + segmentHost);
-    URI segmentPath = new URI(originalPath.getScheme(), segmentHost, originalPath.getPath(), originalPath.getFragment());
-    LOG.info("segmentPath: " + segmentPath);
+  private Path getSegmentPathForSwift(Path originPath, String manifestPostfix) throws URISyntaxException, IOException {
+    URI originUri = originPath.toUri();
+    String segmentHost = RestClientBindings.extractContainerName(originUri.getHost()) + "segments." +
+        RestClientBindings.extractServiceName(originUri.getHost());
+//    if (segmentHost.charAt(segmentHost.length()-1) != '/') {
+//      segmentHost = segmentHost + "/";
+//    }
+    manifestPostfix = manifestPostfix.substring(manifestPostfix.indexOf('/'));
+    URI segmentPath = new URI(originUri.getScheme(), segmentHost,
+        manifestPostfix, null);
     return new Path(segmentPath);
   }
 
@@ -529,6 +535,32 @@ public class FileStorageManager extends StorageManager {
       }
     }
     return validHosts.toArray(new String[validHosts.size()]);
+  }
+
+  private Header[] stat(SwiftRestClient swiftRestClient, SwiftObjectPath objectPath, boolean newest)
+      throws IOException {
+    LOG.info("objectPath: " + objectPath.toUriPath());
+    Header[] headers;
+    if (newest) {
+      headers = swiftRestClient.headRequest("getObjectMetadata-newest",
+          objectPath, SwiftRestClient.NEWEST);
+    } else {
+      headers = swiftRestClient.headRequest("getObjectMetadata",
+          objectPath);
+    }
+    LOG.info("# of headers: " + headers.length);
+    return headers;
+  }
+
+  private String getManifestPostfix(Header[] headers) {
+    for (Header header : headers) {
+      String headerName = header.getName();
+      LOG.info("headerName: " + headerName + ", value: " + header.getValue());
+      if (headerName.equals("X-Object-Manifest")) {
+        return header.getValue();
+      }
+    }
+    return null;
   }
 
   /**
@@ -549,36 +581,79 @@ public class FileStorageManager extends StorageManager {
 
       if (fs instanceof SwiftNativeFileSystem) {
         try {
-          // 1. Get the path to the segment files
-          Path segmentPath = getSegmentPathForSwift(p);
-          FileSystem segmentFs = segmentPath.getFileSystem(conf);
-          if (!segmentFs.exists(segmentPath)) {
-            // If the relation size is small, the segment path does not exist.
-            segmentPath = p;
-            segmentFs = fs;
-          }
+          URI pUri = p.toUri();
+          URI fsUri = new URI(pUri.getScheme(), pUri.getHost(), null, null);
+          LOG.info("fsUri: " + fsUri);
+          LOG.info("pUri.getPath(): " + pUri.getPath());
+          SwiftRestClient swiftRestClient = SwiftRestClient.getInstance(fsUri, conf);
+          String manifestPostfix = getManifestPostfix(stat(swiftRestClient,
+              SwiftObjectPath.fromPath(fsUri, new Path(pUri.getPath())), true));
+          LOG.info("manifestPostfix: " + manifestPostfix);
 
-          // 2. Get the list of the all segment files
-          for (FileStatus file : segmentFs.listStatus(segmentPath)) {
-            Path path = file.getPath();
-            long length = file.getLen();
-            FileFragment fragment;
-            if (length > 0) {
-              // 3. Get the locations of all segment files
-              BlockLocation[] segmentBlkLocations = segmentFs.getFileBlockLocations(file, 0, length);
-              // 4. Make splits for the original path
-              fragment = makeSplit(tableName, p, getStartForSwiftBlock(path), length,
-                  extractValidHosts(segmentBlkLocations));
-              splits.add(fragment);
+          Path segmentPath;
+          FileSystem segmentFs;
+          if (manifestPostfix == null) {
+            // If the relation size is small, the segment path does not exist.
+
+            ArrayList<FileStatus> files = Lists.newArrayList();
+            if (fs.isFile(p)) {
+              files.addAll(Lists.newArrayList(fs.getFileStatus(p)));
             } else {
-              //for zero length files
-              fragment = makeSplit(tableName, p, 0, length);
-              splits.add(fragment);
+              files.addAll(listStatus(p));
             }
-            LOG.info("fragment: " + fragment);
-            LOG.info("hosts");
-            for (String host : fragment.getHosts()) {
-              LOG.info(host);
+
+            for (FileStatus file : files) {
+              Path path = file.getPath();
+              long length = file.getLen();
+              if (length > 0) {
+                long minSize = Math.max(getMinSplitSize(), 1);
+
+                long blockSize = file.getBlockSize(); // s3n rest api contained block size but blockLocations is one
+                long splitSize = Math.max(minSize, blockSize);
+                long bytesRemaining = length;
+
+                // for s3
+                while (((double) bytesRemaining) / splitSize > SPLIT_SLOP) {
+                  splits.add(makeSplit(tableName, path, length - bytesRemaining, splitSize));
+                  bytesRemaining -= splitSize;
+                }
+                if (bytesRemaining > 0) {
+                  splits.add(makeSplit(tableName, path, length - bytesRemaining, bytesRemaining));
+                }
+              } else {
+                //for zero length files
+                splits.add(makeSplit(tableName, path, 0, length));
+              }
+            }
+          } else {
+            // 1. Get the path to the segment files
+            segmentPath = getSegmentPathForSwift(p, manifestPostfix);
+            LOG.info("segmentPath: " + segmentPath);
+            segmentFs = segmentPath.getFileSystem(conf);
+
+            // 2. Get the list of the all segment files
+            // TODO: Get the file list via HTTP or RestClient
+            for (FileStatus file : segmentFs.listStatus(segmentPath)) {
+              Path path = file.getPath();
+              long length = file.getLen();
+              FileFragment fragment;
+              if (length > 0) {
+                // 3. Get the locations of all segment files
+                // TODO: Get locations of the file via HTTP
+                BlockLocation[] segmentBlkLocations = segmentFs.getFileBlockLocations(file, 0, length);
+                // 4. Make splits for the original path
+                fragment = makeSplit(tableName, p, getStartForSwiftBlock(path), length,
+                    extractValidHosts(segmentBlkLocations));
+                splits.add(fragment);
+              } else {
+                //for zero length files
+                fragment = makeSplit(tableName, p, 0, length);
+                splits.add(fragment);
+              }
+              LOG.info("fragment: " + fragment);
+              for (String host : fragment.getHosts()) {
+                LOG.info("host: " + host);
+              }
             }
           }
         } catch (URISyntaxException e) {
