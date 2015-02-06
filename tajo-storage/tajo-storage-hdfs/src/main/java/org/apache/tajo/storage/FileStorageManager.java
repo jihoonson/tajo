@@ -510,7 +510,7 @@ public class FileStorageManager extends StorageManager {
 
   private Path getSegmentPathForSwift(Path originPath, String manifestPostfix) throws URISyntaxException, IOException {
     URI originUri = originPath.toUri();
-    String segmentHost = RestClientBindings.extractContainerName(originUri.getHost()) + "segments." +
+    String segmentHost = RestClientBindings.extractContainerName(originUri.getHost()) + "-segments." +
         RestClientBindings.extractServiceName(originUri.getHost());
 //    if (segmentHost.charAt(segmentHost.length()-1) != '/') {
 //      segmentHost = segmentHost + "/";
