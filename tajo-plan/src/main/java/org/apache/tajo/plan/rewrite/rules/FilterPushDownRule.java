@@ -320,8 +320,8 @@ public class FilterPushDownRule extends BasicLogicalPlanVisitor<FilterPushDownCo
     // Join's input schema = right child output columns + left child output columns
     Map<EvalNode, EvalNode> transformedMap = findCanPushdownAndTransform(context, block, joinNode, left, notMatched,
         null, true, 0);
-//    context.setFiltersTobePushed(transformedMap.keySet());
-    context.addFiltersTobePushed(transformedMap.keySet());
+    context.setFiltersTobePushed(transformedMap.keySet());
+//    context.addFiltersTobePushed(transformedMap.keySet());
     stack.push(joinNode);
     visit(context, plan, block, left, stack);
     stack.pop();
@@ -332,8 +332,8 @@ public class FilterPushDownRule extends BasicLogicalPlanVisitor<FilterPushDownCo
     notMatched.clear();
     transformedMap = findCanPushdownAndTransform(context, block, joinNode, right, notMatched, null, true,
         left.getOutSchema().size());
-//    context.setFiltersTobePushed(new HashSet<EvalNode>(transformedMap.keySet()));
-    context.addFiltersTobePushed(transformedMap.keySet());
+    context.setFiltersTobePushed(transformedMap.keySet());
+//    context.addFiltersTobePushed(transformedMap.keySet());
 
     stack.push(joinNode);
     visit(context, plan, block, right, stack);

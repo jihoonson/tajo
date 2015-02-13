@@ -150,9 +150,8 @@ public class InSubQueryRewriteRule implements ExpressionRewriteRule {
     Set<Aggregation> aggregations = ExprTreeUtil.finds(projection, OpType.Aggregation);
     if (aggregations.size() == 0) {
       for (NamedExpr namedExpr : projection.getNamedExprs()) {
-        if (namedExpr.getExpr().getType() == OpType.CountRowsFunction) {
-          needDistinct = false;
-        }
+        needDistinct =
+            ExprTreeUtil.finds(namedExpr.getExpr(), OpType.CountRowsFunction).size() == 0;
       }
       if (needDistinct) {
         projection.setDistinct();
@@ -249,7 +248,7 @@ public class InSubQueryRewriteRule implements ExpressionRewriteRule {
           updateProjection(projection);
 //          ctx.willbeUpdatedProjections.add(projection);
 
-          Join join = new Join(inPredicate.isNot() ? JoinType.LEFT_OUTER : JoinType.INNER);
+          Join join = new Join(inPredicate.isNot() ? JoinType.LEFT_OUTER : JoinType.LEFT_SEMI);
           if (isWillBeReplaced(ctx, expr)) {
             // This selection has multiple IN subqueries.
             // In this case, the new join must have the join corresponding to the other IN subquery as its child.
