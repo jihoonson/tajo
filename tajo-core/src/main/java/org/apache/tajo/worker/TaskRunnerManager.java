@@ -169,7 +169,9 @@ public class TaskRunnerManager extends CompositeService implements EventHandler<
 
       if(context == null){
         try {
-          context = new ExecutionBlockContext(this, startEvent, startEvent.getQueryMaster());
+          context = new ExecutionBlockContext(getTajoConf(), getWorkerContext(), this, startEvent.getQueryContext(),
+              startEvent.getPlan(), startEvent.getExecutionBlockId(), startEvent.getQueryMaster());
+          context.init();
         } catch (Throwable e) {
           LOG.fatal(e.getMessage(), e);
           throw new RuntimeException(e);
@@ -192,6 +194,7 @@ public class TaskRunnerManager extends CompositeService implements EventHandler<
           TupleCache.getInstance().removeBroadcastCache(event.getExecutionBlockId());
           executionBlockContext.reportExecutionBlock(event.getExecutionBlockId());
           workerContext.getHashShuffleAppenderManager().close(event.getExecutionBlockId());
+          workerContext.getTaskHistoryWriter().flushTaskHistories();
         } catch (IOException e) {
           LOG.fatal(e.getMessage(), e);
           throw new RuntimeException(e);
@@ -222,7 +225,7 @@ public class TaskRunnerManager extends CompositeService implements EventHandler<
       LOG.info("FinishedQueryMasterTaskCleanThread started: expire interval minutes = " + expireIntervalTime);
       while(!stop.get()) {
         try {
-          Thread.sleep(60 * 1000 * 60);   // hourly check
+          Thread.sleep(60 * 1000);
         } catch (InterruptedException e) {
           break;
         }
@@ -239,7 +242,9 @@ public class TaskRunnerManager extends CompositeService implements EventHandler<
       synchronized(taskRunnerHistoryMap) {
         List<String> expiredIds = new ArrayList<String>();
         for(Map.Entry<String, TaskRunnerHistory> entry: taskRunnerHistoryMap.entrySet()) {
-          if(entry.getValue().getStartTime() > expireTime) {
+           /* If a task runner are abnormal termination, the finished time will be zero. */
+          long finishedTime = Math.max(entry.getValue().getStartTime(), entry.getValue().getFinishTime());
+          if(finishedTime < expireTime) {
             expiredIds.add(entry.getKey());
           }
         }

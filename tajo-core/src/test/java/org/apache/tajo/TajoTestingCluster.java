@@ -43,13 +43,14 @@ import org.apache.tajo.client.TajoClientUtil;
 import org.apache.tajo.conf.TajoConf;
 import org.apache.tajo.conf.TajoConf.ConfVars;
 import org.apache.tajo.engine.planner.global.rewriter.GlobalPlanTestRuleProvider;
-import org.apache.tajo.master.QueryInProgress;
 import org.apache.tajo.master.TajoMaster;
-import org.apache.tajo.querymaster.Query;
-import org.apache.tajo.querymaster.Stage;
-import org.apache.tajo.querymaster.StageState;
 import org.apache.tajo.master.rm.TajoWorkerResourceManager;
 import org.apache.tajo.plan.rewrite.LogicalPlanTestRuleProvider;
+import org.apache.tajo.querymaster.Query;
+import org.apache.tajo.querymaster.QueryMasterTask;
+import org.apache.tajo.querymaster.Stage;
+import org.apache.tajo.querymaster.StageState;
+import org.apache.tajo.service.ServiceTrackerFactory;
 import org.apache.tajo.util.CommonTestingUtil;
 import org.apache.tajo.util.KeyValueSet;
 import org.apache.tajo.util.NetUtils;
@@ -59,7 +60,10 @@ import java.io.*;
 import java.net.InetSocketAddress;
 import java.net.URL;
 import java.sql.ResultSet;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.TimeZone;
+import java.util.UUID;
 
 public class TajoTestingCluster {
 	private static Log LOG = LogFactory.getLog(TajoTestingCluster.class);
@@ -74,20 +78,17 @@ public class TajoTestingCluster {
   private TajoMaster tajoMaster;
   private List<TajoWorker> tajoWorkers = new ArrayList<TajoWorker>();
   private boolean standbyWorkerMode = false;
+  private boolean isDFSRunning = false;
+  private boolean isTajoClusterRunning = false;
+  private boolean isCatalogServerRunning = false;
 
-	// If non-null, then already a cluster running.
 	private File clusterTestBuildDir = null;
-
-	/**
-	 * System property key to get test directory value.
-	 * Name is as it is because mini dfs has hard-codings to put test data here.
-	 */
-	public static final String TEST_DIRECTORY_KEY = MiniDFSCluster.PROP_TEST_BUILD_DATA;
 
 	/**
 	 * Default parent directory for test output.
 	 */
-	public static final String DEFAULT_TEST_DIRECTORY = "target/test-data";
+	public static final String DEFAULT_TEST_DIRECTORY = "target/" + 
+	    System.getProperty("tajo.test.data.dir", "test-data");
 
   /**
    * True If HCatalogStore is used. Otherwise, it is FALSE.
@@ -108,6 +109,7 @@ public class TajoTestingCluster {
     this.conf = new TajoConf();
     this.conf.setBoolVar(ConfVars.TAJO_MASTER_HA_ENABLE, masterHaEMode);
 
+    initTestDir();
     setTestingFlagProperties();
     initPropertiesAndConfigs();
   }
@@ -157,6 +159,12 @@ public class TajoTestingCluster {
     conf.setIntVar(ConfVars.CATALOG_RPC_SERVER_WORKER_THREAD_NUM, 2);
     conf.setIntVar(ConfVars.SHUFFLE_RPC_SERVER_WORKER_THREAD_NUM, 2);
 
+    // Resource allocator
+    conf.setIntVar(ConfVars.YARN_RM_TASKRUNNER_LAUNCH_PARALLEL_NUM, 2);
+
+    // Memory cache termination
+    conf.setIntVar(ConfVars.WORKER_HISTORY_EXPIRE_PERIOD, 1);
+
     this.standbyWorkerMode = conf.getVar(ConfVars.RESOURCE_MANAGER_CLASS)
         .indexOf(TajoWorkerResourceManager.class.getName()) >= 0;
 
@@ -167,6 +175,7 @@ public class TajoTestingCluster {
       Logger.getLogger("org.apache.hadoop").setLevel(Level.toLevel(LOG_LEVEL.toUpperCase(), defaultLevel));
       Logger.getLogger("org.apache.zookeeper").setLevel(Level.toLevel(LOG_LEVEL.toUpperCase(), defaultLevel));
       Logger.getLogger("BlockStateChange").setLevel(Level.toLevel(LOG_LEVEL.toUpperCase(), defaultLevel));
+      Logger.getLogger("org.mortbay.log").setLevel(Level.toLevel(LOG_LEVEL.toUpperCase(), defaultLevel));
     }
   }
 
@@ -174,22 +183,19 @@ public class TajoTestingCluster {
 		return this.conf;
 	}
 
-	public void initTestDir() {
-		if (System.getProperty(TEST_DIRECTORY_KEY) == null) {
-			clusterTestBuildDir = setupClusterTestBuildDir();
-			System.setProperty(TEST_DIRECTORY_KEY,
-          clusterTestBuildDir.getAbsolutePath());
-		}
-	}
+  public void initTestDir() {
+    if (clusterTestBuildDir == null) {
+      clusterTestBuildDir = setupClusterTestBuildDir();
+    }
+  }
 
 	/**
 	 * @return Where to write test data on local filesystem; usually
 	 * {@link #DEFAULT_TEST_DIRECTORY}
 	 * @see #setupClusterTestBuildDir()
 	 */
-	public static File getTestDir() {
-		return new File(System.getProperty(TEST_DIRECTORY_KEY,
-			DEFAULT_TEST_DIRECTORY));
+	public File getTestDir() {
+		return clusterTestBuildDir;
 	}
 
 	/**
@@ -199,10 +205,10 @@ public class TajoTestingCluster {
 	 * @see #setupClusterTestBuildDir()
 	 */
 	public static File getTestDir(final String subdirName) {
-		return new File(getTestDir(), subdirName);
+		return new File(new File(DEFAULT_TEST_DIRECTORY), subdirName);
   }
 
-	public File setupClusterTestBuildDir() {
+	public static File setupClusterTestBuildDir() {
 		String randomStr = UUID.randomUUID().toString();
 		String dirStr = getTestDir(randomStr).toString();
 		File dir = new File(dirStr).getAbsoluteFile();
@@ -237,18 +243,11 @@ public class TajoTestingCluster {
    * @throws java.io.IOException
    */
   public MiniDFSCluster startMiniDFSCluster(int servers,
-                                            final File dir,
+                                            File dir,
                                             final String hosts[])
       throws IOException {
-    if (dir == null) {
-      this.clusterTestBuildDir = setupClusterTestBuildDir();
-    } else {
-      this.clusterTestBuildDir = dir;
-    }
 
-    System.setProperty(MiniDFSCluster.PROP_TEST_BUILD_DATA,
-        this.clusterTestBuildDir.toString());
-
+    conf.set(MiniDFSCluster.HDFS_MINIDFS_BASEDIR, dir.toString());
     conf.setInt(DFSConfigKeys.DFS_REPLICATION_KEY, 1);
     conf.setBoolean(DFSConfigKeys.DFS_CLIENT_READ_SHORTCIRCUIT_KEY, false);
     MiniDFSCluster.Builder builder = new MiniDFSCluster.Builder(new HdfsConfiguration(conf));
@@ -264,7 +263,7 @@ public class TajoTestingCluster {
     this.defaultFS = this.dfsCluster.getFileSystem();
     this.conf.set(CommonConfigurationKeysPublic.FS_DEFAULT_NAME_KEY, defaultFS.getUri().toString());
     this.conf.setVar(TajoConf.ConfVars.ROOT_DIR, defaultFS.getUri() + "/tajo");
-
+    isDFSRunning = true;
     return this.dfsCluster;
   }
 
@@ -301,22 +300,20 @@ public class TajoTestingCluster {
   // Catalog Section
   ////////////////////////////////////////////////////////
   public MiniCatalogServer startCatalogCluster() throws Exception {
-    TajoConf c = getConfiguration();
+    if(isCatalogServerRunning) throw new IOException("Catalog Cluster already running");
 
-    if(clusterTestBuildDir == null) {
-      clusterTestBuildDir = setupClusterTestBuildDir();
-    }
+    TajoConf c = getConfiguration();
 
     conf.set(CatalogConstants.STORE_CLASS, "org.apache.tajo.catalog.store.MemStore");
     conf.set(CatalogConstants.CATALOG_URI, "jdbc:derby:" + clusterTestBuildDir.getAbsolutePath() + "/db");
-    LOG.info("Apache Derby repository is set to "+conf.get(CatalogConstants.CATALOG_URI));
+    LOG.info("Apache Derby repository is set to " + conf.get(CatalogConstants.CATALOG_URI));
     conf.setVar(ConfVars.CATALOG_ADDRESS, "localhost:0");
 
     catalogServer = new MiniCatalogServer(conf);
     CatalogServer catServer = catalogServer.getCatalogServer();
     InetSocketAddress sockAddr = catServer.getBindAddress();
     c.setVar(ConfVars.CATALOG_ADDRESS, NetUtils.normalizeInetSocketAddress(sockAddr));
-
+    isCatalogServerRunning = true;
     return this.catalogServer;
   }
 
@@ -324,6 +321,7 @@ public class TajoTestingCluster {
     if (catalogServer != null) {
       this.catalogServer.shutdown();
     }
+    isCatalogServerRunning = false;
   }
 
   public MiniCatalogServer getMiniCatalogCluster() {
@@ -353,10 +351,10 @@ public class TajoTestingCluster {
       c.setVar(ConfVars.ROOT_DIR,
           getMiniDFSCluster().getFileSystem().getUri() + "/tajo");
     } else {
-      c.setVar(ConfVars.ROOT_DIR, clusterTestBuildDir.getAbsolutePath() + "/tajo");
+      c.setVar(ConfVars.ROOT_DIR, testBuildDir.getAbsolutePath() + "/tajo");
     }
 
-    setupCatalogForTesting(c, clusterTestBuildDir);
+    setupCatalogForTesting(c, testBuildDir);
 
     tajoMaster = new TajoMaster();
     tajoMaster.init(c);
@@ -375,6 +373,7 @@ public class TajoTestingCluster {
     if(standbyWorkerMode) {
       startTajoWorkers(numSlaves);
     }
+    isTajoClusterRunning = true;
     LOG.info("Mini Tajo cluster is up");
     LOG.info("====================================================================================");
     LOG.info("=                           MiniTajoCluster starts up                              =");
@@ -474,8 +473,8 @@ public class TajoTestingCluster {
   /**
    * @throws java.io.IOException If a cluster -- dfs or engine -- already running.
    */
-  void isRunningCluster(String passedBuildPath) throws IOException {
-    if (this.clusterTestBuildDir == null || passedBuildPath != null) return;
+  void isRunningCluster() throws IOException {
+    if (!isTajoClusterRunning && !isCatalogServerRunning && !isDFSRunning) return;
     throw new IOException("Cluster already running at " +
         this.clusterTestBuildDir);
   }
@@ -502,22 +501,13 @@ public class TajoTestingCluster {
     LOG.info("Starting up minicluster with 1 master(s) and " +
         numSlaves + " worker(s) and " + numDataNodes + " datanode(s)");
 
-    // If we already put up a cluster, fail.
-    String testBuildPath = conf.get(TEST_DIRECTORY_KEY, null);
-    isRunningCluster(testBuildPath);
-    if (testBuildPath != null) {
-      LOG.info("Using passed path: " + testBuildPath);
+    // If we already bring up the cluster, fail.
+    isRunningCluster();
+    if (clusterTestBuildDir != null) {
+      LOG.info("Using passed path: " + clusterTestBuildDir);
     }
 
-    // Make a new random dir to home everything in.  Set it as system property.
-    // minidfs reads home from system property.
-    this.clusterTestBuildDir = testBuildPath == null?
-        setupClusterTestBuildDir() : new File(testBuildPath);
-
-    System.setProperty(TEST_DIRECTORY_KEY,
-        this.clusterTestBuildDir.getAbsolutePath());
-
-    startMiniDFSCluster(numDataNodes, this.clusterTestBuildDir, dataNodeHosts);
+    startMiniDFSCluster(numDataNodes, clusterTestBuildDir, dataNodeHosts);
     this.dfsCluster.waitClusterUp();
 
     hbaseUtil = new HBaseTestClusterUtil(conf, clusterTestBuildDir);
@@ -563,20 +553,11 @@ public class TajoTestingCluster {
   }
 
   public void startMiniClusterInLocal(final int numSlaves) throws Exception {
-    // If we already put up a cluster, fail.
-    String testBuildPath = conf.get(TEST_DIRECTORY_KEY, null);
-    isRunningCluster(testBuildPath);
-    if (testBuildPath != null) {
-      LOG.info("Using passed path: " + testBuildPath);
+    isRunningCluster();
+
+    if (clusterTestBuildDir != null) {
+      LOG.info("Using passed path: " + clusterTestBuildDir);
     }
-
-    // Make a new random dir to home everything in.  Set it as system property.
-    // minidfs reads home from system property.
-    this.clusterTestBuildDir = testBuildPath == null?
-        setupClusterTestBuildDir() : new File(testBuildPath);
-
-    System.setProperty(TEST_DIRECTORY_KEY,
-        this.clusterTestBuildDir.getAbsolutePath());
 
     startMiniTajoCluster(this.clusterTestBuildDir, numSlaves, true);
   }
@@ -596,6 +577,7 @@ public class TajoTestingCluster {
 
     if(this.catalogServer != null) {
       shutdownCatalogCluster();
+      isCatalogServerRunning = false;
     }
 
     if(this.yarnCluster != null) {
@@ -616,6 +598,7 @@ public class TajoTestingCluster {
       } catch (IOException e) {
         System.err.println("error closing file system: " + e);
       }
+      isDFSRunning = false;
     }
 
     if(this.clusterTestBuildDir != null && this.clusterTestBuildDir.exists()) {
@@ -634,19 +617,11 @@ public class TajoTestingCluster {
     }
 
     LOG.info("Minicluster is down");
+    isTajoClusterRunning = false;
   }
 
-  public static TajoClient newTajoClient() throws Exception {
-    TpchTestBase instance = TpchTestBase.getInstance();
-    TajoTestingCluster util = instance.getTestingCluster();
-    while(true) {
-      if(util.getMaster().isMasterRunning()) {
-        break;
-      }
-      Thread.sleep(1000);
-    }
-    TajoConf conf = util.getConfiguration();
-    return new TajoClientImpl(conf);
+  public TajoClient newTajoClient() throws Exception {
+    return new TajoClientImpl(ServiceTrackerFactory.get(getConfiguration()));
   }
 
   public static ResultSet run(String[] names,
@@ -658,8 +633,7 @@ public class TajoTestingCluster {
     TajoTestingCluster util = TpchTestBase.getInstance().getTestingCluster();
 
     FileSystem fs = util.getDefaultFileSystem();
-    Path rootDir = util.getMaster().
-        getStorageManager().getWarehouseDir();
+    Path rootDir = TajoConf.getWarehouseDir(util.getConfiguration());
     fs.mkdirs(rootDir);
     for (int i = 0; i < names.length; i++) {
       createTable(names[i], schemas[i], tableOption, tables[i]);
@@ -683,7 +657,7 @@ public class TajoTestingCluster {
       Thread.sleep(1000);
     }
     TajoConf conf = util.getConfiguration();
-    TajoClient client = new TajoClientImpl(conf);
+    TajoClient client = new TajoClientImpl(ServiceTrackerFactory.get(conf));
 
     try {
       return run(names, schemas, tableOption, tables, query, client);
@@ -708,11 +682,10 @@ public class TajoTestingCluster {
       Thread.sleep(1000);
     }
     TajoConf conf = util.getConfiguration();
-    TajoClient client = new TajoClientImpl(conf);
+    TajoClient client = new TajoClientImpl(ServiceTrackerFactory.get(conf));
     try {
       FileSystem fs = util.getDefaultFileSystem();
-      Path rootDir = util.getMaster().
-          getStorageManager().getWarehouseDir();
+      Path rootDir = TajoConf.getWarehouseDir(util.getConfiguration());
       if (!fs.exists(rootDir)) {
         fs.mkdirs(rootDir);
       }
@@ -739,7 +712,7 @@ public class TajoTestingCluster {
         }
       }
       TableMeta meta = CatalogUtil.newTableMeta(CatalogProtos.StoreType.CSV, tableOption);
-      client.createExternalTable(tableName, schema, tablePath, meta);
+      client.createExternalTable(tableName, schema, tablePath.toUri(), meta);
     } finally {
       client.close();
     }
@@ -776,21 +749,20 @@ public class TajoTestingCluster {
     }
   }
 
-  public void waitForQueryRunning(QueryId queryId) throws Exception {
-    waitForQueryRunning(queryId, 50);
+  public void waitForQuerySubmitted(QueryId queryId) throws Exception {
+    waitForQuerySubmitted(queryId, 50);
   }
 
-  public void waitForQueryRunning(QueryId queryId, int delay) throws Exception {
-    QueryInProgress qip = null;
+  public void waitForQuerySubmitted(QueryId queryId, int delay) throws Exception {
+    QueryMasterTask qmt = null;
 
     int i = 0;
-    while (qip == null || TajoClientUtil.isQueryWaitingForSchedule(qip.getQueryInfo().getQueryState())) {
+    while (qmt == null || TajoClientUtil.isQueryWaitingForSchedule(qmt.getState())) {
       try {
         Thread.sleep(delay);
-        if(qip == null){
 
-          TajoMaster master = getMaster();
-          qip = master.getContext().getQueryJobManager().getQueryInProgress(queryId);
+        if (qmt == null) {
+          qmt = getQueryMasterTask(queryId);
         }
       } catch (InterruptedException e) {
       }
@@ -808,7 +780,8 @@ public class TajoTestingCluster {
       } catch (InterruptedException e) {
       }
       if (++i > 200) {
-        throw new IOException("Timed out waiting");
+        throw new IOException("Timed out waiting. expected: " + expected +
+            ", actual: " + query != null ? String.valueOf(query.getSynchronizedState()) : String.valueOf(query));
       }
     }
   }
@@ -825,5 +798,16 @@ public class TajoTestingCluster {
         throw new IOException("Timed out waiting");
       }
     }
+  }
+
+  public QueryMasterTask getQueryMasterTask(QueryId queryId) {
+    QueryMasterTask qmt = null;
+    for (TajoWorker worker : getTajoWorkers()) {
+      qmt = worker.getWorkerContext().getQueryMaster().getQueryMasterTask(queryId, true);
+      if (qmt != null && queryId.equals(qmt.getQueryId())) {
+        break;
+      }
+    }
+    return qmt;
   }
 }

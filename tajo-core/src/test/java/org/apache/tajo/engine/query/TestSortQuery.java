@@ -102,6 +102,40 @@ public class TestSortQuery extends QueryTestCaseBase {
     cleanupQuery(res);
   }
 
+
+  @Test
+  public final void testSortFirstDesc() throws Exception {
+    try {
+      testingCluster.setAllTajoDaemonConfValue(ConfVars.$TEST_MIN_TASK_NUM.varname, "2");
+      KeyValueSet tableOptions = new KeyValueSet();
+      tableOptions.set(StorageConstants.TEXT_DELIMITER, StorageConstants.DEFAULT_FIELD_DELIMITER);
+      tableOptions.set(StorageConstants.TEXT_NULL, "\\\\N");
+
+      Schema schema = new Schema();
+      schema.addColumn("col1", Type.INT4);
+      schema.addColumn("col2", Type.TEXT);
+      String[] data = new String[]{
+          "1|abc",
+          "3|dfa",
+          "3|das",
+          "1|abb",
+          "1|abc",
+          "3|dfb",
+          "3|dat",
+          "1|abe"
+      };
+      TajoTestingCluster.createTable("sortfirstdesc", schema, tableOptions, data, 2);
+
+      ResultSet res = executeQuery();
+      assertResultSet(res);
+      cleanupQuery(res);
+    } finally {
+      testingCluster.setAllTajoDaemonConfValue(ConfVars.$TEST_MIN_TASK_NUM.varname, "0");
+      executeString("DROP TABLE sortfirstdesc PURGE;").close();
+    }
+  }
+
+
   @Test
   public final void testTopK() throws Exception {
     ResultSet res = executeQuery();
@@ -231,6 +265,34 @@ public class TestSortQuery extends QueryTestCaseBase {
 
       assertEquals(descExpected, resultSetToString(res));
       res.close();
+    } finally {
+      executeString("DROP TABLE table11 PURGE");
+    }
+  }
+
+  @Test
+  public final void testSortOnNullColumn3() throws Exception {
+    KeyValueSet tableOptions = new KeyValueSet();
+    tableOptions.set(StorageConstants.TEXT_DELIMITER, StorageConstants.DEFAULT_FIELD_DELIMITER);
+    tableOptions.set(StorageConstants.TEXT_NULL, "\\\\N");
+
+    Schema schema = new Schema();
+    schema.addColumn("id", Type.INT4);
+    schema.addColumn("name", Type.TEXT);
+    String[] data = new String[]{ "1|111", "2|\\N", "3|333" };
+    TajoTestingCluster.createTable("table11", schema, tableOptions, data, 1);
+
+    try {
+      ResultSet res = executeString("select * from table11 order by name null first");
+      String ascExpected = "id,name\n" +
+          "-------------------------------\n" +
+          "2,null\n" +
+          "1,111\n" +
+          "3,333\n";
+
+      assertEquals(ascExpected, resultSetToString(res));
+      res.close();
+
     } finally {
       executeString("DROP TABLE table11 PURGE");
     }

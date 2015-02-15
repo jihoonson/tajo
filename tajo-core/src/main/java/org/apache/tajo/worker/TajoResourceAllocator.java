@@ -51,6 +51,7 @@ import org.apache.tajo.rpc.CallFuture;
 import org.apache.tajo.rpc.NettyClientBase;
 import org.apache.tajo.rpc.NullCallback;
 import org.apache.tajo.rpc.RpcConnectionPool;
+import org.apache.tajo.service.ServiceTracker;
 import org.apache.tajo.util.ApplicationIdUtils;
 
 import java.net.InetSocketAddress;
@@ -128,7 +129,7 @@ public class TajoResourceAllocator extends AbstractResourceAllocator {
     for(ContainerProxy eachProxy: list) {
       try {
         eachProxy.stopContainer();
-      } catch (Exception e) {
+      } catch (Throwable e) {
         LOG.warn(e.getMessage());
       }
     }
@@ -274,34 +275,11 @@ public class TajoResourceAllocator extends AbstractResourceAllocator {
       RpcConnectionPool connPool = RpcConnectionPool.getPool();
       NettyClientBase tmClient = null;
       try {
-
-        // In TajoMaster HA mode, if backup master be active status,
-        // worker may fail to connect existing active master. Thus,
-        // if worker can't connect the master, worker should try to connect another master and
-        // update master address in worker context.
-        if (tajoConf.getBoolVar(TajoConf.ConfVars.TAJO_MASTER_HA_ENABLE)) {
-          try {
-            tmClient = connPool.getConnection(
-              queryTaskContext.getQueryMasterContext().getWorkerContext().getTajoMasterAddress(),
-              QueryCoordinatorProtocol.class, true);
-          } catch (Exception e) {
-            queryTaskContext.getQueryMasterContext().getWorkerContext().
-              setWorkerResourceTrackerAddr(HAServiceUtil.getResourceTrackerAddress(tajoConf));
-            queryTaskContext.getQueryMasterContext().getWorkerContext().
-              setTajoMasterAddress(HAServiceUtil.getMasterUmbilicalAddress(tajoConf));
-            tmClient = connPool.getConnection(
-              queryTaskContext.getQueryMasterContext().getWorkerContext().getTajoMasterAddress(),
-              QueryCoordinatorProtocol.class, true);
-          }
-        } else {
-          tmClient = connPool.getConnection(
-            queryTaskContext.getQueryMasterContext().getWorkerContext().getTajoMasterAddress(),
-            QueryCoordinatorProtocol.class, true);
-        }
-
+        ServiceTracker serviceTracker = queryTaskContext.getQueryMasterContext().getWorkerContext().getServiceTracker();
+        tmClient = connPool.getConnection(serviceTracker.getUmbilicalAddress(), QueryCoordinatorProtocol.class, true);
         QueryCoordinatorProtocolService masterClientService = tmClient.getStub();
         masterClientService.allocateWorkerResources(null, request, callBack);
-      } catch (Exception e) {
+      } catch (Throwable e) {
         LOG.error(e.getMessage(), e);
       } finally {
         connPool.releaseConnection(tmClient);
@@ -363,7 +341,7 @@ public class TajoResourceAllocator extends AbstractResourceAllocator {
               containerIds.add(eachContainer.getId());
             }
             TajoContainerProxy.releaseWorkerResource(queryTaskContext, executionBlockId, containerIds);
-          } catch (Exception e) {
+          } catch (Throwable e) {
             LOG.error(e.getMessage(), e);
           }
           return;

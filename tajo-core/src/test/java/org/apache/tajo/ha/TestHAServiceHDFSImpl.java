@@ -18,27 +18,22 @@
 
 package org.apache.tajo.ha;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.net.NetUtils;
 import org.apache.tajo.TajoConstants;
 import org.apache.tajo.TajoTestingCluster;
 import org.apache.tajo.client.TajoClient;
-import org.apache.tajo.client.TajoClientImpl;
 import org.apache.tajo.conf.TajoConf;
 import org.apache.tajo.master.TajoMaster;
+import org.apache.tajo.service.ServiceTracker;
+import org.apache.tajo.service.ServiceTrackerFactory;
 import org.junit.Test;
 
 import static junit.framework.TestCase.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotEquals;
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.*;
 
 public class TestHAServiceHDFSImpl  {
-  private static Log LOG = LogFactory.getLog(TestHAServiceHDFSImpl.class);
-
   private TajoTestingCluster cluster;
   private TajoMaster backupMaster;
 
@@ -55,12 +50,13 @@ public class TestHAServiceHDFSImpl  {
 
     cluster.startMiniCluster(1);
     conf = cluster.getConfiguration();
-    client = new TajoClientImpl(conf);
+    client = cluster.newTajoClient();
 
     try {
       FileSystem fs = cluster.getDefaultFileSystem();
 
-      masterAddress = HAServiceUtil.getMasterUmbilicalName(conf).split(":")[0];
+      ServiceTracker serviceTracker = ServiceTrackerFactory.get(conf);
+      masterAddress = serviceTracker.getUmbilicalAddress().getHostName();
 
       setConfiguration();
 
@@ -90,7 +86,7 @@ public class TestHAServiceHDFSImpl  {
       assertFalse(cluster.getMaster().isActiveMaster());
       assertTrue(backupMaster.isActiveMaster());
 
-      client = new TajoClientImpl(conf);
+      client = cluster.newTajoClient();
       verifyDataBaseAndTable();
     } finally {
       client.close();
@@ -112,6 +108,7 @@ public class TestHAServiceHDFSImpl  {
       masterAddress + ":" + NetUtils.getFreeSocketPort());
     conf.setVar(TajoConf.ConfVars.TAJO_MASTER_INFO_ADDRESS,
       masterAddress + ":" + NetUtils.getFreeSocketPort());
+
     conf.setBoolVar(TajoConf.ConfVars.TAJO_MASTER_HA_ENABLE, true);
 
     //Client API service RPC Server

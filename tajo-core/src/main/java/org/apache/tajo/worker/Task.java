@@ -88,8 +88,6 @@ public class Task {
   private final Map<String, TableDesc> descs = Maps.newHashMap();
   private PhysicalExec executor;
   private boolean interQuery;
-  private boolean killed = false;
-  private boolean aborted = false;
   private Path inputTableBaseDir;
 
   private long startTime;
@@ -108,11 +106,20 @@ public class Task {
               TaskAttemptId taskId,
               final ExecutionBlockContext executionBlockContext,
               final TaskRequest request) throws IOException {
+    this(taskRunnerId, baseDir, taskId, executionBlockContext.getConf(), executionBlockContext, request);
+  }
+
+  public Task(String taskRunnerId,
+              Path baseDir,
+              TaskAttemptId taskId,
+              TajoConf conf,
+              final ExecutionBlockContext executionBlockContext,
+              final TaskRequest request) throws IOException {
     this.taskRunnerId = taskRunnerId;
     this.request = request;
     this.taskId = taskId;
 
-    this.systemConf = executionBlockContext.getConf();
+    this.systemConf = conf;
     this.queryContext = request.getQueryContext(systemConf);
     this.executionBlockContext = executionBlockContext;
     this.taskDir = StorageUtil.concatPath(baseDir,
@@ -122,8 +129,12 @@ public class Task {
         request.getFragments().toArray(new FragmentProto[request.getFragments().size()]), taskDir);
     this.context.setDataChannel(request.getDataChannel());
     this.context.setEnforcer(request.getEnforcer());
+    this.context.setState(TaskAttemptState.TA_PENDING);
     this.inputStats = new TableStats();
+    this.fetcherRunners = Lists.newArrayList();
+  }
 
+  public void initPlan() throws IOException {
     plan = LogicalNodeDeserializer.deserialize(queryContext, request.getPlan());
     LogicalNode [] scanNode = PlannerUtil.findAllNodes(plan, NodeType.SCAN);
     if (scanNode != null) {
@@ -159,8 +170,6 @@ public class Task {
     }
 
     this.localChunks = Collections.synchronizedList(new ArrayList<FileChunk>());
-    
-    context.setState(TaskAttemptState.TA_PENDING);
     LOG.info("==================================");
     LOG.info("* Stage " + request.getId() + " is initialized");
     LOG.info("* InterQuery: " + interQuery
@@ -182,6 +191,8 @@ public class Task {
   }
 
   public void init() throws IOException {
+    initPlan();
+
     if (context.getState() == TaskAttemptState.TA_PENDING) {
       // initialize a task temporal dir
       FileSystem localFS = executionBlockContext.getLocalFS();
@@ -202,20 +213,12 @@ public class Task {
         }
       }
       // for localizing the intermediate data
-      localize(request);
+      fetcherRunners.addAll(getFetchRunners(context, request.getFetches()));
     }
   }
 
   public TaskAttemptId getTaskId() {
     return taskId;
-  }
-
-  public static Log getLog() {
-    return LOG;
-  }
-
-  public void localize(TaskRequest request) throws IOException {
-    fetcherRunners = getFetchRunners(context, request.getFetches());
   }
 
   public TaskAttemptId getId() {
@@ -254,13 +257,11 @@ public class Task {
   }
 
   public void kill() {
-    killed = true;
-    context.stop();
     context.setState(TaskAttemptState.TA_KILLED);
+    context.stop();
   }
 
   public void abort() {
-    aborted = true;
     context.stop();
   }
 
@@ -299,7 +300,7 @@ public class Task {
   }
 
   public void updateProgress() {
-    if(killed || aborted){
+    if(context != null && context.isStopped()){
       return;
     }
 
@@ -388,27 +389,28 @@ public class Task {
     startTime = System.currentTimeMillis();
     Throwable error = null;
     try {
-      context.setState(TaskAttemptState.TA_RUNNING);
+      if(!context.isStopped()) {
+        context.setState(TaskAttemptState.TA_RUNNING);
+        if (context.hasFetchPhase()) {
+          // If the fetch is still in progress, the query unit must wait for
+          // complete.
+          waitForFetch();
+          context.setFetcherProgress(FETCHER_PROGRESS);
+          context.setProgressChanged(true);
+          updateProgress();
+        }
 
-      if (context.hasFetchPhase()) {
-        // If the fetch is still in progress, the query unit must wait for
-        // complete.
-        waitForFetch();
-        context.setFetcherProgress(FETCHER_PROGRESS);
-        context.setProgressChanged(true);
-        updateProgress();
-      }
+        this.executor = executionBlockContext.getTQueryEngine().
+            createPlan(context, plan);
+        this.executor.init();
 
-      this.executor = executionBlockContext.getTQueryEngine().
-          createPlan(context, plan);
-      this.executor.init();
-
-      while(!killed && !aborted && executor.next() != null) {
+        while(!context.isStopped() && executor.next() != null) {
+        }
       }
     } catch (Throwable e) {
       error = e ;
       LOG.error(e.getMessage(), e);
-      aborted = true;
+      context.stop();
     } finally {
       if (executor != null) {
         try {
@@ -423,10 +425,10 @@ public class Task {
       executionBlockContext.completedTasksNum.incrementAndGet();
       context.getHashShuffleAppenderManager().finalizeTask(taskId);
       QueryMasterProtocol.QueryMasterProtocolService.Interface queryMasterStub = executionBlockContext.getQueryMasterStub();
-      if (killed || aborted) {
+      if (context.isStopped()) {
         context.setExecutorProgress(0.0f);
-        if(killed) {
-          context.setState(TaskAttemptState.TA_KILLED);
+
+        if(context.getState() == TaskAttemptState.TA_KILLED) {
           queryMasterStub.statusUpdate(null, getReport(), NullCallback.get());
           executionBlockContext.killedTasksNum.incrementAndGet();
         } else {
@@ -593,7 +595,7 @@ public class Task {
       int retryWaitTime = 1000; //sec
 
       try { // for releasing fetch latch
-        while(!killed && retryNum < maxRetryNum) {
+        while(!context.isStopped() && retryNum < maxRetryNum) {
           if (retryNum > 0) {
             try {
               Thread.sleep(retryWaitTime);
@@ -625,7 +627,7 @@ public class Task {
           if (retryNum == maxRetryNum) {
             LOG.error("ERROR: the maximum retry (" + retryNum + ") on the fetch exceeded (" + fetcher.getURI() + ")");
           }
-          aborted = true; // retry task
+          context.stop(); // retry task
           ctx.getFetchLatch().countDown();
         }
       }

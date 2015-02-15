@@ -80,8 +80,12 @@ public class QueryInProgress {
 
   public synchronized void kill() {
     getQueryInfo().setQueryState(TajoProtos.QueryState.QUERY_KILLED);
-    if(queryMasterRpcClient != null){
-      queryMasterRpcClient.killQuery(null, queryId.getProto(), NullCallback.get());
+    if (queryMasterRpcClient != null) {
+      try {
+        queryMasterRpcClient.killQuery(null, queryId.getProto(), NullCallback.get());
+      } catch (Throwable e) {
+        catchException(e);
+      }
     }
   }
 
@@ -99,7 +103,11 @@ public class QueryInProgress {
       RpcConnectionPool.getPool().closeConnection(queryMasterRpc);
     }
 
-    masterContext.getHistoryWriter().appendHistory(queryInfo);
+    try {
+      masterContext.getHistoryWriter().appendAndFlush(queryInfo);
+    } catch (Throwable e) {
+      LOG.warn(e);
+    }
   }
 
   public boolean startQueryMaster() {
@@ -160,12 +168,13 @@ public class QueryInProgress {
 
       queryMasterRpcClient.executeQuery(null, builder.build(), NullCallback.get());
       querySubmitted.set(true);
+      getQueryInfo().setQueryState(TajoProtos.QueryState.QUERY_MASTER_LAUNCHED);
     } catch (Exception e) {
       LOG.error(e.getMessage(), e);
     }
   }
 
-  public void catchException(Exception e) {
+  public void catchException(Throwable e) {
     LOG.error(e.getMessage(), e);
     queryInfo.setQueryState(TajoProtos.QueryState.QUERY_FAILED);
     queryInfo.setLastMessage(StringUtils.stringifyException(e));
@@ -199,7 +208,6 @@ public class QueryInProgress {
 
       this.queryInfo.setQueryState(queryInfo.getQueryState());
       this.queryInfo.setProgress(queryInfo.getProgress());
-      this.queryInfo.setFinishTime(queryInfo.getFinishTime());
 
       // Update diagnosis message
       if (queryInfo.getLastMessage() != null && !queryInfo.getLastMessage().isEmpty()) {
@@ -214,6 +222,7 @@ public class QueryInProgress {
 
 
       if (isFinishState(this.queryInfo.getQueryState())) {
+        this.queryInfo.setFinishTime(System.currentTimeMillis());
         masterContext.getQueryJobManager().getEventHandler().handle(
             new QueryJobEvent(QueryJobEvent.Type.QUERY_JOB_STOP, this.queryInfo));
       }
@@ -222,6 +231,7 @@ public class QueryInProgress {
 
   private boolean isFinishState(TajoProtos.QueryState state) {
     return state == TajoProtos.QueryState.QUERY_FAILED ||
+        state == TajoProtos.QueryState.QUERY_ERROR ||
         state == TajoProtos.QueryState.QUERY_KILLED ||
         state == TajoProtos.QueryState.QUERY_SUCCEEDED;
   }

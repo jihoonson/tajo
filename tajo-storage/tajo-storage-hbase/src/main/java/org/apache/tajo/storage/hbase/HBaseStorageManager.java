@@ -299,14 +299,29 @@ public class HBaseStorageManager extends StorageManager {
    * @throws java.io.IOException
    */
   public static Configuration getHBaseConfiguration(Configuration conf, TableMeta tableMeta) throws IOException {
-    String zkQuorum = tableMeta.getOption(HBaseStorageConstants.META_ZK_QUORUM_KEY, "");
+    Configuration hbaseConf = (conf == null) ? HBaseConfiguration.create() : HBaseConfiguration.create(conf);
+
+    String zkQuorum = hbaseConf.get(HConstants.ZOOKEEPER_QUORUM);
+    if (tableMeta.containsOption(HBaseStorageConstants.META_ZK_QUORUM_KEY)) {
+      zkQuorum = tableMeta.getOption(HBaseStorageConstants.META_ZK_QUORUM_KEY, "");
+      hbaseConf.set(HConstants.ZOOKEEPER_QUORUM, zkQuorum);
+    }
+
     if (zkQuorum == null || zkQuorum.trim().isEmpty()) {
       throw new IOException("HBase mapped table is required a '" +
           HBaseStorageConstants.META_ZK_QUORUM_KEY + "' attribute.");
     }
 
-    Configuration hbaseConf = (conf == null) ? HBaseConfiguration.create() : HBaseConfiguration.create(conf);
-    hbaseConf.set(HConstants.ZOOKEEPER_QUORUM, zkQuorum);
+    String zkPort = hbaseConf.get(HConstants.ZOOKEEPER_CLIENT_PORT);
+    if (tableMeta.containsOption(HBaseStorageConstants.META_ZK_CLIENT_PORT)) {
+      zkPort = tableMeta.getOption(HBaseStorageConstants.META_ZK_CLIENT_PORT, "");
+      hbaseConf.set(HConstants.ZOOKEEPER_CLIENT_PORT, zkPort);
+    }
+
+    if (zkPort == null || zkPort.trim().isEmpty()) {
+      throw new IOException("HBase mapped table is required a '" +
+        HBaseStorageConstants.META_ZK_CLIENT_PORT + "' attribute.");
+    }
 
     for (Map.Entry<String, String> eachOption: tableMeta.getOptions().getAllKeyValus().entrySet()) {
       String key = eachOption.getKey();

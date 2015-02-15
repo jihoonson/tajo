@@ -23,7 +23,6 @@ import org.apache.tajo.TajoProtos;
 import org.apache.tajo.TajoTestingCluster;
 import org.apache.tajo.benchmark.TPCH;
 import org.apache.tajo.client.TajoClient;
-import org.apache.tajo.client.TajoClientImpl;
 import org.apache.tajo.client.TajoClientUtil;
 import org.apache.tajo.conf.TajoConf;
 import org.apache.tajo.ipc.ClientProtos;
@@ -48,7 +47,7 @@ public class TestFifoScheduler {
     cluster = new TajoTestingCluster();
     cluster.startMiniClusterInLocal(1);
     conf = cluster.getConfiguration();
-    client = new TajoClientImpl(cluster.getConfiguration());
+    client = cluster.newTajoClient();
     File file = TPCH.getDataFile("lineitem");
     client.executeQueryAndGetResult("create external table default.lineitem (l_orderkey int, l_partkey int) "
         + "using text location 'file://" + file.getAbsolutePath() + "'");
@@ -68,7 +67,7 @@ public class TestFifoScheduler {
     QueryId queryId = new QueryId(res.getQueryId());
     QueryId queryId2 = new QueryId(res2.getQueryId());
 
-    cluster.waitForQueryRunning(queryId);
+    cluster.waitForQuerySubmitted(queryId);
     client.killQuery(queryId2);
     assertEquals(TajoProtos.QueryState.QUERY_KILLED, client.getQueryStatus(queryId2).getState());
   }
@@ -82,10 +81,10 @@ public class TestFifoScheduler {
 
     QueryId queryId = new QueryId(res.getQueryId());
     QueryId queryId2 = new QueryId(res2.getQueryId());
-    cluster.waitForQueryRunning(queryId);
+    cluster.waitForQuerySubmitted(queryId);
 
     assertEquals(TajoProtos.QueryState.QUERY_SUCCEEDED, client.getQueryStatus(queryId2).getState());
-    ResultSet resSet = TajoClientUtil.createResultSet(conf, client, res2);
+    ResultSet resSet = TajoClientUtil.createResultSet(client, res2, 1);
     assertNotNull(resSet);
   }
 
@@ -101,9 +100,9 @@ public class TestFifoScheduler {
     QueryId queryId3 = new QueryId(res3.getQueryId());
     QueryId queryId4 = new QueryId(res4.getQueryId());
 
-    cluster.waitForQueryRunning(queryId);
+    cluster.waitForQuerySubmitted(queryId);
 
-    assertTrue(TajoClientUtil.isQueryRunning(client.getQueryStatus(queryId).getState()));
+    assertFalse(TajoClientUtil.isQueryComplete(client.getQueryStatus(queryId).getState()));
 
     assertEquals(TajoProtos.QueryState.QUERY_MASTER_INIT, client.getQueryStatus(queryId2).getState());
     assertEquals(TajoProtos.QueryState.QUERY_MASTER_INIT, client.getQueryStatus(queryId3).getState());

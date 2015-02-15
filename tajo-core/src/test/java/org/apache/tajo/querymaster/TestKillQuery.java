@@ -18,29 +18,40 @@
 
 package org.apache.tajo.querymaster;
 
+import com.google.common.collect.Lists;
 import org.apache.tajo.*;
 import org.apache.tajo.algebra.Expr;
 import org.apache.tajo.benchmark.TPCH;
 import org.apache.tajo.catalog.CatalogService;
+import org.apache.tajo.catalog.proto.CatalogProtos;
 import org.apache.tajo.client.TajoClient;
-import org.apache.tajo.client.TajoClientImpl;
 import org.apache.tajo.conf.TajoConf;
 import org.apache.tajo.engine.parser.SQLAnalyzer;
 import org.apache.tajo.engine.planner.global.GlobalPlanner;
 import org.apache.tajo.engine.planner.global.MasterPlan;
 import org.apache.tajo.engine.query.QueryContext;
+import org.apache.tajo.engine.query.TaskRequestImpl;
+import org.apache.tajo.ipc.ClientProtos;
 import org.apache.tajo.master.event.QueryEvent;
 import org.apache.tajo.master.event.QueryEventType;
-import org.apache.tajo.session.Session;
+import org.apache.tajo.master.event.StageEvent;
+import org.apache.tajo.master.event.StageEventType;
 import org.apache.tajo.plan.LogicalOptimizer;
 import org.apache.tajo.plan.LogicalPlan;
 import org.apache.tajo.plan.LogicalPlanner;
+import org.apache.tajo.plan.serder.PlanProto;
+import org.apache.tajo.session.Session;
+import org.apache.tajo.util.CommonTestingUtil;
+import org.apache.tajo.worker.ExecutionBlockContext;
+import org.apache.tajo.worker.Task;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.junit.Assert.*;
 
@@ -48,17 +59,25 @@ public class TestKillQuery {
   private static TajoTestingCluster cluster;
   private static TajoConf conf;
   private static TajoClient client;
+  private static String queryStr = "select t1.l_orderkey, t1.l_partkey, t2.c_custkey " +
+      "from lineitem t1 join customer t2 " +
+      "on t1.l_orderkey = t2.c_custkey order by t1.l_orderkey";
 
   @BeforeClass
   public static void setUp() throws Exception {
     cluster = new TajoTestingCluster();
     cluster.startMiniClusterInLocal(1);
     conf = cluster.getConfiguration();
-    client = new TajoClientImpl(cluster.getConfiguration());
+    client = cluster.newTajoClient();
     File file = TPCH.getDataFile("lineitem");
     client.executeQueryAndGetResult("create external table default.lineitem (l_orderkey int, l_partkey int) "
         + "using text location 'file://" + file.getAbsolutePath() + "'");
     assertTrue(client.existTable("default.lineitem"));
+
+    file = TPCH.getDataFile("customer");
+    client.executeQueryAndGetResult("create external table default.customer (c_custkey int, c_name text) "
+        + "using text location 'file://" + file.getAbsolutePath() + "'");
+    assertTrue(client.existTable("default.customer"));
   }
 
   @AfterClass
@@ -73,11 +92,10 @@ public class TestKillQuery {
     QueryContext defaultContext = LocalTajoTestingUtility.createDummyContext(conf);
     Session session = LocalTajoTestingUtility.createDummySession();
     CatalogService catalog = cluster.getMaster().getCatalog();
-    String query = "select l_orderkey, l_partkey from lineitem group by l_orderkey, l_partkey order by l_orderkey";
 
     LogicalPlanner planner = new LogicalPlanner(catalog);
     LogicalOptimizer optimizer = new LogicalOptimizer(conf);
-    Expr expr =  analyzer.parse(query);
+    Expr expr =  analyzer.parse(queryStr);
     LogicalPlan plan = planner.createPlan(defaultContext, expr);
 
     optimizer.optimize(plan);
@@ -115,11 +133,94 @@ public class TestKillQuery {
     Query q = queryMasterTask.getQuery();
     q.handle(new QueryEvent(queryId, QueryEventType.KILL));
 
-    try{
+    try {
       cluster.waitForQueryState(queryMasterTask.getQuery(), TajoProtos.QueryState.QUERY_KILLED, 50);
-    } finally {
       assertEquals(TajoProtos.QueryState.QUERY_KILLED, queryMasterTask.getQuery().getSynchronizedState());
+    } catch (Exception e) {
+      e.printStackTrace();
+      if (stage != null) {
+        System.err.println(String.format("Stage: [%s] (Total: %d, Complete: %d, Success: %d, Killed: %d, Failed: %d)",
+            stage.getId().toString(),
+            stage.getTotalScheduledObjectsCount(),
+            stage.getCompletedTaskCount(),
+            stage.getSucceededObjectCount(),
+            stage.getKilledObjectCount(),
+            stage.getFailedObjectCount()));
+      }
+      throw e;
+    } finally {
+      queryMasterTask.stop();
     }
-    queryMasterTask.stop();
+  }
+
+  @Test
+  public final void testIgnoreStageStateFromKilled() throws Exception {
+
+    ClientProtos.SubmitQueryResponse res = client.executeQuery(queryStr);
+    QueryId queryId = new QueryId(res.getQueryId());
+    cluster.waitForQuerySubmitted(queryId);
+
+    QueryMasterTask qmt = cluster.getQueryMasterTask(queryId);
+    Query query = qmt.getQuery();
+
+    // wait for a stage created
+    cluster.waitForQueryState(query, TajoProtos.QueryState.QUERY_RUNNING, 10);
+    query.handle(new QueryEvent(queryId, QueryEventType.KILL));
+
+    try{
+      cluster.waitForQueryState(query, TajoProtos.QueryState.QUERY_KILLED, 50);
+    } finally {
+      assertEquals(TajoProtos.QueryState.QUERY_KILLED, query.getSynchronizedState());
+    }
+
+    List<Stage> stages = Lists.newArrayList(query.getStages());
+    Stage lastStage = stages.get(stages.size() - 1);
+
+    assertEquals(StageState.KILLED, lastStage.getSynchronizedState());
+
+    lastStage.getStateMachine().doTransition(StageEventType.SQ_START,
+        new StageEvent(lastStage.getId(), StageEventType.SQ_START));
+
+    lastStage.getStateMachine().doTransition(StageEventType.SQ_KILL,
+        new StageEvent(lastStage.getId(), StageEventType.SQ_KILL));
+
+    lastStage.getStateMachine().doTransition(StageEventType.SQ_CONTAINER_ALLOCATED,
+        new StageEvent(lastStage.getId(), StageEventType.SQ_CONTAINER_ALLOCATED));
+
+    lastStage.getStateMachine().doTransition(StageEventType.SQ_SHUFFLE_REPORT,
+        new StageEvent(lastStage.getId(), StageEventType.SQ_SHUFFLE_REPORT));
+
+    lastStage.getStateMachine().doTransition(StageEventType.SQ_STAGE_COMPLETED,
+        new StageEvent(lastStage.getId(), StageEventType.SQ_STAGE_COMPLETED));
+
+    lastStage.getStateMachine().doTransition(StageEventType.SQ_FAILED,
+        new StageEvent(lastStage.getId(), StageEventType.SQ_FAILED));
+  }
+
+  @Test
+  public void testKillTask() throws Throwable {
+    QueryId qid = LocalTajoTestingUtility.newQueryId();
+    ExecutionBlockId eid = QueryIdFactory.newExecutionBlockId(qid, 1);
+    TaskId tid = QueryIdFactory.newTaskId(eid);
+    TajoConf conf = new TajoConf();
+    TaskRequestImpl taskRequest = new TaskRequestImpl();
+
+    taskRequest.set(null, new ArrayList<CatalogProtos.FragmentProto>(),
+        null, false, PlanProto.LogicalNodeTree.newBuilder().build(), new QueryContext(conf), null, null);
+    taskRequest.setInterQuery();
+    TaskAttemptId attemptId = new TaskAttemptId(tid, 1);
+
+    ExecutionBlockContext context = new ExecutionBlockContext(conf, null, null, new QueryContext(conf), null, eid, null);
+
+    org.apache.tajo.worker.Task task = new Task("test", CommonTestingUtil.getTestDir(), attemptId,
+        conf, context, taskRequest);
+    task.kill();
+    assertEquals(TajoProtos.TaskAttemptState.TA_KILLED, task.getStatus());
+    try {
+      task.run();
+      assertEquals(TajoProtos.TaskAttemptState.TA_KILLED, task.getStatus());
+    } catch (Exception e) {
+      assertEquals(TajoProtos.TaskAttemptState.TA_KILLED, task.getStatus());
+    }
   }
 }

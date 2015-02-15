@@ -1,9 +1,11 @@
 Tajo Change Log 
 
 
-Release 0.9.1 - unreleased
+Release 0.10.0 - unreleased
 
   NEW FEATURES
+
+    TAJO-919: Implement LAG and LEAD window functions. (Keuntae Park)
 
     TAJO-920: Add FIRST_VALUE and LAST_VALUE window functions. 
     (Keuntae Park via hyunsik)
@@ -26,6 +28,25 @@ Release 0.9.1 - unreleased
     TAJO-1095: Implement Json file scanner. (hyunsik)
 
   IMPROVEMENT
+
+    TAJO-1160: Remove Hadoop dependency from tajo-client module. (jinho)
+
+    TAJO-1269: Separate cli from tajo-client. (hyunsik)
+
+    TAJO-1328: Fix deprecated property names in the catalog configuration
+    document. (jihun)
+
+    TAJO-1317: Parallel Test Executions on Tajo Core Project. (jihun)
+
+    TAJO-1320: HBaseStorageManager need to support Zookeeper Client Port.
+    (jaehwa)
+
+    TAJO-1309: Add missing break point in physical operator. (jinho)
+
+    TAJO-1307: HBaseStorageManager need to support for users to use
+    hbase-site.xml file. (jaehwa)
+
+    TAJO-1290: Add HBase Storage Integration Documentation. (jaehwa)
 
     TAJO-1293: Tajo have to accept hostname beginning with digits.
     (Jinhang Choi via jihun)
@@ -164,6 +185,48 @@ Release 0.9.1 - unreleased
 
   BUG FIXES
 
+    TAJO-1336: Fix task failure of stopped task. (jinho)
+
+    TAJO-1316: NPE occurs when performing window functions after join.
+    (jihun)
+
+    TAJO-1325: Invalid history cleaner timeout. (jinho)
+
+    TAJO-1283: ORDER BY with the first descending order causes wrong results.
+    (Keuntae Park)
+
+    TAJO-1324: Remove warehouse directory rewriting in Unit Test. (jinho)
+
+    TAJO-1321: Cli prints wrong response time. (jihoon)
+
+    TAJO-1313: Tajo-dump creates DDLs for information_schema tables.
+    (jihun)
+
+    TAJO-1322: Invalid stored caching on StorageManager. (jinho)
+
+    TAJO-1319: Tajo can't find HBase configuration file. (jaehwa)
+
+    TAJO-1312: Stage causes Invalid event error: SQ_SHUFFLE_REPORT 
+    at KILLED. (jinho)
+
+    TAJO-1318: Unit test failure after miniDFS cluster restart. (jinho)
+
+    TAJO-1289: History reader fails to get the query information after 
+    a successful query execution. (jinho)
+
+    TAJO-1303: CDH cannot pass hadoop version check test.
+    (Keuntae Park via jihun)
+
+    TAJO-1308: QueryInprogress can not release when query is QUERY_ERROR.
+    (jinho)
+
+    TAJO-1305: With metadata storage of MySQL, columns with the same 
+    character but difference case are not allowed. (jihun)
+
+    TAJO-1257: ORDER BY with NULL FIRST misses some data. (Keuntae Park)
+
+    TAJO-1225: Fix wrong schema name in JDBC driver. (jaehwa)
+
     TAJO-1304: Can not found TextFile in catalog. (jinho)
 
     TAJO-1299: TB and PB representations in StorageUnit are overflow.
@@ -291,6 +354,10 @@ Release 0.9.1 - unreleased
 
 
   TASKS
+
+    TAJO-1260: Add ALTER TABLE ADD/DROP PARTITION statement to parser. (jaehwa)
+
+    TAJO-1323: Cleanup the unstable test case. (jinho)
 
     TAJO-1295: Remove legacy worker.dataserver package and its unit tests.
     (hyunsik)
