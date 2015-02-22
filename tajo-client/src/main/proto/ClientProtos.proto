@@ -276,6 +276,7 @@ message StageHistoryProto {
   optional string plan = 16;
   optional int32 hostLocalAssigned = 17;
   optional int32 rackLocalAssigned = 18;
+  optional int64 scheduleTime = 19;
 }
 
 message QueryHistoryProto {

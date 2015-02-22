@@ -37,6 +37,8 @@ public class StageHistory implements GsonObject {
   @Expose
   private long finishTime;
   @Expose
+  private long scheduleTime;
+  @Expose
   private int succeededObjectCount;
   @Expose
   private int failedObjectCount;
@@ -248,6 +250,7 @@ public class StageHistory implements GsonObject {
       .setState(state)
       .setStartTime(startTime)
       .setFinishTime(finishTime)
+      .setScheduleTime(scheduleTime)
       .setSucceededObjectCount(succeededObjectCount)
       .setFailedObjectCount(failedObjectCount)
       .setKilledObjectCount(killedObjectCount)
@@ -266,5 +269,13 @@ public class StageHistory implements GsonObject {
       .setRackLocalAssigned(rackLocalAssigned);
 
     return builder.build();
+  }
+
+  public long getScheduleTime() {
+    return scheduleTime;
+  }
+
+  public void setScheduleTime(long scheduleTime) {
+    this.scheduleTime = scheduleTime;
   }
 }

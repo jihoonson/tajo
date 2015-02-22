@@ -104,6 +104,7 @@ public class Stage implements EventHandler<StageEvent> {
 
   private long startTime;
   private long finishTime;
+  private long scheduleTime;
   private volatile long lastContactTime;
   private Thread timeoutChecker;
 
@@ -464,6 +465,7 @@ public class Stage implements EventHandler<StageEvent> {
     stageHistory.setState(getState().toString());
     stageHistory.setStartTime(startTime);
     stageHistory.setFinishTime(finishTime);
+    stageHistory.setScheduleTime(scheduleTime);
     stageHistory.setSucceededObjectCount(succeededObjectCount);
     stageHistory.setKilledObjectCount(killedObjectCount);
     stageHistory.setFailedObjectCount(failedObjectCount);
@@ -793,7 +795,10 @@ public class Stage implements EventHandler<StageEvent> {
                         @Override
                         public void run() {
                           try {
+                            long before = System.currentTimeMillis();
                             schedule(stage);
+                            stage.scheduleTime = System.currentTimeMillis() - before;
+                            LOG.info("schedule time: " + stage.scheduleTime + " ms");
                             stage.totalScheduledObjectsCount = stage.getTaskScheduler().remainingScheduledObjectNum();
                             LOG.info(stage.totalScheduledObjectsCount + " objects are scheduled");
 
