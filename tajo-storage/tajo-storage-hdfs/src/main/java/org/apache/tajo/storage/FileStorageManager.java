@@ -39,6 +39,7 @@ import org.apache.tajo.plan.logical.ScanNode;
 import org.apache.tajo.storage.fragment.FileFragment;
 import org.apache.tajo.storage.fragment.Fragment;
 import org.apache.tajo.util.Bytes;
+import org.apache.tajo.util.TUtil;
 
 import java.io.IOException;
 import java.text.NumberFormat;
@@ -561,13 +562,13 @@ public class FileStorageManager extends StorageManager {
               while (((double) bytesRemaining) / splitSize > SPLIT_SLOP) {
                 int blkIndex = getBlockIndex(blkLocations, length - bytesRemaining);
                 splits.add(makeSplit(tableName, path, length - bytesRemaining, splitSize,
-                    blkLocations[blkIndex].getHosts()));
+                    resolveHosts(blkLocations[blkIndex].getHosts())));
                 bytesRemaining -= splitSize;
               }
               if (bytesRemaining > 0) {
                 int blkIndex = getBlockIndex(blkLocations, length - bytesRemaining);
                 splits.add(makeSplit(tableName, path, length - bytesRemaining, bytesRemaining,
-                    blkLocations[blkIndex].getHosts()));
+                    resolveHosts(blkLocations[blkIndex].getHosts())));
               }
             } else { // Non splittable
               splits.add(makeNonSplit(tableName, path, 0, length, blkLocations));
@@ -588,6 +589,19 @@ public class FileStorageManager extends StorageManager {
     splits.addAll(volumeSplits);
     LOG.info("Total # of splits: " + splits.size());
     return splits;
+  }
+
+  private static String[] resolveHosts(String[] hosts) {
+    List<String> resolved = TUtil.newList();
+    for (String host : hosts) {
+      if (host.startsWith("192")) {
+        String[] splits = host.split("\\.");
+        resolved.add("t" + splits[splits.length-1]);
+      } else {
+        resolved.add(host);
+      }
+    }
+    return resolved.toArray(new String[resolved.size()]);
   }
 
   private void setVolumeMeta(List<Fragment> splits, final List<BlockLocation> blockLocations)
