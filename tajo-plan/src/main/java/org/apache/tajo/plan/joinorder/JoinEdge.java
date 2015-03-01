@@ -20,6 +20,7 @@ package org.apache.tajo.plan.joinorder;
 
 import com.google.common.collect.Sets;
 import org.apache.tajo.algebra.JoinType;
+import org.apache.tajo.plan.Target;
 import org.apache.tajo.plan.expr.EvalNode;
 import org.apache.tajo.plan.logical.LogicalNode;
 import org.apache.tajo.util.TUtil;
@@ -32,16 +33,19 @@ public class JoinEdge {
   private final LogicalNode leftRelation;
   private final LogicalNode rightRelation;
   private final Set<EvalNode> joinQual = Sets.newHashSet();
+  private final Set<EvalNode> joinFilter = Sets.newHashSet();
+  private final Target[] targets;
 
-  public JoinEdge(JoinType joinType, LogicalNode leftRelation, LogicalNode rightRelation) {
+  public JoinEdge(JoinType joinType, LogicalNode leftRelation, LogicalNode rightRelation, Target[] targets) {
     this.joinType = joinType;
     this.leftRelation = leftRelation;
     this.rightRelation = rightRelation;
+    this.targets = targets;
   }
 
-  public JoinEdge(JoinType joinType, LogicalNode leftRelation, LogicalNode rightRelation,
+  public JoinEdge(JoinType joinType, LogicalNode leftRelation, LogicalNode rightRelation, Target[] targets,
                   EvalNode ... condition) {
-    this(joinType, leftRelation, rightRelation);
+    this(joinType, leftRelation, rightRelation, targets);
     Collections.addAll(joinQual, condition);
   }
 
@@ -65,11 +69,31 @@ public class JoinEdge {
     this.joinQual.add(joinQual);
   }
 
+  public boolean hasTargets() {
+    return this.targets != null;
+  }
+
   public EvalNode [] getJoinQual() {
     return joinQual.toArray(new EvalNode[joinQual.size()]);
   }
 
+  public boolean hasJoinFilter() {
+    return joinFilter.size() > 0;
+  }
+
+  public void addJoinFilter(EvalNode joinFilter) {
+    this.joinFilter.add(joinFilter);
+  }
+
+  public EvalNode[] getJoinFilter() {
+    return joinFilter.toArray(new EvalNode[joinFilter.size()]);
+  }
+
   public String toString() {
     return leftRelation + " " + joinType + " " + rightRelation + " ON " + TUtil.collectionToString(joinQual, ", ");
+  }
+
+  public Target[] getTargets() {
+    return targets;
   }
 }

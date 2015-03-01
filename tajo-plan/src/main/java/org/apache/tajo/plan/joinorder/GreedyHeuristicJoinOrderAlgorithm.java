@@ -19,8 +19,11 @@
 package org.apache.tajo.plan.joinorder;
 
 import org.apache.tajo.algebra.JoinType;
+import org.apache.tajo.catalog.Column;
 import org.apache.tajo.catalog.Schema;
 import org.apache.tajo.plan.LogicalPlan;
+import org.apache.tajo.plan.expr.EvalNode;
+import org.apache.tajo.plan.expr.EvalTreeUtil;
 import org.apache.tajo.plan.util.PlannerUtil;
 import org.apache.tajo.plan.PlanningException;
 import org.apache.tajo.catalog.SchemaUtil;
@@ -37,6 +40,12 @@ import java.util.*;
  */
 public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
   public static double DEFAULT_SELECTION_FACTOR = 0.1;
+
+  private LogicalPlan logicalPlan;
+
+  public GreedyHeuristicJoinOrderAlgorithm(LogicalPlan plan) {
+    this.logicalPlan = plan;
+  }
 
   @Override
   public FoundJoinOrder findBestOrder(LogicalPlan plan, LogicalPlan.QueryBlock block, JoinGraph joinGraph,
@@ -75,20 +84,36 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
 
         // check if the relation is the last piece of outer join
         boolean endInnerRelation = false;
+        if (joinEdges.size() == 0) {
+          if (checkingRelations.size() == 1) {
+            // cross join
+            endInnerRelation = true;
+            checkingRelations.add(relation);
+            break;
+          }
+        }
+
         for (JoinEdge joinEdge: joinEdges) {
-          switch(joinEdge.getJoinType()) {
-            case LEFT_ANTI:
-            case RIGHT_ANTI:
-            case LEFT_SEMI:
-            case RIGHT_SEMI:
-            case LEFT_OUTER:
-            case RIGHT_OUTER:
-            case FULL_OUTER:
-              endInnerRelation = true;
-              if (checkingRelations.size() <= 1) {
-                checkingRelations.add(relation);
-              }
-              break;
+//          switch(joinEdge.getJoinType()) {
+//            case LEFT_ANTI:
+//            case RIGHT_ANTI:
+//            case LEFT_SEMI:
+//            case RIGHT_SEMI:
+//            case LEFT_OUTER:
+//            case RIGHT_OUTER:
+//            case FULL_OUTER:
+//              endInnerRelation = true;
+//              if (checkingRelations.size() <= 1) {
+//                checkingRelations.add(relation);
+//              }
+//              break;
+//          }
+          if (!isAssosicative(plan, joinEdge)) {
+            endInnerRelation = true;
+            if (checkingRelations.size() <= 1) {
+              checkingRelations.add(relation);
+            }
+            break;
           }
         }
 
@@ -131,6 +156,35 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
     return new FoundJoinOrder(joinTree, getCost(joinTree));
   }
 
+  private static boolean isAssosicative(LogicalPlan plan, JoinEdge joinEdge) throws PlanningException {
+    switch(joinEdge.getJoinType()) {
+      case LEFT_ANTI:
+      case RIGHT_ANTI:
+      case LEFT_SEMI:
+      case RIGHT_SEMI:
+      case LEFT_OUTER:
+      case RIGHT_OUTER:
+      case FULL_OUTER:
+        return false;
+      case INNER:
+        Set<Column> columnSet = new HashSet<Column>();
+        for (EvalNode qual : joinEdge.getJoinQual()) {
+          columnSet.addAll(EvalTreeUtil.findUniqueColumns(qual));
+        }
+        for (Column eachCol : columnSet) {
+          if (!eachCol.getQualifier().equals(
+                  PlannerUtil.getTopRelationInLineage(plan, joinEdge.getLeftRelation())) &&
+              !eachCol.getQualifier().equals(
+                  PlannerUtil.getTopRelationInLineage(plan, joinEdge.getRightRelation()))) {
+            return false;
+          }
+        }
+        return true;
+      default:
+        return true;
+    }
+  }
+
   private static JoinNode createJoinNode(LogicalPlan plan, JoinEdge joinEdge) {
     LogicalNode left = joinEdge.getLeftRelation();
     LogicalNode right = joinEdge.getRightRelation();
@@ -157,6 +211,12 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
     joinNode.setOutSchema(mergedSchema);
     if (joinEdge.hasJoinQual()) {
       joinNode.setJoinQual(AlgebraicUtil.createSingletonExprFromCNF(joinEdge.getJoinQual()));
+    }
+    if (joinEdge.hasJoinFilter()) {
+      joinNode.setJoinFilter(AlgebraicUtil.createSingletonExprFromCNF(joinEdge.getJoinFilter()));
+    }
+    if (joinEdge.hasTargets()) {
+      joinNode.setTargets(joinEdge.getTargets());
     }
     return joinNode;
   }
@@ -241,11 +301,14 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
         String[] joinEdgePair = {outerEdgeKey, innerName};
         joinEdgePairs.add(joinEdgePair);
         if (foundJoinEdge == null) {
-          foundJoinEdge = new JoinEdge(existJoinEdge.getJoinType(), outer, inner,
+          foundJoinEdge = new JoinEdge(existJoinEdge.getJoinType(), outer, inner, existJoinEdge.getTargets(),
               existJoinEdge.getJoinQual());
         } else {
           foundJoinEdge.addJoinQual(AlgebraicUtil.createSingletonExprFromCNF(
               existJoinEdge.getJoinQual()));
+        }
+        if (existJoinEdge.hasJoinFilter()) {
+          foundJoinEdge.addJoinFilter(AlgebraicUtil.createSingletonExprFromCNF(existJoinEdge.getJoinFilter()));
         }
       }
     }
@@ -262,11 +325,14 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
         String[] joinEdgePair = {outerEdgeKey, outerName};
         joinEdgePairs.add(joinEdgePair);
         if (foundJoinEdge == null) {
-          foundJoinEdge = new JoinEdge(existJoinEdge.getJoinType(), inner, outer,
+          foundJoinEdge = new JoinEdge(existJoinEdge.getJoinType(), inner, outer, existJoinEdge.getTargets(),
               existJoinEdge.getJoinQual());
         } else {
           foundJoinEdge.addJoinQual(AlgebraicUtil.createSingletonExprFromCNF(
               existJoinEdge.getJoinQual()));
+        }
+        if (existJoinEdge.hasJoinFilter()) {
+          foundJoinEdge.addJoinFilter(AlgebraicUtil.createSingletonExprFromCNF(existJoinEdge.getJoinFilter()));
         }
       }
     }
@@ -283,18 +349,21 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
           String[] joinEdgePair = {outerName, innerName};
           joinEdgePairs.add(joinEdgePair);
           if (foundJoinEdge == null) {
-            foundJoinEdge = new JoinEdge(existJoinEdge.getJoinType(), outer, inner,
+            foundJoinEdge = new JoinEdge(existJoinEdge.getJoinType(), outer, inner, existJoinEdge.getTargets(),
                 existJoinEdge.getJoinQual());
           } else {
             foundJoinEdge.addJoinQual(AlgebraicUtil.createSingletonExprFromCNF(
                 existJoinEdge.getJoinQual()));
+          }
+          if (existJoinEdge.hasJoinFilter()) {
+            foundJoinEdge.addJoinFilter(AlgebraicUtil.createSingletonExprFromCNF(existJoinEdge.getJoinFilter()));
           }
         }
       }
     }
 
     if (foundJoinEdge == null) {
-      foundJoinEdge = new JoinEdge(JoinType.CROSS, outer, inner);
+      foundJoinEdge = new JoinEdge(JoinType.CROSS, outer, inner, null);
     }
 
     return foundJoinEdge;
@@ -332,10 +401,15 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
       if (joinNode.hasJoinQual()) {
         filterFactor = Math.pow(DEFAULT_SELECTION_FACTOR,
             AlgebraicUtil.toConjunctiveNormalFormArray(joinNode.getJoinQual()).length);
-        return getCost(joinNode.getLeftChild()) * getCost(joinNode.getRightChild()) * filterFactor;
       } else {
-        return Math.pow(getCost(joinNode.getLeftChild()) * getCost(joinNode.getRightChild()), 2);
+        filterFactor = Math.pow(getCost(joinNode.getLeftChild()) * getCost(joinNode.getRightChild()), 2);
       }
+      // TODO: join filters must be considered to improve the accuracy of selectivity estimation
+      if (joinNode.hasJoinFilter()) {
+        filterFactor *= Math.pow(DEFAULT_SELECTION_FACTOR,
+            AlgebraicUtil.toConjunctiveNormalFormArray(joinNode.getJoinFilter()).length);
+      }
+      return filterFactor;
 
     case SELECTION:
       SelectionNode selectionNode = (SelectionNode) node;
