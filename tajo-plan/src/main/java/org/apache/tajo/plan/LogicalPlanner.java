@@ -1150,8 +1150,7 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
       NamedExpr namedExpr = it.next();
       try {
         evalNode = exprAnnotator.createEvalNode(context, namedExpr.getExpr(), NameResolvingMode.LEGACY);
-        // here, we assume that every exprs are specified at the on clause
-        if (LogicalPlanner.checkIfBeEvaluatedAtJoin(block, evalNode, joinNode, true)) {
+        if (LogicalPlanner.checkIfBeEvaluatedAtJoin(block, evalNode, joinNode)) {
           block.namedExprsMgr.markAsEvaluated(namedExpr.getAlias(), evalNode);
           newlyEvaluatedExprs.add(namedExpr.getAlias());
         }
@@ -1963,8 +1962,7 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
     return true;
   }
 
-  public static boolean checkIfBeEvaluatedAtJoin(QueryBlock block, EvalNode evalNode, JoinNode node,
-                                                 boolean isOnPredicate) {
+  public static boolean checkIfBeEvaluatedAtJoin(QueryBlock block, EvalNode evalNode, JoinNode node) {
     Set<Column> columnRefs = EvalTreeUtil.findUniqueColumns(evalNode);
 
     if (EvalTreeUtil.findDistinctAggFunction(evalNode).size() > 0) {
@@ -1984,9 +1982,9 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
      * Other predicates from the where clause must be evaluated after the join.
      * The below code will be modified after improving join operators to keep join filters by themselves (TAJO-1310).
      */
-    if (PlannerUtil.isOuterJoin(node.getJoinType()) && !isOnPredicate) {
-      return false;
-    }
+//    if (PlannerUtil.isOuterJoin(node.getJoinType()) && !isOnPredicate) {
+//      return false;
+//    }
 
     return true;
   }

@@ -352,50 +352,32 @@ public class FilterPushDownRule extends BasicLogicalPlanVisitor<FilterPushDownCo
     notMatched.clear();
 
     context.addFiltersTobePushed(nonPushableQuals);
-    List<EvalNode> matched = TUtil.newList();
-    for (EvalNode evalNode : context.pushingDownFilters) {
-      // TODO: currently, non-equi theta join is not supported yet.
-      if (!isNonEquiThetaJoinQual(block, joinNode, evalNode) &&
-          LogicalPlanner.checkIfBeEvaluatedAtJoin(block, evalNode, joinNode, onPredicates.contains(evalNode))) {
-        matched.add(evalNode);
-//=======
-//
-//    /*
-//     * Join conditions and join filters must be handled separately, especially for outer joins,
-//     * because their behaviors can be differ according to that a predicate belongs to join conditions or join filters.
-//     */
-//    List<EvalNode> matched = Lists.newArrayList();
-//    if(isOuterJoin) {
-//      matched.addAll(outerJoinPredicationEvals);
-//    } else {
-//      for (EvalNode eval : context.pushingDownFilters) {
-//        if (EvalTreeUtil.isJoinQual(block, left.getOutSchema(), right.getOutSchema(), eval, false) &&
-//            LogicalPlanner.checkIfBeEvaluatedAtJoin(block, eval, joinNode, isTopMostJoin)) {
-//          matched.add(eval);
-//        }
-//>>>>>>> TAJO-1310
-      }
-    }
 
-    EvalNode qual = null;
-    if (matched.size() > 1) {
-      // merged into one eval tree
-      qual = AlgebraicUtil.createSingletonExprFromCNF(
-          matched.toArray(new EvalNode[matched.size()]));
-    } else if (matched.size() == 1) {
-      // if the number of matched expr is one
-      qual = matched.get(0);
-    }
+    /*
+     * Join conditions and join filters must be handled separately, especially for outer joins,
+     * because their behaviors can be differ according to that a predicate belongs to join conditions or join filters.
+     */
+    Set<EvalNode> joinConditions = extractJoinConditions(context.pushingDownFilters, block, joinNode, onPredicates);
 
-    if (qual != null) {
-      joinNode.setJoinQual(qual);
+    if (joinConditions != null && joinConditions.size() > 0) {
+      joinNode.setJoinQual(makeSingletonFilter(joinConditions));
 
       if (joinNode.getJoinType() == JoinType.CROSS) {
         joinNode.setJoinType(JoinType.INNER);
       }
     }
 
-    context.pushingDownFilters.removeAll(matched);
+    context.pushingDownFilters.removeAll(joinConditions);
+
+    // find join filters
+    Set<EvalNode> joinFilters = extractJoinFilters(context.pushingDownFilters, block, joinNode);
+
+    if (joinFilters != null && joinFilters.size() > 0) {
+      joinNode.setJoinFilter(makeSingletonFilter(joinFilters));
+    }
+
+    context.pushingDownFilters.removeAll(joinFilters);
+
 //=======
 //    matched.clear();
 //    if (isOuterJoin) {
@@ -424,6 +406,45 @@ public class FilterPushDownRule extends BasicLogicalPlanVisitor<FilterPushDownCo
 //    context.pushingDownFilters.addAll(thetaJoinFilter);
 //>>>>>>> TAJO-1310
     return joinNode;
+  }
+
+  private static Set<EvalNode> extractJoinConditions(Set<EvalNode> remainingFilters, LogicalPlan.QueryBlock block,
+                                                     JoinNode join, Set<EvalNode> onPredicates) {
+    Set<EvalNode> conditions = TUtil.newHashSet();
+    for (EvalNode evalNode : remainingFilters) {
+      // TODO: currently, non-equi theta join is not supported yet.
+      if (!isNonEquiThetaJoinQual(block, join, evalNode)
+          && LogicalPlanner.checkIfBeEvaluatedAtJoin(block, evalNode, join)) {
+        if (PlannerUtil.isOuterJoin(join.getJoinType()) && onPredicates.contains(evalNode)) {
+          conditions.add(evalNode);
+        }
+      }
+    }
+    return conditions;
+  }
+
+  private static Set<EvalNode> extractJoinFilters(Set<EvalNode> remainingFilters, LogicalPlan.QueryBlock block,
+                                                  JoinNode join) {
+    Set<EvalNode> filters = TUtil.newHashSet();
+    for (EvalNode evalNode : remainingFilters) {
+      // TODO: currently, non-equi theta join is not supported yet.
+      if (LogicalPlanner.checkIfBeEvaluatedAtJoin(block, evalNode, join)) {
+        filters.add(evalNode);
+      }
+    }
+    return filters;
+  }
+
+  private static EvalNode makeSingletonFilter(Set<EvalNode> filters) {
+    if (filters.size() > 1) {
+      // merged into one eval tree
+      return AlgebraicUtil.createSingletonExprFromCNF(
+          filters.toArray(new EvalNode[filters.size()]));
+    } else if (filters.size() == 1) {
+      // if the number of matched expr is one
+      return filters.iterator().next();
+    }
+    return null;
   }
 
   private static Set<EvalNode> extractNonPushableJoinQuals(final LogicalPlan plan,
