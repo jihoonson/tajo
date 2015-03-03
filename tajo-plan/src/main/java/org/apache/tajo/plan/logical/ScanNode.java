@@ -30,6 +30,8 @@ import org.apache.tajo.plan.Target;
 import org.apache.tajo.plan.expr.EvalNode;
 import org.apache.tajo.util.TUtil;
 
+import java.util.Arrays;
+
 public class ScanNode extends RelationNode implements Projectable, SelectableNode, Cloneable {
 	@Expose protected TableDesc tableDesc;
   @Expose protected String alias;
@@ -168,7 +170,7 @@ public class ScanNode extends RelationNode implements Projectable, SelectableNod
 
   @Override
   public int hashCode() {
-    return Objects.hashCode(this.tableDesc, this.qual, this.targets);
+    return Objects.hashCode(this.tableDesc, this.qual, Arrays.hashCode(this.targets));
   }
 	
 	@Override

@@ -233,6 +233,11 @@ public class TestJoinQuery extends QueryTestCaseBase {
   }
 
   @Test
+  public final void test() throws Exception {
+    executeString("select * from customer left outer join nation on c_nationkey = n_nationkey right outer join customer on c_custkey = n_nationkey inner join nation on c_custkey = n_regionkey");
+  }
+
+  @Test
   public final void testLeftOuterJoin1() throws Exception {
     ResultSet res = executeQuery();
     assertResultSet(res);

@@ -142,6 +142,10 @@ public class TUtil {
     return newMap;
   }
 
+  public static <T> Set<T> newLinkedHashSet() {
+    return new LinkedHashSet<T>();
+  }
+
   public static <K,V> Map<K,V> newLinkedHashMap() {
     return new LinkedHashMap<K, V>();
   }

@@ -209,9 +209,10 @@ public class PlannerUtil {
   }
 
   public static class RelationFinderVisitor extends BasicLogicalPlanVisitor<Object, LogicalNode> {
-    private Set<String> foundRelNameSet = Sets.newHashSet();
+//    private Set<String> foundRelNameSet = Sets.newHashSet();
+    private List<String> foundRelNameSet = TUtil.newList();
 
-    public Set<String> getFoundRelations() {
+    public List<String> getFoundRelations() {
       return foundRelNameSet;
     }
 

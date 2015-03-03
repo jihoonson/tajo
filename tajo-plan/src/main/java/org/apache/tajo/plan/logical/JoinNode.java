@@ -21,6 +21,7 @@
  */
 package org.apache.tajo.plan.logical;
 
+import com.google.common.base.Objects;
 import com.google.gson.annotations.Expose;
 import org.apache.tajo.algebra.JoinType;
 import org.apache.tajo.plan.PlanString;
@@ -31,6 +32,7 @@ import org.apache.tajo.plan.expr.EvalNode;
 import org.apache.tajo.util.TUtil;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 public class JoinNode extends BinaryNode implements Projectable, Cloneable {
@@ -136,6 +138,11 @@ public class JoinNode extends BinaryNode implements Projectable, Cloneable {
     } else {
       return false;
     }
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hashCode(joinType, joinQual, Arrays.hashCode(targets));
   }
 
   @Override
