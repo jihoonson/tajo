@@ -37,6 +37,9 @@ import org.apache.tajo.util.TUtil;
 
 import java.util.*;
 
+/**
+ * The join graph is a directed graph
+ */
 public class JoinGraph extends SimpleUndirectedGraph<String, JoinEdge> {
 
   private String [] guessRelationsFromJoinQual(LogicalPlan.QueryBlock block, BinaryEval joinCondition)
