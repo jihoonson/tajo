@@ -74,7 +74,9 @@ public class JoinEdge {
   }
 
   public JoinNode getJoinNode() {
-    joinNode.setJoinQual(AlgebraicUtil.createSingletonExprFromCNF(getJoinQual()));
+    if (hasJoinQual()) {
+      joinNode.setJoinQual(AlgebraicUtil.createSingletonExprFromCNF(getJoinQual()));
+    }
     return joinNode;
   }
 

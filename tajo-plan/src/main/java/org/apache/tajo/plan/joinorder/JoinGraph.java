@@ -118,6 +118,18 @@ public class JoinGraph extends SimpleUndirectedGraph<String, JoinEdge> {
       allInOneCnf.add(joinNode.getJoinQual());
 
       return allInOneCnf;
+    } else if (joinNode.getJoinType() == JoinType.CROSS) {
+      JoinEdge edge = new JoinEdge(joinNode);
+      SortedSet<String> leftNodeRelationName =
+          new TreeSet<String>(PlannerUtil.getRelationLineageWithinQueryBlock(plan, joinNode.getLeftChild()));
+      SortedSet<String> rightNodeRelationName =
+          new TreeSet<String>(PlannerUtil.getRelationLineageWithinQueryBlock(plan, joinNode.getRightChild()));
+
+      addEdge(
+          TUtil.collectionToString(leftNodeRelationName, ","),
+          TUtil.collectionToString(rightNodeRelationName, ","),
+          edge);
+      return new HashSet<EvalNode>();
     } else {
       Collection<String> leftNodeRelationName =
           PlannerUtil.getRelationLineageWithinQueryBlock(plan, joinNode.getLeftChild());

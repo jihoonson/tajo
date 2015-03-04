@@ -31,6 +31,7 @@ import org.apache.tajo.algebra.JoinType;
 import org.apache.tajo.conf.TajoConf;
 import org.apache.tajo.conf.TajoConf.ConfVars;
 import org.apache.tajo.util.ReflectionUtil;
+import org.apache.tajo.util.TUtil;
 import org.apache.tajo.util.graph.DirectedGraphCursor;
 import org.apache.tajo.plan.expr.AlgebraicUtil;
 import org.apache.tajo.plan.expr.EvalNode;
@@ -44,6 +45,7 @@ import org.apache.tajo.plan.util.PlannerUtil;
 import org.apache.tajo.plan.visitor.BasicLogicalPlanVisitor;
 
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.Stack;
 
@@ -158,7 +160,8 @@ public class LogicalOptimizer {
   private static class JoinGraphContext {
     JoinGraph joinGraph = new JoinGraph();
     Set<EvalNode> quals = Sets.newHashSet();
-    Set<String> relationsForProduct = Sets.newHashSet();
+//    Set<String> relationsForProduct = Sets.newHashSet();
+    List<LogicalNode> associativeGroup = TUtil.newList();
   }
 
   private static class JoinGraphBuilder extends BasicLogicalPlanVisitor<JoinGraphContext, LogicalNode> {
@@ -192,22 +195,68 @@ public class LogicalOptimizer {
                                  JoinNode joinNode, Stack<LogicalNode> stack)
         throws PlanningException {
       super.visitJoin(joinGraphContext, plan, block, joinNode, stack);
-      if (joinNode.hasJoinQual()) {
-        joinGraphContext.joinGraph.addJoin(plan, block, joinNode);
+//      if (joinNode.hasJoinQual()) {
+//        joinGraphContext.joinGraph.addJoin(plan, block, joinNode);
+//      } else {
+//        LogicalNode leftChild = joinNode.getLeftChild();
+//        LogicalNode rightChild = joinNode.getRightChild();
+//        if (leftChild instanceof RelationNode) {
+//          RelationNode rel = (RelationNode) leftChild;
+//          joinGraphContext.relationsForProduct.add(rel.getCanonicalName());
+//        }
+//        if (rightChild instanceof RelationNode) {
+//          RelationNode rel = (RelationNode) rightChild;
+//          joinGraphContext.relationsForProduct.add(rel.getCanonicalName());
+//        }
+//      }
+      if (isAssociative(joinNode)) {
+
       } else {
-        LogicalNode leftChild = joinNode.getLeftChild();
-        LogicalNode rightChild = joinNode.getRightChild();
-        if (leftChild instanceof RelationNode) {
-          RelationNode rel = (RelationNode) leftChild;
-          joinGraphContext.relationsForProduct.add(rel.getCanonicalName());
-        }
-        if (rightChild instanceof RelationNode) {
-          RelationNode rel = (RelationNode) rightChild;
-          joinGraphContext.relationsForProduct.add(rel.getCanonicalName());
-        }
+        joinGraphContext.joinGraph.addJoin(plan, block, joinNode);
       }
       return joinNode;
     }
+  }
+
+
+  /**
+   * Associativity rules
+   *
+   * ==============================================================
+   * Left-Hand Bracketed  | Right-Hand Bracketed  | Equivalence
+   * ==============================================================
+   * (A inner B) inner C  | A inner (B inner C)   | Equivalent
+   * (A left B) inner C   | A left (B inner C)    | Not equivalent
+   * (A right B) inner C  |	A right (B inner C)   | Equivalent
+   * (A full B) inner C   |	A full (B inner C)	  | Not equivalent
+   * (A inner B) left C	  | A inner (B left C)	  | Equivalent
+   * (A left B) left C	  | A left (B left C)	    | Equivalent
+   * (A right B) left C   |	A right (B left C)	  | Equivalent
+   * (A full B) left C    |	A full (B left C)     | Equivalent
+   * (A inner B) right C  |	A inner (B right C)   | Not equivalent
+   * (A left B) right C   |	A left (B right C)    | Not equivalent
+   * (A right B) right C  |	A right (B right C)   | Equivalent
+   * (A full B) right C   |	A full (B right C)    |	Not equivalent
+   * (A inner B) full C   |	A inner (B full C)    |	Not equivalent
+   * (A left B) full C    |	A left (B full C)     |	Not equivalent
+   * (A right B) full C   |	A right (B full C)    |	Equivalent
+   * (A full B) full C    |	A full (B full C)     |	Equivalent
+   * ========================================================
+   */
+  private static boolean isAssociative(JoinNode joinNode) {
+    switch(joinNode.getJoinType()) {
+      case LEFT_ANTI:
+      case RIGHT_ANTI:
+      case LEFT_SEMI:
+      case RIGHT_SEMI:
+      case LEFT_OUTER:
+      case RIGHT_OUTER:
+      case FULL_OUTER:
+        return false;
+      case INNER:
+        // TODO: consider when a join qual involves columns from two or more tables
+    }
+    return true;
   }
 
   public static class JoinOrderStringBuilder extends BasicLogicalPlanVisitor<StringBuilder, LogicalNode> {

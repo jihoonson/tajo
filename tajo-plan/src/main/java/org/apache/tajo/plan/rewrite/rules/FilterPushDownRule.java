@@ -162,53 +162,53 @@ public class FilterPushDownRule extends BasicLogicalPlanVisitor<FilterPushDownCo
     // get the two operands of the join operation as well as the join type
     JoinType joinType = joinNode.getJoinType();
     EvalNode joinQual = joinNode.getJoinQual();
-    if (joinQual != null && LogicalPlanner.isOuterJoin(joinType)) {
-      BinaryEval binaryEval = (BinaryEval) joinQual;
-      // if both are fields
-      if (binaryEval.getLeftExpr().getType() == EvalType.FIELD &&
-          binaryEval.getRightExpr().getType() == EvalType.FIELD) {
-
-        String leftTableName = ((FieldEval) binaryEval.getLeftExpr()).getQualifier();
-        String rightTableName = ((FieldEval) binaryEval.getRightExpr()).getQualifier();
-        List<String> nullSuppliers = Lists.newArrayList();
-        Set<String> leftTableSet = Sets.newHashSet(PlannerUtil.getRelationLineageWithinQueryBlock(plan,
-            joinNode.getLeftChild()));
-        Set<String> rightTableSet = Sets.newHashSet(PlannerUtil.getRelationLineageWithinQueryBlock(plan,
-            joinNode.getRightChild()));
-
-        // some verification
-        if (joinType == JoinType.FULL_OUTER) {
-          nullSuppliers.add(leftTableName);
-          nullSuppliers.add(rightTableName);
-
-          // verify that these null suppliers are indeed in the left and right sets
-          if (!rightTableSet.contains(nullSuppliers.get(0)) && !leftTableSet.contains(nullSuppliers.get(0))) {
-            throw new InvalidQueryException("Incorrect Logical Query Plan with regard to outer join");
-          }
-          if (!rightTableSet.contains(nullSuppliers.get(1)) && !leftTableSet.contains(nullSuppliers.get(1))) {
-            throw new InvalidQueryException("Incorrect Logical Query Plan with regard to outer join");
-          }
-
-        } else if (joinType == JoinType.LEFT_OUTER) {
-          nullSuppliers.add(((RelationNode)joinNode.getRightChild()).getCanonicalName());
-          //verify that this null supplier is indeed in the right sub-tree
-          if (!rightTableSet.contains(nullSuppliers.get(0))) {
-            throw new InvalidQueryException("Incorrect Logical Query Plan with regard to outer join");
-          }
-        } else if (joinType == JoinType.RIGHT_OUTER) {
-          if (((RelationNode)joinNode.getRightChild()).getCanonicalName().equals(rightTableName)) {
-            nullSuppliers.add(leftTableName);
-          } else {
-            nullSuppliers.add(rightTableName);
-          }
-
-          // verify that this null supplier is indeed in the left sub-tree
-          if (!leftTableSet.contains(nullSuppliers.get(0))) {
-            throw new InvalidQueryException("Incorrect Logical Query Plan with regard to outer join");
-          }
-        }
-      }
-    }
+//    if (joinQual != null && LogicalPlanner.isOuterJoin(joinType)) {
+//      BinaryEval binaryEval = (BinaryEval) joinQual;
+//      // if both are fields
+//      if (binaryEval.getLeftExpr().getType() == EvalType.FIELD &&
+//          binaryEval.getRightExpr().getType() == EvalType.FIELD) {
+//
+//        String leftTableName = ((FieldEval) binaryEval.getLeftExpr()).getQualifier();
+//        String rightTableName = ((FieldEval) binaryEval.getRightExpr()).getQualifier();
+//        List<String> nullSuppliers = Lists.newArrayList();
+//        Set<String> leftTableSet = Sets.newHashSet(PlannerUtil.getRelationLineageWithinQueryBlock(plan,
+//            joinNode.getLeftChild()));
+//        Set<String> rightTableSet = Sets.newHashSet(PlannerUtil.getRelationLineageWithinQueryBlock(plan,
+//            joinNode.getRightChild()));
+//
+//        // some verification
+//        if (joinType == JoinType.FULL_OUTER) {
+//          nullSuppliers.add(leftTableName);
+//          nullSuppliers.add(rightTableName);
+//
+//          // verify that these null suppliers are indeed in the left and right sets
+//          if (!rightTableSet.contains(nullSuppliers.get(0)) && !leftTableSet.contains(nullSuppliers.get(0))) {
+//            throw new InvalidQueryException("Incorrect Logical Query Plan with regard to outer join");
+//          }
+//          if (!rightTableSet.contains(nullSuppliers.get(1)) && !leftTableSet.contains(nullSuppliers.get(1))) {
+//            throw new InvalidQueryException("Incorrect Logical Query Plan with regard to outer join");
+//          }
+//
+//        } else if (joinType == JoinType.LEFT_OUTER) {
+//          nullSuppliers.add(((RelationNode)joinNode.getRightChild()).getCanonicalName());
+//          //verify that this null supplier is indeed in the right sub-tree
+//          if (!rightTableSet.contains(nullSuppliers.get(0))) {
+//            throw new InvalidQueryException("Incorrect Logical Query Plan with regard to outer join");
+//          }
+//        } else if (joinType == JoinType.RIGHT_OUTER) {
+//          if (((RelationNode)joinNode.getRightChild()).getCanonicalName().equals(rightTableName)) {
+//            nullSuppliers.add(leftTableName);
+//          } else {
+//            nullSuppliers.add(rightTableName);
+//          }
+//
+//          // verify that this null supplier is indeed in the left sub-tree
+//          if (!leftTableSet.contains(nullSuppliers.get(0))) {
+//            throw new InvalidQueryException("Incorrect Logical Query Plan with regard to outer join");
+//          }
+//        }
+//      }
+//    }
 
     /* non-equi filter should not be push down as a join qualifier until theta join is implemented
      * TODO this code SHOULD be restored after TAJO-742 is resolved. */

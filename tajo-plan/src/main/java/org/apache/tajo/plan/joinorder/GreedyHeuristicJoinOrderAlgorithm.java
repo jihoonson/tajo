@@ -67,8 +67,8 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
           continue;
         }
 
-        LogicalNode lastAssociativeRelation = associativeGroup.get(associativeGroup.size()-1);
-        String leftRelationLineageName = getRelationLineageName(plan, lastAssociativeRelation);
+//        LogicalNode lastAssociativeRelation = associativeGroup.get(associativeGroup.size()-1);
+        String leftRelationLineageName = getRelationLineageName(plan, associativeGroup);
         String rightRelationLineageName = getRelationLineageName(plan, candidate);
 
         JoinEdge joinEdge = joinGraph.getEdge(leftRelationLineageName, rightRelationLineageName);
@@ -116,10 +116,43 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
     return new FoundJoinOrder(joinTree, getCost(joinTree));
   }
 
+  private static String getRelationLineageName(LogicalPlan plan, List<LogicalNode> nodes) throws PlanningException {
+    StringBuilder sb = new StringBuilder();
+    for (LogicalNode node : nodes) {
+      sb.append(getRelationLineageName(plan, node)).append(",");
+    }
+    sb.deleteCharAt(sb.length()-1);
+    return sb.toString();
+  }
+
   private static String getRelationLineageName(LogicalPlan plan, LogicalNode node) throws PlanningException {
     return TUtil.collectionToString(PlannerUtil.getRelationLineageWithinQueryBlock(plan, node), ",");
   }
 
+  /**
+   * Associativity rules
+   *
+   * ==============================================================
+   * Left-Hand Bracketed  | Right-Hand Bracketed  | Equivalence
+   * ==============================================================
+   * (A inner B) inner C  | A inner (B inner C)   | Equivalent
+   * (A left B) inner C   | A left (B inner C)    | Not equivalent
+   * (A right B) inner C  |	A right (B inner C)   | Equivalent
+   * (A full B) inner C   |	A full (B inner C)	  | Not equivalent
+   * (A inner B) left C	  | A inner (B left C)	  | Equivalent
+   * (A left B) left C	  | A left (B left C)	    | Equivalent
+   * (A right B) left C   |	A right (B left C)	  | Equivalent
+   * (A full B) left C    |	A full (B left C)     | Equivalent
+   * (A inner B) right C  |	A inner (B right C)   | Not equivalent
+   * (A left B) right C   |	A left (B right C)    | Not equivalent
+   * (A right B) right C  |	A right (B right C)   | Equivalent
+   * (A full B) right C   |	A full (B right C)    |	Not equivalent
+   * (A inner B) full C   |	A inner (B full C)    |	Not equivalent
+   * (A left B) full C    |	A left (B full C)     |	Not equivalent
+   * (A right B) full C   |	A right (B full C)    |	Equivalent
+   * (A full B) full C    |	A full (B full C)     |	Equivalent
+   * ========================================================
+   */
   private static boolean isAssociative(JoinEdge joinEdge) {
     switch(joinEdge.getJoinType()) {
       case LEFT_ANTI:
@@ -191,7 +224,6 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
           continue;
         }
 
-        Set<String[]> joinEdgePairs = TUtil.newLinkedHashSet();
         JoinEdge foundJoin = findJoin(plan, graph, outer, inner);
         if (foundJoin == null) {
           continue;
@@ -294,9 +326,14 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
 
     if (foundJoinEdge == null) {
 //      foundJoinEdge = new JoinEdge(JoinType.CROSS, outer, inner);
-      JoinNode cross = new JoinNode(plan.newPID());
-      cross.setLeftChild(outer);
-      cross.setRightChild(inner);
+      JoinNode cross = plan.createNode(JoinNode.class);
+      cross.init(JoinType.CROSS, outer, inner);
+      Schema mergedSchema = SchemaUtil.merge(outer.getOutSchema(),
+          inner.getOutSchema());
+      cross.setInSchema(mergedSchema);
+      cross.setOutSchema(mergedSchema);
+      cross.setTargets(PlannerUtil.schemaToTargets(mergedSchema));
+
       foundJoinEdge = new JoinEdge(cross);
     }
 
