@@ -71,7 +71,8 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
         String leftRelationLineageName = getRelationLineageName(plan, associativeGroup);
         String rightRelationLineageName = getRelationLineageName(plan, candidate);
 
-        JoinEdge joinEdge = joinGraph.getEdge(leftRelationLineageName, rightRelationLineageName);
+//        JoinEdge joinEdge = joinGraph.getEdge(leftRelationLineageName, rightRelationLineageName);
+        JoinEdge joinEdge = null;
         // TODO: if the join edge is null?
         if (!isAssociative(joinEdge)) {
           lastNonAssociativePair = joinEdge;
@@ -269,17 +270,17 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
 //    String outerEdgeKey = TUtil.collectionToString(relationNames, ", ");
     String outerEdgeKey = getRelationLineageName(plan, outer);
     for (String innerName : PlannerUtil.getRelationLineageWithinQueryBlock(plan, inner)) {
-      if (graph.hasEdge(outerEdgeKey, innerName)) {
-        JoinEdge existJoinEdge = graph.getEdge(outerEdgeKey, innerName);
-        if (foundJoinEdge == null) {
-//          foundJoinEdge = new JoinEdge(existJoinEdge.getJoinType(), outer, inner,
-//              existJoinEdge.getJoinQual());
-          foundJoinEdge = new JoinEdge(existJoinEdge.getJoinNode());
-        } else {
-          foundJoinEdge.addJoinQual(AlgebraicUtil.createSingletonExprFromCNF(
-              existJoinEdge.getJoinQual()));
-        }
-      }
+//      if (graph.hasEdge(outerEdgeKey, innerName)) {
+//        JoinEdge existJoinEdge = graph.getEdge(outerEdgeKey, innerName);
+//        if (foundJoinEdge == null) {
+////          foundJoinEdge = new JoinEdge(existJoinEdge.getJoinType(), outer, inner,
+////              existJoinEdge.getJoinQual());
+//          foundJoinEdge = new JoinEdge(existJoinEdge.getJoinNode());
+//        } else {
+//          foundJoinEdge.addJoinQual(AlgebraicUtil.createSingletonExprFromCNF(
+//              existJoinEdge.getJoinQual()));
+//        }
+//      }
     }
     if (foundJoinEdge != null) {
       return foundJoinEdge;
@@ -290,17 +291,17 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
 //    outerEdgeKey = TUtil.collectionToString(relationNames, ", ");
     outerEdgeKey = getRelationLineageName(plan, inner);
     for (String outerName : PlannerUtil.getRelationLineageWithinQueryBlock(plan, outer)) {
-      if (graph.hasEdge(outerEdgeKey, outerName)) {
-        JoinEdge existJoinEdge = graph.getEdge(outerEdgeKey, outerName);
-        if (foundJoinEdge == null) {
-//          foundJoinEdge = new JoinEdge(existJoinEdge.getJoinType(), inner, outer,
-//              existJoinEdge.getJoinQual());
-          foundJoinEdge = new JoinEdge(existJoinEdge.getJoinNode());
-        } else {
-          foundJoinEdge.addJoinQual(AlgebraicUtil.createSingletonExprFromCNF(
-              existJoinEdge.getJoinQual()));
-        }
-      }
+//      if (graph.hasEdge(outerEdgeKey, outerName)) {
+//        JoinEdge existJoinEdge = graph.getEdge(outerEdgeKey, outerName);
+//        if (foundJoinEdge == null) {
+////          foundJoinEdge = new JoinEdge(existJoinEdge.getJoinType(), inner, outer,
+////              existJoinEdge.getJoinQual());
+//          foundJoinEdge = new JoinEdge(existJoinEdge.getJoinNode());
+//        } else {
+//          foundJoinEdge.addJoinQual(AlgebraicUtil.createSingletonExprFromCNF(
+//              existJoinEdge.getJoinQual()));
+//        }
+//      }
     }
     if (foundJoinEdge != null) {
       return foundJoinEdge;
@@ -310,17 +311,17 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
       for (String innerName : PlannerUtil.getRelationLineageWithinQueryBlock(plan, inner)) {
 
         // Find all joins between two relations and merge them into one join if possible
-        if (graph.hasEdge(outerName, innerName)) {
-          JoinEdge existJoinEdge = graph.getEdge(outerName, innerName);
-          if (foundJoinEdge == null) {
-//            foundJoinEdge = new JoinEdge(existJoinEdge.getJoinType(), outer, inner,
-//                existJoinEdge.getJoinQual());
-            foundJoinEdge = new JoinEdge(existJoinEdge.getJoinNode());
-          } else {
-            foundJoinEdge.addJoinQual(AlgebraicUtil.createSingletonExprFromCNF(
-                existJoinEdge.getJoinQual()));
-          }
-        }
+//        if (graph.hasEdge(outerName, innerName)) {
+//          JoinEdge existJoinEdge = graph.getEdge(outerName, innerName);
+//          if (foundJoinEdge == null) {
+////            foundJoinEdge = new JoinEdge(existJoinEdge.getJoinType(), outer, inner,
+////                existJoinEdge.getJoinQual());
+//            foundJoinEdge = new JoinEdge(existJoinEdge.getJoinNode());
+//          } else {
+//            foundJoinEdge.addJoinQual(AlgebraicUtil.createSingletonExprFromCNF(
+//                existJoinEdge.getJoinQual()));
+//          }
+//        }
       }
     }
 
