@@ -20,11 +20,13 @@ package org.apache.tajo.plan.joinorder;
 
 import com.google.common.collect.Sets;
 import org.apache.tajo.algebra.JoinType;
+import org.apache.tajo.annotation.Nullable;
 import org.apache.tajo.plan.Target;
 import org.apache.tajo.plan.expr.AlgebraicUtil;
 import org.apache.tajo.plan.expr.EvalNode;
 import org.apache.tajo.plan.logical.JoinNode;
 import org.apache.tajo.plan.logical.LogicalNode;
+import org.apache.tajo.plan.logical.RelationNode;
 import org.apache.tajo.util.TUtil;
 
 import java.util.Collections;
@@ -34,16 +36,24 @@ public class JoinEdge {
 //  private final JoinType joinType;
 //  private final LogicalNode leftRelation;
 //  private final LogicalNode rightRelation;
+  private final JoinType joinType;
   private final Set<EvalNode> joinQual = Sets.newHashSet();
-  private final JoinNode joinNode;
+  private final RelationNode leftRelation;
+  private final RelationNode rightRelation;
 
-  public JoinEdge(JoinNode joinNode) {
-//    this.joinType = joinType;
+  public JoinEdge(JoinType joinType, RelationNode leftRelation, RelationNode rightRelation) {
+    this(joinType, leftRelation, rightRelation, null);
+  }
+
+  public JoinEdge(JoinType joinType, RelationNode leftRelation, RelationNode rightRelation,
+                  @Nullable Set<EvalNode> joinQual) {
+    this.joinType = joinType;
 //    this.leftRelation = leftRelation;
 //    this.rightRelation = rightRelation;
-    this.joinNode = joinNode;
-    if (joinNode.hasJoinQual()) {
-      joinQual.add(joinNode.getJoinQual());
+    this.leftRelation = leftRelation;
+    this.rightRelation = rightRelation;
+    if (joinQual != null) {
+      this.joinQual.addAll(joinQual);
     }
   }
 
@@ -54,15 +64,15 @@ public class JoinEdge {
 //  }
 
   public JoinType getJoinType() {
-    return joinNode.getJoinType();
+    return joinType;
   }
 
   public LogicalNode getLeftRelation() {
-    return joinNode.getLeftChild();
+    return leftRelation;
   }
 
   public LogicalNode getRightRelation() {
-    return joinNode.getRightChild();
+    return rightRelation;
   }
 
   public boolean hasJoinQual() {
@@ -73,22 +83,12 @@ public class JoinEdge {
     this.joinQual.add(joinQual);
   }
 
-  public JoinNode getJoinNode() {
-    if (hasJoinQual()) {
-      joinNode.setJoinQual(AlgebraicUtil.createSingletonExprFromCNF(getJoinQual()));
-    }
-    return joinNode;
-  }
-
   public EvalNode [] getJoinQual() {
     return joinQual.toArray(new EvalNode[joinQual.size()]);
   }
 
-  public Target[] getTargets() {
-    return joinNode.getTargets();
-  }
-
   public String toString() {
-    return getLeftRelation() + " " + getJoinType() + " " + getRightRelation() + " ON " + TUtil.collectionToString(joinQual, ", ");
+    return getLeftRelation() + " " + getJoinType() + " " + getRightRelation() + " ON "
+        + TUtil.collectionToString(joinQual, ", ");
   }
 }

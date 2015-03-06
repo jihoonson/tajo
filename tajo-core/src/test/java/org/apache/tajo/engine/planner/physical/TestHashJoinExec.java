@@ -228,8 +228,8 @@ public class TestHashJoinExec {
                                                        JoinNode joinNode, BinaryPhysicalExec joinExec) throws
       IOException {
 
-    String [] left = PlannerUtil.getRelationLineage(joinNode.getLeftChild());
-    String [] right = PlannerUtil.getRelationLineage(joinNode.getRightChild());
+    String [] left = PlannerUtil.getRelationNamesLineage(joinNode.getLeftChild());
+    String [] right = PlannerUtil.getRelationNamesLineage(joinNode.getRightChild());
 
     boolean leftSmaller;
     if (left[0].equals("default.p")) {

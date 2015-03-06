@@ -28,7 +28,6 @@ import org.apache.tajo.ConfigKey;
 import org.apache.tajo.OverridableConf;
 import org.apache.tajo.SessionVars;
 import org.apache.tajo.algebra.JoinType;
-import org.apache.tajo.annotation.Nullable;
 import org.apache.tajo.catalog.Schema;
 import org.apache.tajo.catalog.SchemaUtil;
 import org.apache.tajo.conf.TajoConf;
@@ -118,9 +117,8 @@ public class LogicalOptimizer {
       JoinGraphContext joinGraphContext = JoinGraphBuilder.buildJoinGraph(plan, block);
 
       // finding join order and restore remain filter order
-//      FoundJoinOrder order = joinOrderAlgorithm.findBestOrder(plan, block,
-//          joinGraphContext.joinGraph, joinGraphContext.relationsForProduct);
-      FoundJoinOrder order = null;
+      FoundJoinOrder order = joinOrderAlgorithm.findBestOrder(plan, block,
+          joinGraphContext.joinGraph);
 
       // replace join node with FoundJoinOrder.
       JoinNode newJoinNode = order.getOrderedJoin();
@@ -184,8 +182,8 @@ public class LogicalOptimizer {
     Map<VertexPair, JoinNode> joinRelations = TUtil.newHashMap(); // set to store the join relationships
 //    Map<String, LogicalNode> pidToLogicalNodeMap = TUtil.newHashMap();
 
-    public void addJoinRelation(JoinNode joinNode) {
-      VertexPair pair = new VertexPair();
+    public void addJoinRelation(JoinNode joinNode, String leftRelationName, String rightRelationName) {
+      VertexPair pair = new VertexPair(leftRelationName, rightRelationName);
       joinRelations.put(pair, joinNode);
 //      pidToLogicalNodeMap.put(pair.getFirst(), joinNode.getLeftChild());
 //      pidToLogicalNodeMap.put(pair.getSecond(), joinNode.getRightChild());
@@ -202,6 +200,7 @@ public class LogicalOptimizer {
 //    Set<String> relationsForProduct = Sets.newHashSet();
     List<AssociativeGroup> associativeGroups = TUtil.newList(); // associative groups must be sorted with their creation order
     AssociativeGroup currentGroup;
+    Map<String, RelationNode> vertexNameToRelation = TUtil.newHashMap();
 
     public JoinGraphContext() {
       newAssociativeGroup();
@@ -266,7 +265,9 @@ public class LogicalOptimizer {
 
       // Find the largest associative group from the left
       if (isAssociative(joinNode)) {
-        joinGraphContext.currentGroup.addJoinRelation(joinNode);
+        joinGraphContext.currentGroup.addJoinRelation(joinNode,
+            getMostRightRelNameWithinLineage(plan, joinNode.getLeftChild()).getCanonicalName(),
+            getMostLeftRelNameWithinLineage(plan, joinNode.getRightChild()).getCanonicalName());
       } else {
         // add join edges
         addJoinEdges(joinGraphContext, plan, block);
@@ -282,41 +283,49 @@ public class LogicalOptimizer {
   private static void addJoinEdges(JoinGraphContext context, LogicalPlan plan, LogicalPlan.QueryBlock block)
       throws PlanningException {
     // Create join edges for every pair of relations within the current group
-    for (JoinNode eachJoin : populateVertexPairsWithinAssociativeGroup(plan, block, context.currentGroup,
-        context.quals)) {
-      context.joinGraph.addJoin(eachJoin);
+    for (Map.Entry<Pair<RelationNode,RelationNode>, JoinNode> eachEntry :
+        populateVertexPairsWithinAssociativeGroup(plan, block, context).entrySet()) {
+      context.joinGraph.addJoin(block, eachEntry.getKey().getFirst(), eachEntry.getKey().getSecond(),
+          eachEntry.getValue());
     }
   }
 
-  private static Set<JoinNode> populateVertexPairsWithinAssociativeGroup(LogicalPlan plan,
-                                                                         LogicalPlan.QueryBlock block,
-                                                                         AssociativeGroup group,
-                                                                         Set<EvalNode> joinConditions)
+  private static Map<Pair<RelationNode,RelationNode>, JoinNode> populateVertexPairsWithinAssociativeGroup(LogicalPlan plan,
+                                                                                                          LogicalPlan.QueryBlock block,
+                                                                                                          JoinGraphContext contex)
       throws PlanningException {
-    // make the unique vertex set
-    Set<String> vertexSet = TUtil.newHashSet();
-    for (JoinNode eachJoin : group.joinRelations.values()) {
+    RelationNode leftRelation, rightRelation;
+    AssociativeGroup group = contex.currentGroup;
+    Map<String, RelationNode> vertexNameToRelation = contex.vertexNameToRelation;
+    Set<EvalNode> joinConditions = contex.quals;
 
-//      vertexSet.add(eachJoin.getLeftChild().getPID());
-//      vertexSet.add(eachJoin.getRightChild().getPID());
+    // make the unique vertex set
+    for (JoinNode eachJoin : group.joinRelations.values()) {
+      leftRelation = getMostRightRelNameWithinLineage(plan, eachJoin.getLeftChild());
+      rightRelation = getMostLeftRelNameWithinLineage(plan, eachJoin.getRightChild());
+      vertexNameToRelation.put(leftRelation.getCanonicalName(), leftRelation);
+      vertexNameToRelation.put(rightRelation.getCanonicalName(), rightRelation);
     }
 
     // get or create join nodes for every vertex pairs
-    Set<JoinNode> populatedJoins = TUtil.newHashSet();
-    VertexPair keyVertexPair = new VertexPair();
-    for (String tail : vertexSet) {
-      for (String head : vertexSet) {
+    Map<Pair<RelationNode,RelationNode>, JoinNode> populatedJoins = TUtil.newHashMap();
+    VertexPair keyVertexPair = new VertexPair();;
+    for (String tail : vertexNameToRelation.keySet()) {
+      for (String head : vertexNameToRelation.keySet()) {
         if (tail == head) continue;
         keyVertexPair.set(tail, head);
+        leftRelation = vertexNameToRelation.get(tail);
+        rightRelation = vertexNameToRelation.get(head);
+        JoinNode joinNode;
         if (group.joinRelations.containsKey(keyVertexPair)) {
-          populatedJoins.add(group.joinRelations.get(keyVertexPair));
+          joinNode = group.joinRelations.get(keyVertexPair);
         } else {
           // If there are no existing join nodes, create a new join node for this relationship
           // Here, join conditions must be referred to decide the join type between INNER and CROSS.
           Set<EvalNode> conditionsForThisJoin = TUtil.newHashSet();
           for (EvalNode cond : joinConditions) {
-            if (EvalTreeUtil.isJoinQual(block, group.getLogicalNode(tail).getOutSchema(),
-                group.getLogicalNode(head).getOutSchema(), cond, false)) {
+            if (EvalTreeUtil.isJoinQual(block, leftRelation.getOutSchema(), rightRelation.getOutSchema(),
+                cond, false)) {
               conditionsForThisJoin.add(cond);
             }
           }
@@ -326,25 +335,26 @@ public class LogicalOptimizer {
           } else {
             joinType = JoinType.INNER;
           }
-          populatedJoins.add(createJoinNode(plan, joinType, group.getLogicalNode(head),
-              group.getLogicalNode(tail), conditionsForThisJoin));
+          joinNode = createJoinNode(plan, joinType, leftRelation, rightRelation, conditionsForThisJoin);
         }
+        populatedJoins.put(new Pair<RelationNode, RelationNode>(leftRelation, rightRelation), joinNode);
       }
     }
 
     return populatedJoins;
   }
 
-  private static String getMostLeftRelNameWithinLineage(LogicalPlan plan, LogicalNode root) throws PlanningException {
-    List<String> names = TUtil.newList(PlannerUtil.getRelationLineageWithinQueryBlock(plan, root));
+  private static RelationNode getMostLeftRelNameWithinLineage(LogicalPlan plan, LogicalNode root) throws PlanningException {
+    List<RelationNode> names = TUtil.newList(PlannerUtil.getRelationLineageWithinQueryBlock(plan, root));
     return names.get(0);
   }
 
-  private static String getMostRightRelNameWithinLineage(LogicalPlan plan, LogicalNode root) throws PlanningException {
-    List<String> names = TUtil.newList(PlannerUtil.getRelationLineageWithinQueryBlock(plan, root));
+  private static RelationNode getMostRightRelNameWithinLineage(LogicalPlan plan, LogicalNode root) throws PlanningException {
+    List<RelationNode> names = TUtil.newList(PlannerUtil.getRelationLineageWithinQueryBlock(plan, root));
     return names.get(names.size()-1);
   }
 
+  // TODO: remove this function, and create join spec
   private static JoinNode createJoinNode(LogicalPlan plan, JoinType joinType, LogicalNode left, LogicalNode right,
                                          Set<EvalNode> joinConditions) {
     JoinNode joinNode = plan.createNode(JoinNode.class);

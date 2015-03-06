@@ -38,18 +38,30 @@ import org.apache.tajo.util.TUtil;
 import java.util.*;
 
 /**
- * The join graph is a directed graph that comprises of logical node pids (vertices) and JoinEdges between them.
- * Every vertex must be unique even though they actually access the same data.
+ * The join graph is a directed graph that comprises of canonical names of relation nodes (vertices)
+ * and JoinEdges between them. Every vertex must be unique even though they actually access the same data.
  * In addition, every vertex pair can have at most one edge.
  *
  * The edge direction represents the join direction.
  * That is, the tail (left) relation can be joinable with the head (right).
  */
-public class JoinGraph extends SimpleUndirectedGraph<Integer, JoinEdge> {
+public class JoinGraph extends SimpleUndirectedGraph<String, JoinEdge> {
 
-  public void addJoin(JoinNode joinNode) throws PlanningException {
-    JoinEdge edge = new JoinEdge(joinNode);
-    addEdge(joinNode.getLeftChild().getPID(), joinNode.getRightChild().getPID(), edge);
+  public void addJoin(LogicalPlan.QueryBlock block, RelationNode leftRelation, RelationNode rightRelation,
+                      JoinNode joinNode) throws PlanningException {
+    JoinEdge edge = new JoinEdge(joinNode.getJoinType(), leftRelation, rightRelation);
+    if (joinNode.hasJoinQual()) {
+      Set<EvalNode> cnf = Sets.newHashSet(AlgebraicUtil.toConjunctiveNormalFormArray(joinNode.getJoinQual()));
+      for (EvalNode singleQual : cnf) {
+        if (EvalTreeUtil.isJoinQual(block,
+            joinNode.getLeftChild().getOutSchema(),
+            joinNode.getRightChild().getOutSchema(),
+            singleQual, true)) {
+          edge.addJoinQual(singleQual);
+        }
+      }
+    }
+    addEdge(leftRelation.getCanonicalName(), rightRelation.getCanonicalName(), edge);
   }
 
 //  private String [] guessRelationsFromJoinQual(LogicalPlan.QueryBlock block, BinaryEval joinCondition)
@@ -118,9 +130,9 @@ public class JoinGraph extends SimpleUndirectedGraph<Integer, JoinEdge> {
 //      JoinEdge edge = new JoinEdge(joinNode);
 //
 //      SortedSet<String> leftNodeRelationName =
-//          new TreeSet<String>(PlannerUtil.getRelationLineageWithinQueryBlock(plan, joinNode.getLeftChild()));
+//          new TreeSet<String>(PlannerUtil.getRelationNamesLineageWithinQueryBlock(plan, joinNode.getLeftChild()));
 //      SortedSet<String> rightNodeRelationName =
-//          new TreeSet<String>(PlannerUtil.getRelationLineageWithinQueryBlock(plan, joinNode.getRightChild()));
+//          new TreeSet<String>(PlannerUtil.getRelationNamesLineageWithinQueryBlock(plan, joinNode.getRightChild()));
 //
 //      addEdge(
 //          TUtil.collectionToString(leftNodeRelationName, ","),
@@ -134,9 +146,9 @@ public class JoinGraph extends SimpleUndirectedGraph<Integer, JoinEdge> {
 //    } else if (joinNode.getJoinType() == JoinType.CROSS) {
 //      JoinEdge edge = new JoinEdge(joinNode);
 //      SortedSet<String> leftNodeRelationName =
-//          new TreeSet<String>(PlannerUtil.getRelationLineageWithinQueryBlock(plan, joinNode.getLeftChild()));
+//          new TreeSet<String>(PlannerUtil.getRelationNamesLineageWithinQueryBlock(plan, joinNode.getLeftChild()));
 //      SortedSet<String> rightNodeRelationName =
-//          new TreeSet<String>(PlannerUtil.getRelationLineageWithinQueryBlock(plan, joinNode.getRightChild()));
+//          new TreeSet<String>(PlannerUtil.getRelationNamesLineageWithinQueryBlock(plan, joinNode.getRightChild()));
 //
 //      addEdge(
 //          TUtil.collectionToString(leftNodeRelationName, ","),
@@ -145,9 +157,9 @@ public class JoinGraph extends SimpleUndirectedGraph<Integer, JoinEdge> {
 //      return new HashSet<EvalNode>();
 //    } else {
 //      Collection<String> leftNodeRelationName =
-//          PlannerUtil.getRelationLineageWithinQueryBlock(plan, joinNode.getLeftChild());
+//          PlannerUtil.getRelationNamesLineageWithinQueryBlock(plan, joinNode.getLeftChild());
 //      Collection<String> rightNodeRelationName =
-//          PlannerUtil.getRelationLineageWithinQueryBlock(plan, joinNode.getRightChild());
+//          PlannerUtil.getRelationNamesLineageWithinQueryBlock(plan, joinNode.getRightChild());
 //      String leftRelationLineageName = TUtil.collectionToString(leftNodeRelationName, ",");
 //      String rightRelationLineageName = TUtil.collectionToString(rightNodeRelationName, ",");
 //      JoinEdge edge = getEdge(leftRelationLineageName, rightRelationLineageName);

@@ -20,7 +20,6 @@ package org.apache.tajo.plan.util;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Sets;
 import org.apache.tajo.OverridableConf;
 import org.apache.tajo.SessionVars;
 import org.apache.tajo.algebra.*;
@@ -97,7 +96,7 @@ public class PlannerUtil {
     boolean noJoin = !plan.getRootBlock().hasNode(NodeType.JOIN);
     boolean singleRelation =
         (plan.getRootBlock().hasNode(NodeType.SCAN) || plan.getRootBlock().hasNode(NodeType.PARTITIONS_SCAN)) &&
-        PlannerUtil.getRelationLineage(plan.getRootBlock().getRoot()).length == 1;
+        PlannerUtil.getRelationNamesLineage(plan.getRootBlock().getRoot()).length == 1;
 
     boolean noComplexComputation = false;
     if (singleRelation) {
@@ -183,7 +182,7 @@ public class PlannerUtil {
    * @param from The LogicalNode to start visiting LogicalNodes.
    * @return an array of all descendant RelationNode of LogicalNode.
    */
-  public static String[] getRelationLineage(LogicalNode from) {
+  public static String[] getRelationNamesLineage(LogicalNode from) {
     LogicalNode[] scans = findAllNodes(from, NodeType.SCAN, NodeType.PARTITIONS_SCAN);
     String[] tableNames = new String[scans.length];
     ScanNode scan;
@@ -195,13 +194,23 @@ public class PlannerUtil {
   }
 
   /**
-   * Get all RelationNodes which are descendant of a given LogicalNode.
+   * Get all names of RelationNodes which are descendant of a given LogicalNode.
    * The finding is restricted within a query block.
    *
    * @param from The LogicalNode to start visiting LogicalNodes.
    * @return an array of all descendant RelationNode of LogicalNode.
    */
-  public static Collection<String> getRelationLineageWithinQueryBlock(LogicalPlan plan, LogicalNode from)
+  public static Collection<String> getRelationNamesLineageWithinQueryBlock(LogicalPlan plan, LogicalNode from)
+      throws PlanningException {
+
+    List<String> names = TUtil.newList();
+    for (RelationNode relationNode : getRelationLineageWithinQueryBlock(plan, from)) {
+      names.add(relationNode.getCanonicalName());
+    }
+    return names;
+  }
+
+  public static Collection<RelationNode> getRelationLineageWithinQueryBlock(LogicalPlan plan, LogicalNode from)
       throws PlanningException {
     RelationFinderVisitor visitor = new RelationFinderVisitor();
     visitor.visit(null, plan, null, from, new Stack<LogicalNode>());
@@ -210,9 +219,9 @@ public class PlannerUtil {
 
   public static class RelationFinderVisitor extends BasicLogicalPlanVisitor<Object, LogicalNode> {
 //    private Set<String> foundRelNameSet = Sets.newHashSet();
-    private List<String> foundRelNameSet = TUtil.newList();
+    private List<RelationNode> foundRelNameSet = TUtil.newList();
 
-    public List<String> getFoundRelations() {
+    public List<RelationNode> getFoundRelations() {
       return foundRelNameSet;
     }
 
@@ -224,7 +233,7 @@ public class PlannerUtil {
       }
 
       if (node instanceof RelationNode) {
-        foundRelNameSet.add(((RelationNode) node).getCanonicalName());
+        foundRelNameSet.add((RelationNode) node);
       }
 
       return node;
