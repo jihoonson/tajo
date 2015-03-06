@@ -18,7 +18,6 @@
 
 package org.apache.tajo.plan.joinorder;
 
-import org.apache.tajo.algebra.JoinType;
 import org.apache.tajo.catalog.Schema;
 import org.apache.tajo.plan.LogicalPlan;
 import org.apache.tajo.plan.util.PlannerUtil;
@@ -28,8 +27,7 @@ import org.apache.tajo.plan.expr.AlgebraicUtil;
 import org.apache.tajo.plan.logical.*;
 import org.apache.tajo.util.TUtil;
 
-import java.util.*;
-
+import java.util.List;
 
 /**
  * This is a greedy heuristic algorithm to find a bushy join tree. This algorithm finds
@@ -39,6 +37,18 @@ import java.util.*;
 public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
   public static double DEFAULT_SELECTION_FACTOR = 0.1;
 
+  private static class OrderedJoin {
+    List<LogicalNode> orderedJoinInputs = TUtil.newList();
+
+    public OrderedJoin() {
+
+    }
+
+    public OrderedJoin(LogicalNode logicalNode) {
+      this.orderedJoinInputs.add(logicalNode);
+    }
+  }
+
   @Override
   public FoundJoinOrder findBestOrder(LogicalPlan plan, LogicalPlan.QueryBlock block, JoinGraph joinGraph)
       throws PlanningException {
@@ -46,73 +56,41 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
     // Setup a remain relation set to be joined
     // Why we should use LinkedHashSet? - it should keep the deterministic for the order of joins.
     // Otherwise, join orders can be different even if join costs are the same to each other.
-    List<LogicalNode> remainRelations = TUtil.newList();
-    for (RelationNode relation : block.getRelations()) {
-      remainRelations.add(relation);
+
+    // to allow that the same relation is used twice or more, we must use List.
+    List<OrderedJoin> remainRelations = TUtil.newList();
+    for (RelationNode relationNode : block.getRelations()) {
+      remainRelations.add(new OrderedJoin(relationNode));
     }
 
     LogicalNode latestJoin;
     JoinEdge bestPair;
-    List<LogicalNode> joinInputs = TUtil.newList();
 
     while (remainRelations.size() > 1) {
-      // Find the best join pair among all joinable operators in candidate set.
-      bestPair = getBestPair(plan, joinGraph, remainRelations, joinInputs);
 
-//      remainRelations.remove(bestPair.getLeftRelation()); // remainRels = remainRels \ Ti
-//      remainRelations.remove(bestPair.getRightRelation()); // remainRels = remainRels \ Tj
-      remainRelations.removeAll(joinInputs);
+      // find the largest associative group from left
+      List<OrderedJoin> associativeGroup = TUtil.newList();
+      JoinEdge lastNonAssociativePair = null;
+      for (OrderedJoin candidate : remainRelations) {
+        if (associativeGroup.size() == 0) {
+          associativeGroup.add(candidate);
+          continue;
+        }
 
-      latestJoin = createJoinNode(plan, bestPair, joinInputs);
-      remainRelations.add(0, latestJoin);
-
-      // all logical nodes should be registered to corresponding blocks
-      block.registerNode(latestJoin);
-    }
-
-    JoinNode joinTree = (JoinNode) remainRelations.iterator().next();
-    // all generated nodes should be registered to corresponding blocks
-    block.registerNode(joinTree);
-    return new FoundJoinOrder(joinTree, getCost(joinTree));
-
-//    // Setup a remain relation set to be joined
-//    // Why we should use LinkedHashSet? - it should keep the deterministic for the order of joins.
-//    // Otherwise, join orders can be different even if join costs are the same to each other.
-//
-//    // to allow that the same relation is used twice or more, we must use List.
-//    List<LogicalNode> remainRelations = TUtil.newList();
-//    for (RelationNode relationNode : block.getRelations()) {
-//      remainRelations.add(relationNode);
-//    }
-//
-//    LogicalNode latestJoin;
-//    JoinEdge bestPair;
-//
-//    while (remainRelations.size() > 1) {
-//
-//      // find the largest associative group from left
-//      List<LogicalNode> associativeGroup = TUtil.newList();
-//      JoinEdge lastNonAssociativePair = null;
-//      for (LogicalNode candidate : remainRelations) {
-//        if (associativeGroup.size() == 0) {
-//          associativeGroup.add(candidate);
-//          continue;
-//        }
-//
-////        LogicalNode lastAssociativeRelation = associativeGroup.get(associativeGroup.size()-1);
+//        LogicalNode lastAssociativeRelation = associativeGroup.get(associativeGroup.size()-1);
 //        String leftRelationLineageName = getRelationLineageName(plan, associativeGroup);
 //        String rightRelationLineageName = getRelationLineageName(plan, candidate);
-//
-////        JoinEdge joinEdge = joinGraph.getEdge(leftRelationLineageName, rightRelationLineageName);
-//        JoinEdge joinEdge = null;
-//        // TODO: if the join edge is null?
-//        if (!isAssociative(joinEdge)) {
-//          lastNonAssociativePair = joinEdge;
-//          break;
-//        }
-//        associativeGroup.add(candidate);
-//      }
-//
+
+//        JoinEdge joinEdge = joinGraph.getEdge(leftRelationLineageName, rightRelationLineageName);
+        JoinEdge joinEdge = findJoin(plan, joinGraph, associativeGroup, candidate);
+        // TODO: if the join edge is null?
+        if (!isAssociative(joinEdge)) {
+          lastNonAssociativePair = joinEdge;
+          break;
+        }
+        associativeGroup.add(candidate);
+      }
+
 //      // if the associative group is found
 //      if (associativeGroup.size() > 1) {
 //        // find the best order within that group
@@ -141,12 +119,12 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
 //        block.registerNode(latestJoin);
 //        remainRelations.add(0, latestJoin);
 //      }
-//    }
-//
-//    JoinNode joinTree = (JoinNode) remainRelations.iterator().next();
-//    // all generated nodes should be registered to corresponding blocks
-//    block.registerNode(joinTree);
-//    return new FoundJoinOrder(joinTree, getCost(joinTree));
+    }
+
+    JoinNode joinTree = (JoinNode) remainRelations.iterator().next();
+    // all generated nodes should be registered to corresponding blocks
+    block.registerNode(joinTree);
+    return new FoundJoinOrder(joinTree, getCost(joinTree));
   }
 
   private static String getRelationLineageName(LogicalPlan plan, List<LogicalNode> nodes) throws PlanningException {
@@ -301,7 +279,7 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
    *
    * @return If there is no join condition between two relation, it returns NULL value.
    */
-  private static JoinEdge findJoin(LogicalPlan plan, JoinGraph graph, LogicalNode outer, LogicalNode inner)
+  private static JoinEdge findJoin(LogicalPlan plan, JoinGraph graph, OrderedJoin outer, OrderedJoin inner)
       throws PlanningException {
     JoinEdge foundJoinEdge = null;
 

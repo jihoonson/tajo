@@ -180,13 +180,21 @@ public class LogicalOptimizer {
    */
   private static class AssociativeGroup {
     Map<VertexPair, JoinNode> joinRelations = TUtil.newHashMap(); // set to store the join relationships
+    Set<EvalNode> joinPredicates = TUtil.newHashSet();
 //    Map<String, LogicalNode> pidToLogicalNodeMap = TUtil.newHashMap();
 
     public void addJoinRelation(JoinNode joinNode, String leftRelationName, String rightRelationName) {
       VertexPair pair = new VertexPair(leftRelationName, rightRelationName);
       joinRelations.put(pair, joinNode);
+      if (joinNode.hasJoinQual()) {
+        joinPredicates.addAll(TUtil.newHashSet(AlgebraicUtil.toConjunctiveNormalFormArray(joinNode.getJoinQual())));
+      }
 //      pidToLogicalNodeMap.put(pair.getFirst(), joinNode.getLeftChild());
 //      pidToLogicalNodeMap.put(pair.getSecond(), joinNode.getRightChild());
+    }
+
+    public boolean isEmpty() {
+      return joinRelations.isEmpty();
     }
 
 //    public LogicalNode getLogicalNode(int pid) {
@@ -237,8 +245,8 @@ public class LogicalOptimizer {
 
     public LogicalNode visitFilter(JoinGraphContext context, LogicalPlan plan, LogicalPlan.QueryBlock block,
                                    SelectionNode node, Stack<LogicalNode> stack) throws PlanningException {
-      super.visitFilter(context, plan, block, node, stack);
       context.quals.addAll(Lists.newArrayList(AlgebraicUtil.toConjunctiveNormalFormArray(node.getQual())));
+      super.visitFilter(context, plan, block, node, stack);
       return node;
     }
 
@@ -269,11 +277,19 @@ public class LogicalOptimizer {
             PlannerUtil.getMostRightRelNameWithinLineage(plan, joinNode.getLeftChild()).getCanonicalName(),
             PlannerUtil.getMostLeftRelNameWithinLineage(plan, joinNode.getRightChild()).getCanonicalName());
       } else {
-        // add join edges
-        addJoinEdges(joinGraphContext, plan, block);
+        if (!joinGraphContext.currentGroup.isEmpty()) {
+          // add join edges
+          addJoinEdges(joinGraphContext, plan, block);
 
-        // update the current group
-        joinGraphContext.newAssociativeGroup();
+          // update the current group
+          joinGraphContext.newAssociativeGroup();
+        }
+
+        joinGraphContext.joinGraph.addJoin(block,
+            PlannerUtil.getMostRightRelNameWithinLineage(plan, joinNode.getLeftChild()),
+            PlannerUtil.getMostLeftRelNameWithinLineage(plan, joinNode.getRightChild()),
+            joinNode);
+
       }
 
       return joinNode;
@@ -297,7 +313,7 @@ public class LogicalOptimizer {
     RelationNode leftRelation, rightRelation;
     AssociativeGroup group = contex.currentGroup;
     Map<String, RelationNode> vertexNameToRelation = contex.vertexNameToRelation;
-    Set<EvalNode> joinConditions = contex.quals;
+    Set<EvalNode> joinConditions = contex.currentGroup.joinPredicates;
 
     // make the unique vertex set
     for (JoinNode eachJoin : group.joinRelations.values()) {
@@ -321,21 +337,24 @@ public class LogicalOptimizer {
           joinNode = group.joinRelations.get(keyVertexPair);
         } else {
           // If there are no existing join nodes, create a new join node for this relationship
-          // Here, join conditions must be referred to decide the join type between INNER and CROSS.
+          joinNode = createJoinNode(plan, JoinType.CROSS, leftRelation, rightRelation);
+        }
+
+        if (joinNode.getJoinType() == JoinType.CROSS || joinNode.getJoinType() == JoinType.INNER) {
+          // join conditions must be referred to decide the join type between INNER and CROSS.
+          // In addition, some join conditions can be moved to the optimal places due to the changed join order
           Set<EvalNode> conditionsForThisJoin = TUtil.newHashSet();
           for (EvalNode cond : joinConditions) {
             if (EvalTreeUtil.isJoinQual(block, leftRelation.getOutSchema(), rightRelation.getOutSchema(),
-                cond, false)) {
+                cond, false) && LogicalPlanner.checkIfBeEvaluatedAtJoin(block, cond, joinNode, false)) {
               conditionsForThisJoin.add(cond);
             }
           }
-          JoinType joinType;
-          if (conditionsForThisJoin.isEmpty()) {
-            joinType = JoinType.CROSS;
-          } else {
-            joinType = JoinType.INNER;
+          if (!conditionsForThisJoin.isEmpty()) {
+            joinNode.setJoinQual(AlgebraicUtil.createSingletonExprFromCNF(
+                conditionsForThisJoin.toArray(new EvalNode[conditionsForThisJoin.size()])));
+            joinNode.setJoinType(JoinType.INNER);
           }
-          joinNode = createJoinNode(plan, joinType, leftRelation, rightRelation, conditionsForThisJoin);
         }
         populatedJoins.put(new Pair<RelationNode, RelationNode>(leftRelation, rightRelation), joinNode);
       }
@@ -345,8 +364,7 @@ public class LogicalOptimizer {
   }
 
   // TODO: remove this function, and create join spec
-  private static JoinNode createJoinNode(LogicalPlan plan, JoinType joinType, LogicalNode left, LogicalNode right,
-                                         Set<EvalNode> joinConditions) {
+  private static JoinNode createJoinNode(LogicalPlan plan, JoinType joinType, LogicalNode left, LogicalNode right) {
     JoinNode joinNode = plan.createNode(JoinNode.class);
 
     if (PlannerUtil.isCommutativeJoin(joinType)) {
@@ -367,10 +385,10 @@ public class LogicalOptimizer {
         joinNode.getRightChild().getOutSchema());
     joinNode.setInSchema(mergedSchema);
     joinNode.setOutSchema(mergedSchema);
-    if (joinConditions != null  && !joinConditions.isEmpty()) {
-      joinNode.setJoinQual(AlgebraicUtil.createSingletonExprFromCNF(
-          joinConditions.toArray(new EvalNode[joinConditions.size()])));
-    }
+//    if (joinConditions != null  && !joinConditions.isEmpty()) {
+//      joinNode.setJoinQual(AlgebraicUtil.createSingletonExprFromCNF(
+//          joinConditions.toArray(new EvalNode[joinConditions.size()])));
+//    }
     joinNode.setTargets(PlannerUtil.schemaToTargets(mergedSchema));
     return joinNode;
   }
