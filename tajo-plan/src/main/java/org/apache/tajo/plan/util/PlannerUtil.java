@@ -217,6 +217,16 @@ public class PlannerUtil {
     return visitor.getFoundRelations();
   }
 
+  public static RelationNode getMostLeftRelNameWithinLineage(LogicalPlan plan, LogicalNode root) throws PlanningException {
+    List<RelationNode> names = TUtil.newList(PlannerUtil.getRelationLineageWithinQueryBlock(plan, root));
+    return names.get(0);
+  }
+
+  public static RelationNode getMostRightRelNameWithinLineage(LogicalPlan plan, LogicalNode root) throws PlanningException {
+    List<RelationNode> names = TUtil.newList(PlannerUtil.getRelationLineageWithinQueryBlock(plan, root));
+    return names.get(names.size()-1);
+  }
+
   public static class RelationFinderVisitor extends BasicLogicalPlanVisitor<Object, LogicalNode> {
 //    private Set<String> foundRelNameSet = Sets.newHashSet();
     private List<RelationNode> foundRelNameSet = TUtil.newList();

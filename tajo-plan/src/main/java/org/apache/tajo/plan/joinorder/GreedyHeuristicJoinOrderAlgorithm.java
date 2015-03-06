@@ -53,16 +53,18 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
 
     LogicalNode latestJoin;
     JoinEdge bestPair;
+    List<LogicalNode> joinInputs = TUtil.newList();
 
     while (remainRelations.size() > 1) {
       // Find the best join pair among all joinable operators in candidate set.
-      bestPair = getBestPair(plan, joinGraph, remainRelations);
+      bestPair = getBestPair(plan, joinGraph, remainRelations, joinInputs);
 
-      remainRelations.remove(bestPair.getLeftRelation()); // remainRels = remainRels \ Ti
-      remainRelations.remove(bestPair.getRightRelation()); // remainRels = remainRels \ Tj
+//      remainRelations.remove(bestPair.getLeftRelation()); // remainRels = remainRels \ Ti
+//      remainRelations.remove(bestPair.getRightRelation()); // remainRels = remainRels \ Tj
+      remainRelations.removeAll(joinInputs);
 
-      latestJoin = createJoinNode(plan, bestPair);
-      remainRelations.add(latestJoin);
+      latestJoin = createJoinNode(plan, bestPair, joinInputs);
+      remainRelations.add(0, latestJoin);
 
       // all logical nodes should be registered to corresponding blocks
       block.registerNode(latestJoin);
@@ -200,9 +202,11 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
     return true;
   }
 
-  private static JoinNode createJoinNode(LogicalPlan plan, JoinEdge joinEdge) {
-    LogicalNode left = joinEdge.getLeftRelation();
-    LogicalNode right = joinEdge.getRightRelation();
+  private static JoinNode createJoinNode(LogicalPlan plan, JoinEdge joinEdge, List<LogicalNode> actualChilds) {
+//    LogicalNode left = joinEdge.getLeftRelation();
+//    LogicalNode right = joinEdge.getRightRelation();
+    LogicalNode left = actualChilds.get(0);
+    LogicalNode right = actualChilds.get(1);
 
     JoinNode joinNode = plan.createNode(JoinNode.class);
 
@@ -241,7 +245,8 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
    * @return The best join pair among them
    * @throws PlanningException
    */
-  private JoinEdge getBestPair(LogicalPlan plan, JoinGraph graph, List<LogicalNode> candidateSet)
+  private JoinEdge getBestPair(LogicalPlan plan, JoinGraph graph, List<LogicalNode> candidateSet,
+                               List<LogicalNode> willBeRemoved)
       throws PlanningException {
     double minCost = Double.MAX_VALUE;
     JoinEdge bestJoin = null;
@@ -264,6 +269,9 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
         if (cost < minCost) {
           minCost = cost;
           bestJoin = foundJoin;
+          willBeRemoved.clear();
+          willBeRemoved.add(outer);
+          willBeRemoved.add(inner);
         }
 
         // Keep the min cost join
@@ -273,6 +281,9 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
           if (cost < minNonCrossJoinCost) {
             minNonCrossJoinCost = cost;
             bestNonCrossJoin = foundJoin;
+            willBeRemoved.clear();
+            willBeRemoved.add(outer);
+            willBeRemoved.add(inner);
           }
         }
       }
@@ -294,37 +305,30 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
       throws PlanningException {
     JoinEdge foundJoinEdge = null;
 
-    // If outer is outer join, make edge key using all relation names in outer.
-//    Collection<String> relationNames =
-//        PlannerUtil.getRelationNamesLineageWithinQueryBlock(plan, outer);
-//    String outerEdgeKey = TUtil.collectionToString(relationNames, ", ");
-    String outerEdgeKey = getRelationLineageName(plan, outer);
-    for (String innerName : PlannerUtil.getRelationNamesLineageWithinQueryBlock(plan, inner)) {
-      if (graph.hasEdge(outerEdgeKey, innerName)) {
-        JoinEdge existJoinEdge = graph.getEdge(outerEdgeKey, innerName);
-        if (foundJoinEdge == null) {
-//          foundJoinEdge = new JoinEdge(existJoinEdge.getJoinType(), outer, inner,
-//              existJoinEdge.getJoinQual());
-          foundJoinEdge = new JoinEdge(existJoinEdge.getJoinNode());
-        } else {
-          foundJoinEdge.addJoinQual(AlgebraicUtil.createSingletonExprFromCNF(
-              existJoinEdge.getJoinQual()));
-        }
-      }
+    RelationNode leftRelation, rightRelation;
+    if (outer instanceof RelationNode) {
+      leftRelation = (RelationNode) outer;
+    } else {
+      leftRelation = PlannerUtil.getMostRightRelNameWithinLineage(plan, outer);
     }
-    if (foundJoinEdge != null) {
-      return foundJoinEdge;
+    if (inner instanceof RelationNode) {
+      rightRelation = (RelationNode) inner;
+    } else {
+      rightRelation = PlannerUtil.getMostLeftRelNameWithinLineage(plan, inner);
     }
 
-//    relationNames =
-//        PlannerUtil.getRelationNamesLineageWithinQueryBlock(plan, inner);
-//    outerEdgeKey = TUtil.collectionToString(relationNames, ", ");
-    outerEdgeKey = getRelationLineageName(plan, inner);
-    for (String outerName : PlannerUtil.getRelationNamesLineageWithinQueryBlock(plan, outer)) {
-//      if (graph.hasEdge(outerEdgeKey, outerName)) {
-//        JoinEdge existJoinEdge = graph.getEdge(outerEdgeKey, outerName);
+    return graph.getEdge(leftRelation.getCanonicalName(), rightRelation.getCanonicalName());
+
+//    // If outer is outer join, make edge key using all relation names in outer.
+////    Collection<String> relationNames =
+////        PlannerUtil.getRelationNamesLineageWithinQueryBlock(plan, outer);
+////    String outerEdgeKey = TUtil.collectionToString(relationNames, ", ");
+//    String outerEdgeKey = getRelationLineageName(plan, outer);
+//    for (String innerName : PlannerUtil.getRelationNamesLineageWithinQueryBlock(plan, inner)) {
+//      if (graph.hasEdge(outerEdgeKey, innerName)) {
+//        JoinEdge existJoinEdge = graph.getEdge(outerEdgeKey, innerName);
 //        if (foundJoinEdge == null) {
-////          foundJoinEdge = new JoinEdge(existJoinEdge.getJoinType(), inner, outer,
+////          foundJoinEdge = new JoinEdge(existJoinEdge.getJoinType(), outer, inner,
 ////              existJoinEdge.getJoinQual());
 //          foundJoinEdge = new JoinEdge(existJoinEdge.getJoinNode());
 //        } else {
@@ -332,43 +336,64 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
 //              existJoinEdge.getJoinQual()));
 //        }
 //      }
-    }
-    if (foundJoinEdge != null) {
-      return foundJoinEdge;
-    }
+//    }
+//    if (foundJoinEdge != null) {
+//      return foundJoinEdge;
+//    }
+//
+////    relationNames =
+////        PlannerUtil.getRelationNamesLineageWithinQueryBlock(plan, inner);
+////    outerEdgeKey = TUtil.collectionToString(relationNames, ", ");
+//    outerEdgeKey = getRelationLineageName(plan, inner);
+//    for (String outerName : PlannerUtil.getRelationNamesLineageWithinQueryBlock(plan, outer)) {
+////      if (graph.hasEdge(outerEdgeKey, outerName)) {
+////        JoinEdge existJoinEdge = graph.getEdge(outerEdgeKey, outerName);
+////        if (foundJoinEdge == null) {
+//////          foundJoinEdge = new JoinEdge(existJoinEdge.getJoinType(), inner, outer,
+//////              existJoinEdge.getJoinQual());
+////          foundJoinEdge = new JoinEdge(existJoinEdge.getJoinNode());
+////        } else {
+////          foundJoinEdge.addJoinQual(AlgebraicUtil.createSingletonExprFromCNF(
+////              existJoinEdge.getJoinQual()));
+////        }
+////      }
+//    }
+//    if (foundJoinEdge != null) {
+//      return foundJoinEdge;
+//    }
+//
+//    for (String outerName : PlannerUtil.getRelationNamesLineageWithinQueryBlock(plan, outer)) {
+//      for (String innerName : PlannerUtil.getRelationNamesLineageWithinQueryBlock(plan, inner)) {
+//
+//        // Find all joins between two relations and merge them into one join if possible
+////        if (graph.hasEdge(outerName, innerName)) {
+////          JoinEdge existJoinEdge = graph.getEdge(outerName, innerName);
+////          if (foundJoinEdge == null) {
+//////            foundJoinEdge = new JoinEdge(existJoinEdge.getJoinType(), outer, inner,
+//////                existJoinEdge.getJoinQual());
+////            foundJoinEdge = new JoinEdge(existJoinEdge.getJoinNode());
+////          } else {
+////            foundJoinEdge.addJoinQual(AlgebraicUtil.createSingletonExprFromCNF(
+////                existJoinEdge.getJoinQual()));
+////          }
+////        }
+//      }
+//    }
+//
+//    if (foundJoinEdge == null) {
+////      foundJoinEdge = new JoinEdge(JoinType.CROSS, outer, inner);
+//      JoinNode cross = plan.createNode(JoinNode.class);
+//      cross.init(JoinType.CROSS, outer, inner);
+//      Schema mergedSchema = SchemaUtil.merge(outer.getOutSchema(),
+//          inner.getOutSchema());
+//      cross.setInSchema(mergedSchema);
+//      cross.setOutSchema(mergedSchema);
+//      cross.setTargets(PlannerUtil.schemaToTargets(mergedSchema));
+//
+////      foundJoinEdge = new JoinEdge(cross);
+//    }
 
-    for (String outerName : PlannerUtil.getRelationNamesLineageWithinQueryBlock(plan, outer)) {
-      for (String innerName : PlannerUtil.getRelationNamesLineageWithinQueryBlock(plan, inner)) {
-
-        // Find all joins between two relations and merge them into one join if possible
-//        if (graph.hasEdge(outerName, innerName)) {
-//          JoinEdge existJoinEdge = graph.getEdge(outerName, innerName);
-//          if (foundJoinEdge == null) {
-////            foundJoinEdge = new JoinEdge(existJoinEdge.getJoinType(), outer, inner,
-////                existJoinEdge.getJoinQual());
-//            foundJoinEdge = new JoinEdge(existJoinEdge.getJoinNode());
-//          } else {
-//            foundJoinEdge.addJoinQual(AlgebraicUtil.createSingletonExprFromCNF(
-//                existJoinEdge.getJoinQual()));
-//          }
-//        }
-      }
-    }
-
-    if (foundJoinEdge == null) {
-//      foundJoinEdge = new JoinEdge(JoinType.CROSS, outer, inner);
-      JoinNode cross = plan.createNode(JoinNode.class);
-      cross.init(JoinType.CROSS, outer, inner);
-      Schema mergedSchema = SchemaUtil.merge(outer.getOutSchema(),
-          inner.getOutSchema());
-      cross.setInSchema(mergedSchema);
-      cross.setOutSchema(mergedSchema);
-      cross.setTargets(PlannerUtil.schemaToTargets(mergedSchema));
-
-//      foundJoinEdge = new JoinEdge(cross);
-    }
-
-    return foundJoinEdge;
+//    return foundJoinEdge;
   }
 
   /**

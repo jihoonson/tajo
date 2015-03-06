@@ -266,8 +266,8 @@ public class LogicalOptimizer {
       // Find the largest associative group from the left
       if (isAssociative(joinNode)) {
         joinGraphContext.currentGroup.addJoinRelation(joinNode,
-            getMostRightRelNameWithinLineage(plan, joinNode.getLeftChild()).getCanonicalName(),
-            getMostLeftRelNameWithinLineage(plan, joinNode.getRightChild()).getCanonicalName());
+            PlannerUtil.getMostRightRelNameWithinLineage(plan, joinNode.getLeftChild()).getCanonicalName(),
+            PlannerUtil.getMostLeftRelNameWithinLineage(plan, joinNode.getRightChild()).getCanonicalName());
       } else {
         // add join edges
         addJoinEdges(joinGraphContext, plan, block);
@@ -301,8 +301,8 @@ public class LogicalOptimizer {
 
     // make the unique vertex set
     for (JoinNode eachJoin : group.joinRelations.values()) {
-      leftRelation = getMostRightRelNameWithinLineage(plan, eachJoin.getLeftChild());
-      rightRelation = getMostLeftRelNameWithinLineage(plan, eachJoin.getRightChild());
+      leftRelation = PlannerUtil.getMostRightRelNameWithinLineage(plan, eachJoin.getLeftChild());
+      rightRelation = PlannerUtil.getMostLeftRelNameWithinLineage(plan, eachJoin.getRightChild());
       vertexNameToRelation.put(leftRelation.getCanonicalName(), leftRelation);
       vertexNameToRelation.put(rightRelation.getCanonicalName(), rightRelation);
     }
@@ -342,16 +342,6 @@ public class LogicalOptimizer {
     }
 
     return populatedJoins;
-  }
-
-  private static RelationNode getMostLeftRelNameWithinLineage(LogicalPlan plan, LogicalNode root) throws PlanningException {
-    List<RelationNode> names = TUtil.newList(PlannerUtil.getRelationLineageWithinQueryBlock(plan, root));
-    return names.get(0);
-  }
-
-  private static RelationNode getMostRightRelNameWithinLineage(LogicalPlan plan, LogicalNode root) throws PlanningException {
-    List<RelationNode> names = TUtil.newList(PlannerUtil.getRelationLineageWithinQueryBlock(plan, root));
-    return names.get(names.size()-1);
   }
 
   // TODO: remove this function, and create join spec
