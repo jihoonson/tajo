@@ -30,14 +30,11 @@ import org.apache.tajo.SessionVars;
 import org.apache.tajo.algebra.JoinType;
 import org.apache.tajo.conf.TajoConf;
 import org.apache.tajo.conf.TajoConf.ConfVars;
+import org.apache.tajo.plan.joinorder.*;
 import org.apache.tajo.util.ReflectionUtil;
 import org.apache.tajo.util.graph.DirectedGraphCursor;
 import org.apache.tajo.plan.expr.AlgebraicUtil;
 import org.apache.tajo.plan.expr.EvalNode;
-import org.apache.tajo.plan.joinorder.FoundJoinOrder;
-import org.apache.tajo.plan.joinorder.GreedyHeuristicJoinOrderAlgorithm;
-import org.apache.tajo.plan.joinorder.JoinGraph;
-import org.apache.tajo.plan.joinorder.JoinOrderAlgorithm;
 import org.apache.tajo.plan.logical.*;
 import org.apache.tajo.plan.rewrite.*;
 import org.apache.tajo.plan.util.PlannerUtil;
@@ -155,60 +152,89 @@ public class LogicalOptimizer {
     }
   }
 
-  private static class JoinGraphContext {
-    JoinGraph joinGraph = new JoinGraph();
-    Set<EvalNode> quals = Sets.newHashSet();
-    Set<String> relationsForProduct = Sets.newHashSet();
+  private static class JoinTreeContext {
+    private AssociativeGroup currentAssociativeGroup;
+
+    public JoinTreeContext() {
+      currentAssociativeGroup = new AssociativeGroup();
+    }
   }
 
-  private static class JoinGraphBuilder extends BasicLogicalPlanVisitor<JoinGraphContext, LogicalNode> {
-    private final static JoinGraphBuilder instance;
+  private static class JoinTreeBuilder extends BasicLogicalPlanVisitor<JoinTreeContext, LogicalNode> {
+    private final static JoinTreeBuilder instance;
 
     static {
-      instance = new JoinGraphBuilder();
+      instance = new JoinTreeBuilder();
     }
 
-    /**
-     * This is based on the assumtion that all join and filter conditions are placed on the right join and
-     * scan operators. In other words, filter push down must be performed before this method.
-     * Otherwise, this method may build incorrectly a join graph.
-     */
-    public static JoinGraphContext buildJoinGraph(LogicalPlan plan, LogicalPlan.QueryBlock block)
+    public static JoinTreeContext buildJoinTree(LogicalPlan plan, LogicalPlan.QueryBlock block)
         throws PlanningException {
-      JoinGraphContext joinGraphContext = new JoinGraphContext();
-      instance.visit(joinGraphContext, plan, block);
-      return joinGraphContext;
-    }
-
-    public LogicalNode visitFilter(JoinGraphContext context, LogicalPlan plan, LogicalPlan.QueryBlock block,
-                                   SelectionNode node, Stack<LogicalNode> stack) throws PlanningException {
-      super.visitFilter(context, plan, block, node, stack);
-      context.quals.addAll(Lists.newArrayList(AlgebraicUtil.toConjunctiveNormalFormArray(node.getQual())));
-      return node;
+      JoinTreeContext joinTreeContext = new JoinTreeContext();
+      instance.visit(joinTreeContext, plan, block);
+      return joinTreeContext;
     }
 
     @Override
-    public LogicalNode visitJoin(JoinGraphContext joinGraphContext, LogicalPlan plan, LogicalPlan.QueryBlock block,
-                                 JoinNode joinNode, Stack<LogicalNode> stack)
-        throws PlanningException {
-      super.visitJoin(joinGraphContext, plan, block, joinNode, stack);
-      if (joinNode.hasJoinQual()) {
-        joinGraphContext.joinGraph.addJoin(plan, block, joinNode);
-      } else {
-        LogicalNode leftChild = joinNode.getLeftChild();
-        LogicalNode rightChild = joinNode.getRightChild();
-        if (leftChild instanceof RelationNode) {
-          RelationNode rel = (RelationNode) leftChild;
-          joinGraphContext.relationsForProduct.add(rel.getCanonicalName());
-        }
-        if (rightChild instanceof RelationNode) {
-          RelationNode rel = (RelationNode) rightChild;
-          joinGraphContext.relationsForProduct.add(rel.getCanonicalName());
-        }
-      }
-      return joinNode;
+    public LogicalNode visitJoin(JoinTreeContext context, LogicalPlan plan, LogicalPlan.QueryBlock block,
+                                 JoinNode joinNode, Stack<LogicalNode> stack) throws PlanningException {
+      super.visitJoin(context, plan, block, joinNode, stack);
     }
   }
+
+//  private static class JoinGraphContext {
+//    JoinGraph joinGraph = new JoinGraph();
+//    Set<EvalNode> quals = Sets.newHashSet();
+//    Set<String> relationsForProduct = Sets.newHashSet();
+//  }
+//
+//  private static class JoinGraphBuilder extends BasicLogicalPlanVisitor<JoinGraphContext, LogicalNode> {
+//    private final static JoinGraphBuilder instance;
+//
+//    static {
+//      instance = new JoinGraphBuilder();
+//    }
+//
+//    /**
+//     * This is based on the assumtion that all join and filter conditions are placed on the right join and
+//     * scan operators. In other words, filter push down must be performed before this method.
+//     * Otherwise, this method may build incorrectly a join graph.
+//     */
+//    public static JoinGraphContext buildJoinGraph(LogicalPlan plan, LogicalPlan.QueryBlock block)
+//        throws PlanningException {
+//      JoinGraphContext joinGraphContext = new JoinGraphContext();
+//      instance.visit(joinGraphContext, plan, block);
+//      return joinGraphContext;
+//    }
+//
+//    public LogicalNode visitFilter(JoinGraphContext context, LogicalPlan plan, LogicalPlan.QueryBlock block,
+//                                   SelectionNode node, Stack<LogicalNode> stack) throws PlanningException {
+//      super.visitFilter(context, plan, block, node, stack);
+//      context.quals.addAll(Lists.newArrayList(AlgebraicUtil.toConjunctiveNormalFormArray(node.getQual())));
+//      return node;
+//    }
+//
+//    @Override
+//    public LogicalNode visitJoin(JoinGraphContext joinGraphContext, LogicalPlan plan, LogicalPlan.QueryBlock block,
+//                                 JoinNode joinNode, Stack<LogicalNode> stack)
+//        throws PlanningException {
+//      super.visitJoin(joinGraphContext, plan, block, joinNode, stack);
+//      if (joinNode.hasJoinQual()) {
+//        joinGraphContext.joinGraph.addJoin(plan, block, joinNode);
+//      } else {
+//        LogicalNode leftChild = joinNode.getLeftChild();
+//        LogicalNode rightChild = joinNode.getRightChild();
+//        if (leftChild instanceof RelationNode) {
+//          RelationNode rel = (RelationNode) leftChild;
+//          joinGraphContext.relationsForProduct.add(rel.getCanonicalName());
+//        }
+//        if (rightChild instanceof RelationNode) {
+//          RelationNode rel = (RelationNode) rightChild;
+//          joinGraphContext.relationsForProduct.add(rel.getCanonicalName());
+//        }
+//      }
+//      return joinNode;
+//    }
+//  }
 
   public static class JoinOrderStringBuilder extends BasicLogicalPlanVisitor<StringBuilder, LogicalNode> {
     private static final JoinOrderStringBuilder instance;
