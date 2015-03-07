@@ -241,16 +241,16 @@ public class FilterPushDownRule extends BasicLogicalPlanVisitor<FilterPushDownCo
       // That filters are processed by SELECTION NODE.
       Set<String> nullSupplyingTableNameSet;
       if (joinNode.getJoinType() == JoinType.RIGHT_OUTER) {
-        nullSupplyingTableNameSet = TUtil.newHashSet(PlannerUtil.getRelationLineage(joinNode.getLeftChild()));
+        nullSupplyingTableNameSet = TUtil.newHashSet(PlannerUtil.getRelationNamesLineage(joinNode.getLeftChild()));
       } else {
-        nullSupplyingTableNameSet = TUtil.newHashSet(PlannerUtil.getRelationLineage(joinNode.getRightChild()));
+        nullSupplyingTableNameSet = TUtil.newHashSet(PlannerUtil.getRelationNamesLineage(joinNode.getRightChild()));
       }
 
       Set<String> preservedTableNameSet;
       if (joinNode.getJoinType() == JoinType.RIGHT_OUTER) {
-        preservedTableNameSet = TUtil.newHashSet(PlannerUtil.getRelationLineage(joinNode.getRightChild()));
+        preservedTableNameSet = TUtil.newHashSet(PlannerUtil.getRelationNamesLineage(joinNode.getRightChild()));
       } else {
-        preservedTableNameSet = TUtil.newHashSet(PlannerUtil.getRelationLineage(joinNode.getLeftChild()));
+        preservedTableNameSet = TUtil.newHashSet(PlannerUtil.getRelationNamesLineage(joinNode.getLeftChild()));
       }
 
       List<EvalNode> removedFromFilter = new ArrayList<EvalNode>();

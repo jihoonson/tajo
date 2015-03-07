@@ -18,6 +18,10 @@ public class AssociativeGroup extends JoinVertex {
     this.predicates.add(predicate);
   }
 
+  public void addPredicates(Set<EvalNode> predicates) {
+    this.predicates.addAll(predicates);
+  }
+
   @Override
   public String toString() {
     StringBuilder sb = new StringBuilder();

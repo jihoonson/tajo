@@ -30,8 +30,10 @@ import org.apache.tajo.SessionVars;
 import org.apache.tajo.algebra.JoinType;
 import org.apache.tajo.conf.TajoConf;
 import org.apache.tajo.conf.TajoConf.ConfVars;
+import org.apache.tajo.plan.expr.EvalTreeUtil;
 import org.apache.tajo.plan.joinorder.*;
 import org.apache.tajo.util.ReflectionUtil;
+import org.apache.tajo.util.TUtil;
 import org.apache.tajo.util.graph.DirectedGraphCursor;
 import org.apache.tajo.plan.expr.AlgebraicUtil;
 import org.apache.tajo.plan.expr.EvalNode;
@@ -154,6 +156,7 @@ public class LogicalOptimizer {
 
   private static class JoinTreeContext {
     private AssociativeGroup currentAssociativeGroup;
+    private Set<EvalNode> unevaluatedPredicates = TUtil.newHashSet();
 
     public JoinTreeContext() {
       currentAssociativeGroup = new AssociativeGroup();
@@ -175,9 +178,51 @@ public class LogicalOptimizer {
     }
 
     @Override
+    public LogicalNode visitFilter(JoinTreeContext context, LogicalPlan plan, LogicalPlan.QueryBlock block,
+                                   SelectionNode selectionNode, Stack<LogicalNode> stack) throws PlanningException {
+      context.unevaluatedPredicates.addAll(
+          TUtil.newList(AlgebraicUtil.toConjunctiveNormalFormArray(selectionNode.getQual())));
+      super.visitFilter(context, plan, block, selectionNode, stack);
+      return selectionNode;
+    }
+
+    @Override
     public LogicalNode visitJoin(JoinTreeContext context, LogicalPlan plan, LogicalPlan.QueryBlock block,
                                  JoinNode joinNode, Stack<LogicalNode> stack) throws PlanningException {
       super.visitJoin(context, plan, block, joinNode, stack);
+
+      if (PlannerUtil.isAssociativeJoin(joinNode)) {
+        // find input relations of the join
+        RelationNode left = PlannerUtil.getMostRightRelNameWithinLineage(plan, joinNode.getLeftChild());
+        RelationNode right = PlannerUtil.getMostLeftRelNameWithinLineage(plan, joinNode.getRightChild());
+
+        // add both relations to the associative group
+        if (PlannerUtil.isCommutativeJoin(joinNode.getJoinType())) {
+          // TODO: is it valid?
+          context.currentAssociativeGroup.addVertex(new RelationVertex(left));
+        }
+        context.currentAssociativeGroup.addVertex(new RelationVertex(right));
+
+        // add predicates between two relations
+        Set<EvalNode> conditionsForThisJoin = TUtil.newHashSet();
+        if (joinNode.hasJoinQual()) {
+          conditionsForThisJoin.addAll(
+              TUtil.newList(AlgebraicUtil.toConjunctiveNormalFormArray(joinNode.getJoinQual())));
+        }
+        for (EvalNode cond : context.unevaluatedPredicates) {
+          if (EvalTreeUtil.isJoinQual(block, left.getOutSchema(), right.getOutSchema(),
+              cond, false) && LogicalPlanner.checkIfBeEvaluatedAtJoin(block, cond, joinNode, false)) {
+            conditionsForThisJoin.add(cond);
+          }
+        }
+        if (!conditionsForThisJoin.isEmpty()) {
+          context.currentAssociativeGroup.addPredicates(conditionsForThisJoin);
+        }
+      } else {
+        // TODO: 
+      }
+
+      return joinNode;
     }
   }
 

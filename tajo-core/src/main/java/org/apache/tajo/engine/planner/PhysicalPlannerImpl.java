@@ -259,7 +259,7 @@ public class PhysicalPlannerImpl implements PhysicalPlanner {
   @VisibleForTesting
   public boolean checkIfInMemoryInnerJoinIsPossible(TaskAttemptContext context, LogicalNode node, boolean left)
       throws IOException {
-    String [] lineage = PlannerUtil.getRelationLineage(node);
+    String [] lineage = PlannerUtil.getRelationNamesLineage(node);
     long volume = estimateSizeRecursive(context, lineage);
     boolean inMemoryInnerJoinFlag = false;
 
@@ -385,8 +385,8 @@ public class PhysicalPlannerImpl implements PhysicalPlanner {
   @VisibleForTesting
   public PhysicalExec [] switchJoinSidesIfNecessary(TaskAttemptContext context, JoinNode plan,
                                                      PhysicalExec left, PhysicalExec right) throws IOException {
-    String [] leftLineage = PlannerUtil.getRelationLineage(plan.getLeftChild());
-    String [] rightLineage = PlannerUtil.getRelationLineage(plan.getRightChild());
+    String [] leftLineage = PlannerUtil.getRelationNamesLineage(plan.getLeftChild());
+    String [] rightLineage = PlannerUtil.getRelationNamesLineage(plan.getRightChild());
     long leftSize = estimateSizeRecursive(context, leftLineage);
     long rightSize = estimateSizeRecursive(context, rightLineage);
 
@@ -480,7 +480,7 @@ public class PhysicalPlannerImpl implements PhysicalPlanner {
 
   private PhysicalExec createBestLeftOuterJoinPlan(TaskAttemptContext context, JoinNode plan,
                                                    PhysicalExec leftExec, PhysicalExec rightExec) throws IOException {
-    String [] rightLineage = PlannerUtil.getRelationLineage(plan.getRightChild());
+    String [] rightLineage = PlannerUtil.getRelationNamesLineage(plan.getRightChild());
     long rightTableVolume = estimateSizeRecursive(context, rightLineage);
     boolean hashJoin;
 
@@ -508,7 +508,7 @@ public class PhysicalPlannerImpl implements PhysicalPlanner {
                                                PhysicalExec leftExec, PhysicalExec rightExec) throws IOException {
     //if the left operand is small enough => implement it as a left outer hash join with exchanged operators (note:
     // blocking, but merge join is blocking as well)
-    String [] outerLineage4 = PlannerUtil.getRelationLineage(plan.getLeftChild());
+    String [] outerLineage4 = PlannerUtil.getRelationNamesLineage(plan.getLeftChild());
     long leftTableVolume = estimateSizeRecursive(context, outerLineage4);
     boolean hashJoin;
 
@@ -598,8 +598,8 @@ public class PhysicalPlannerImpl implements PhysicalPlanner {
   private HashFullOuterJoinExec createFullOuterHashJoinPlan(TaskAttemptContext context, JoinNode plan,
                                                             PhysicalExec leftExec, PhysicalExec rightExec)
       throws IOException {
-    String [] leftLineage = PlannerUtil.getRelationLineage(plan.getLeftChild());
-    String [] rightLineage = PlannerUtil.getRelationLineage(plan.getRightChild());
+    String [] leftLineage = PlannerUtil.getRelationNamesLineage(plan.getLeftChild());
+    String [] rightLineage = PlannerUtil.getRelationNamesLineage(plan.getRightChild());
     long outerSize2 = estimateSizeRecursive(context, leftLineage);
     long innerSize2 = estimateSizeRecursive(context, rightLineage);
 
@@ -643,8 +643,8 @@ public class PhysicalPlannerImpl implements PhysicalPlanner {
 
   private PhysicalExec createBestFullOuterJoinPlan(TaskAttemptContext context, JoinNode plan,
                                                    PhysicalExec leftExec, PhysicalExec rightExec) throws IOException {
-    String [] leftLineage = PlannerUtil.getRelationLineage(plan.getLeftChild());
-    String [] rightLineage = PlannerUtil.getRelationLineage(plan.getRightChild());
+    String [] leftLineage = PlannerUtil.getRelationNamesLineage(plan.getLeftChild());
+    String [] rightLineage = PlannerUtil.getRelationNamesLineage(plan.getRightChild());
     long outerSize2 = estimateSizeRecursive(context, leftLineage);
     long innerSize2 = estimateSizeRecursive(context, rightLineage);
     final long threshold = 1048576 * 128;
@@ -1004,7 +1004,7 @@ public class PhysicalPlannerImpl implements PhysicalPlanner {
       return createInMemoryHashAggregation(context, groupbyNode, subOp);
     }
 
-    String [] outerLineage = PlannerUtil.getRelationLineage(groupbyNode.getChild());
+    String [] outerLineage = PlannerUtil.getRelationNamesLineage(groupbyNode.getChild());
     long estimatedSize = estimateSizeRecursive(context, outerLineage);
     final long threshold = context.getQueryContext().getLong(SessionVars.HASH_GROUPBY_SIZE_LIMIT);
 
