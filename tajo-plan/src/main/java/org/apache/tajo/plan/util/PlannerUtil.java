@@ -762,21 +762,21 @@ public class PlannerUtil {
    * ==============================================================
    * (A inner B) inner C  | A inner (B inner C)   | Equivalent
    * (A left B) inner C   | A left (B inner C)    | Not equivalent
-   * (A right B) inner C  |    A right (B inner C)   | Equivalent
-   * (A full B) inner C   |    A full (B inner C)        | Not equivalent
-   * (A inner B) left C          | A inner (B left C)    | Equivalent
-   * (A left B) left C   | A left (B left C)       | Equivalent
-   * (A right B) left C   |    A right (B left C)        | Equivalent
-   * (A full B) left C    |    A full (B left C)     | Equivalent
-   * (A inner B) right C  |    A inner (B right C)   | Not equivalent
-   * (A left B) right C   |    A left (B right C)    | Not equivalent
-   * (A right B) right C  |    A right (B right C)   | Equivalent
-   * (A full B) right C   |    A full (B right C)    | Not equivalent
-   * (A inner B) full C   |    A inner (B full C)    | Not equivalent
-   * (A left B) full C    |    A left (B full C)     | Not equivalent
-   * (A right B) full C   |    A right (B full C)    | Equivalent
-   * (A full B) full C    |    A full (B full C)     | Equivalent
-   * ========================================================
+   * (A right B) inner C  | A right (B inner C)   | Equivalent
+   * (A full B) inner C   | A full (B inner C)    | Not equivalent
+   * (A inner B) left C   | A inner (B left C)    | Equivalent
+   * (A left B) left C    | A left (B left C)     | Equivalent
+   * (A right B) left C   | A right (B left C)    | Equivalent
+   * (A full B) left C    | A full (B left C)     | Equivalent
+   * (A inner B) right C  | A inner (B right C)   | Not equivalent
+   * (A left B) right C   | A left (B right C)    | Not equivalent
+   * (A right B) right C  | A right (B right C)   | Equivalent
+   * (A full B) right C   | A full (B right C)    | Not equivalent
+   * (A inner B) full C   | A inner (B full C)    | Not equivalent
+   * (A left B) full C    | A left (B full C)     | Not equivalent
+   * (A right B) full C   | A right (B full C)    | Equivalent
+   * (A full B) full C    | A full (B full C)     | Equivalent
+   * ==============================================================
    */
   public static boolean isAssociativeJoin(JoinNode joinNode) {
     switch(joinNode.getJoinType()) {

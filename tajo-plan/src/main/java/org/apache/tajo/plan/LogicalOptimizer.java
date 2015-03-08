@@ -19,8 +19,6 @@
 package org.apache.tajo.plan;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Sets;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceStability;
@@ -28,9 +26,11 @@ import org.apache.tajo.ConfigKey;
 import org.apache.tajo.OverridableConf;
 import org.apache.tajo.SessionVars;
 import org.apache.tajo.algebra.JoinType;
+import org.apache.tajo.catalog.Column;
 import org.apache.tajo.conf.TajoConf;
 import org.apache.tajo.conf.TajoConf.ConfVars;
 import org.apache.tajo.plan.expr.EvalTreeUtil;
+import org.apache.tajo.plan.expr.EvalType;
 import org.apache.tajo.plan.joinorder.*;
 import org.apache.tajo.util.ReflectionUtil;
 import org.apache.tajo.util.TUtil;
@@ -43,6 +43,7 @@ import org.apache.tajo.plan.util.PlannerUtil;
 import org.apache.tajo.plan.visitor.BasicLogicalPlanVisitor;
 
 import java.util.LinkedHashSet;
+import java.util.Map;
 import java.util.Set;
 import java.util.Stack;
 
@@ -110,11 +111,15 @@ public class LogicalOptimizer {
       double nonOptimizedJoinCost = JoinCostComputer.computeCost(plan, block);
 
       // finding relations and filter expressions
-      JoinGraphContext joinGraphContext = JoinGraphBuilder.buildJoinGraph(plan, block);
+//      JoinGraphContext joinGraphContext = JoinGraphBuilder.buildJoinGraph(plan, block);
 
-      // finding join order and restore remain filter order
-      FoundJoinOrder order = joinOrderAlgorithm.findBestOrder(plan, block,
-          joinGraphContext.joinGraph, joinGraphContext.relationsForProduct);
+      JoinTreeContext joinTreeContext = JoinTreeBuilder.buildJoinTree(plan, block);
+      JoinTree tree = new JoinTree(joinTreeContext.currentAssociativeGroupVertex);
+
+//      // finding join order and restore remain filter order
+//      FoundJoinOrder order = joinOrderAlgorithm.findBestOrder(plan, block,
+//          joinGraphContext.joinGraph, joinGraphContext.relationsForProduct);
+      FoundJoinOrder order = null;
 
       // replace join node with FoundJoinOrder.
       JoinNode newJoinNode = order.getOrderedJoin();
@@ -155,12 +160,8 @@ public class LogicalOptimizer {
   }
 
   private static class JoinTreeContext {
-    private AssociativeGroup currentAssociativeGroup;
-    private Set<EvalNode> unevaluatedPredicates = TUtil.newHashSet();
-
-    public JoinTreeContext() {
-      currentAssociativeGroup = new AssociativeGroup();
-    }
+    private JoinVertex currentVertex;
+    private Set<EvalNode> joinPredicateCandidates = TUtil.newHashSet();
   }
 
   private static class JoinTreeBuilder extends BasicLogicalPlanVisitor<JoinTreeContext, LogicalNode> {
@@ -180,7 +181,8 @@ public class LogicalOptimizer {
     @Override
     public LogicalNode visitFilter(JoinTreeContext context, LogicalPlan plan, LogicalPlan.QueryBlock block,
                                    SelectionNode selectionNode, Stack<LogicalNode> stack) throws PlanningException {
-      context.unevaluatedPredicates.addAll(
+      // all join predicate candidates must be collected before building the join tree
+      context.joinPredicateCandidates.addAll(
           TUtil.newList(AlgebraicUtil.toConjunctiveNormalFormArray(selectionNode.getQual())));
       super.visitFilter(context, plan, block, selectionNode, stack);
       return selectionNode;
@@ -190,18 +192,23 @@ public class LogicalOptimizer {
     public LogicalNode visitJoin(JoinTreeContext context, LogicalPlan plan, LogicalPlan.QueryBlock block,
                                  JoinNode joinNode, Stack<LogicalNode> stack) throws PlanningException {
       super.visitJoin(context, plan, block, joinNode, stack);
+      RelationNode right = PlannerUtil.getMostLeftRelNameWithinLineage(plan, joinNode.getRightChild());
 
       if (PlannerUtil.isAssociativeJoin(joinNode)) {
         // find input relations of the join
-        RelationNode left = PlannerUtil.getMostRightRelNameWithinLineage(plan, joinNode.getLeftChild());
-        RelationNode right = PlannerUtil.getMostLeftRelNameWithinLineage(plan, joinNode.getRightChild());
+
 
         // add both relations to the associative group
-        if (PlannerUtil.isCommutativeJoin(joinNode.getJoinType())) {
-          // TODO: is it valid?
-          context.currentAssociativeGroup.addVertex(new RelationVertex(left));
+        JoinVertex leftVertex, rightVertex;
+        if (!context.currentVertex.isEmpty()) {
+          leftVertex = context.currentAssociativeGroupVertex;
+        } else {
+          RelationNode left = PlannerUtil.getMostRightRelNameWithinLineage(plan, joinNode.getLeftChild());
+          leftVertex = new RelationVertex(left);
         }
-        context.currentAssociativeGroup.addVertex(new RelationVertex(right));
+        rightVertex = new RelationVertex(right);
+        context.currentAssociativeGroupVertex.addVertex(leftVertex);
+        context.currentAssociativeGroupVertex.addVertex(rightVertex);
 
         // add predicates between two relations
         Set<EvalNode> conditionsForThisJoin = TUtil.newHashSet();
@@ -209,20 +216,126 @@ public class LogicalOptimizer {
           conditionsForThisJoin.addAll(
               TUtil.newList(AlgebraicUtil.toConjunctiveNormalFormArray(joinNode.getJoinQual())));
         }
-        for (EvalNode cond : context.unevaluatedPredicates) {
-          if (EvalTreeUtil.isJoinQual(block, left.getOutSchema(), right.getOutSchema(),
-              cond, false) && LogicalPlanner.checkIfBeEvaluatedAtJoin(block, cond, joinNode, false)) {
+        for (EvalNode cond : context.joinPredicateCandidates) {
+          if (EvalTreeUtil.isJoinQual(block, leftVertex.getSchema(), rightVertex.getSchema(), cond, false)
+              && LogicalPlanner.checkIfBeEvaluatedAtJoin(block, cond, joinNode, false)) {
             conditionsForThisJoin.add(cond);
           }
         }
         if (!conditionsForThisJoin.isEmpty()) {
-          context.currentAssociativeGroup.addPredicates(conditionsForThisJoin);
+          addJoinEdges(context, plan, block);
         }
       } else {
-        // TODO: 
+
+        if (!context.currentVertex.isEmpty()) {
+          // add join edges
+          addJoinEdges(context, plan, block);
+
+          // update the current group
+          AssociativeGroupVertex leftVertex = context.currentAssociativeGroupVertex;
+          RelationVertex rightVertex = new RelationVertex(right);
+          context.currentAssociativeGroupVertex = new AssociativeGroupVertex();
+          context.currentAssociativeGroupVertex.addVertex(leftVertex);
+          context.currentAssociativeGroupVertex.addVertex(rightVertex);
+          context.currentAssociativeGroupVertex.addJoinEdge(createJoinEdge(joinNode.getJoinType(), leftVertex, rightVertex));
+        } else {
+          RelationNode left = PlannerUtil.getMostRightRelNameWithinLineage(plan, joinNode.getLeftChild());
+          RelationVertex leftVertex = new RelationVertex(left);
+          RelationVertex rightVertex = new RelationVertex(right);
+          context.currentAssociativeGroupVertex.addVertex(leftVertex);
+          context.currentAssociativeGroupVertex.addVertex(rightVertex);
+          context.currentAssociativeGroupVertex.addJoinEdge(createJoinEdge(joinNode.getJoinType(), leftVertex, rightVertex));
+        }
       }
 
       return joinNode;
+    }
+
+    private static void addJoinEdges(JoinTreeContext context, LogicalPlan plan, LogicalPlan.QueryBlock block)
+        throws PlanningException {
+      // Create join edges for every pair of relations within the current group
+      for (Map.Entry<VertexPair, JoinEdge> eachEntry :
+          populateVertexPairsWithinAssociativeGroup(plan, block, context).entrySet()) {
+        context.currentAssociativeGroupVertex.addJoinEdge(eachEntry.getValue());
+      }
+    }
+
+    private static Map<VertexPair, JoinEdge> populateVertexPairsWithinAssociativeGroup(LogicalPlan plan,
+                                                                                       LogicalPlan.QueryBlock block,
+                                                                                       JoinTreeContext context)
+        throws PlanningException {
+      AssociativeGroupVertex group = context.currentAssociativeGroupVertex;
+
+      // get or create join nodes for every vertex pairs
+      Map<VertexPair, JoinEdge> populatedJoins = TUtil.newHashMap();
+      VertexPair keyVertexPair;
+
+      Set<JoinVertex> leftVertexes = TUtil.newHashSet();
+      Set<JoinVertex> rightVertexes = TUtil.newHashSet();
+      leftVertexes.addAll(group.getVertexes());
+      rightVertexes.addAll(group.getVertexes());
+      for (JoinEdge joinEdge : group.getJoinEdges()) {
+        if (!PlannerUtil.isCommutativeJoin(joinEdge.getJoinType())) {
+          rightVertexes.remove(joinEdge.getLeftRelation());
+          leftVertexes.remove(joinEdge.getRightRelation());
+        }
+      }
+
+      for (JoinVertex left : leftVertexes) {
+        for (JoinVertex right : rightVertexes) {
+          if (left.equals(right)) continue;
+          keyVertexPair = new VertexPair(left, right);
+          JoinEdge joinEdge;
+          if (group.getJoinEdgeMap().containsKey(keyVertexPair)) {
+            joinEdge = group.getJoinEdgeMap().get(keyVertexPair);
+          } else {
+            // If there are no existing join nodes, create a new join node for this relationship
+            joinEdge = createJoinEdge(JoinType.CROSS, left, right);
+          }
+          if (joinEdge.getJoinType() == JoinType.CROSS || joinEdge.getJoinType() == JoinType.INNER) {
+            // join conditions must be referred to decide the join type between INNER and CROSS.
+            // In addition, some join conditions can be moved to the optimal places due to the changed join order
+            Set<EvalNode> conditionsForThisJoin = TUtil.newHashSet();
+            for (EvalNode predicate : context.joinPredicateCandidates) {
+              if (EvalTreeUtil.isJoinQual(predicate, false)
+                  && checkIfEvaluatedAtAssociatedGroup(predicate, context.currentAssociativeGroupVertex)) {
+                conditionsForThisJoin.add(predicate);
+              }
+            }
+            if (!conditionsForThisJoin.isEmpty()) {
+//              joinNode.setJoinQual(AlgebraicUtil.createSingletonExprFromCNF(
+//                  conditionsForThisJoin.toArray(new EvalNode[conditionsForThisJoin.size()])));
+//              joinNode.setJoinType(JoinType.INNER);
+              joinEdge.setJoinType(JoinType.INNER);
+              joinEdge.addJoinQuals(conditionsForThisJoin);
+            }
+          }
+          populatedJoins.put(keyVertexPair, joinEdge);
+        }
+      }
+      return populatedJoins;
+    }
+
+    private static JoinEdge createJoinEdge(JoinType joinType, JoinVertex leftVertex, JoinVertex rightVertex) {
+      return new JoinEdge(joinType, leftVertex, rightVertex);
+    }
+
+    private static boolean checkIfEvaluatedAtAssociatedGroup(EvalNode evalNode,
+                                                             AssociativeGroupVertex group) {
+      Set<Column> columnRefs = EvalTreeUtil.findUniqueColumns(evalNode);
+
+      if (EvalTreeUtil.findDistinctAggFunction(evalNode).size() > 0) {
+        return false;
+      }
+
+      if (EvalTreeUtil.findEvalsByType(evalNode, EvalType.WINDOW_FUNCTION).size() > 0) {
+        return false;
+      }
+
+      if (columnRefs.size() > 0 && !group.getSchema().containsAll(columnRefs)) {
+        return false;
+      }
+      return true;
     }
   }
 

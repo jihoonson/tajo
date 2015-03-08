@@ -171,9 +171,9 @@ public class FilterPushDownRule extends BasicLogicalPlanVisitor<FilterPushDownCo
         String leftTableName = ((FieldEval) binaryEval.getLeftExpr()).getQualifier();
         String rightTableName = ((FieldEval) binaryEval.getRightExpr()).getQualifier();
         List<String> nullSuppliers = Lists.newArrayList();
-        Set<String> leftTableSet = Sets.newHashSet(PlannerUtil.getRelationLineageWithinQueryBlock(plan,
+        Set<String> leftTableSet = Sets.newHashSet(PlannerUtil.getRelationNamesLineageWithinQueryBlock(plan,
             joinNode.getLeftChild()));
-        Set<String> rightTableSet = Sets.newHashSet(PlannerUtil.getRelationLineageWithinQueryBlock(plan,
+        Set<String> rightTableSet = Sets.newHashSet(PlannerUtil.getRelationNamesLineageWithinQueryBlock(plan,
             joinNode.getRightChild()));
 
         // some verification

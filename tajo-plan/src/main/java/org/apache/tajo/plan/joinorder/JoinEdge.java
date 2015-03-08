@@ -28,7 +28,7 @@ import java.util.Collections;
 import java.util.Set;
 
 public class JoinEdge {
-  private final JoinType joinType;
+  private JoinType joinType;
   private final JoinVertex leftVertex;
   private final JoinVertex rightVertex;
   private final Set<EvalNode> joinPredicates = Sets.newHashSet();
@@ -45,6 +45,10 @@ public class JoinEdge {
 //    this(joinType, leftRelation, rightRelation);
 //    Collections.addAll(joinQual, condition);
 //  }
+
+  public void setJoinType(JoinType joinType) {
+    this.joinType = joinType;
+  }
 
   public JoinType getJoinType() {
     return joinType;
@@ -64,6 +68,10 @@ public class JoinEdge {
 
   public void addJoinQual(EvalNode joinQual) {
     this.joinPredicates.add(joinQual);
+  }
+
+  public void addJoinQuals(Set<EvalNode> joinQuals) {
+    this.joinPredicates.addAll(joinQuals);
   }
 
   public EvalNode [] getJoinQual() {
