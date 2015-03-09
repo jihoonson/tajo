@@ -233,7 +233,7 @@ public class LogicalOptimizer {
           // add the right child to the associative group
           AssociativeGroupVertex groupVertex = (AssociativeGroupVertex) leftChild;
           groupVertex.setJoinNode(joinNode);
-          groupVertex.addVertex(rightChild);
+          groupVertex.addJoinEdge(new JoinEdge(joinNode.getJoinType(), , rightChild));
           // find all possible predicates for this join
           joinConditions.addAll(findJoinConditionForJoinVertex(context.joinPredicateCandidates, groupVertex));
           groupVertex.addPredicates(joinConditions);

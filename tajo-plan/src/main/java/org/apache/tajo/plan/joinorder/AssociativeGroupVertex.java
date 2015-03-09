@@ -18,6 +18,7 @@
 
 package org.apache.tajo.plan.joinorder;
 
+import com.google.common.base.Preconditions;
 import org.apache.tajo.algebra.JoinType;
 import org.apache.tajo.catalog.Column;
 import org.apache.tajo.catalog.Schema;
@@ -38,17 +39,20 @@ public class AssociativeGroupVertex implements JoinVertex {
   private Set<EvalNode> predicates = TUtil.newHashSet();
   private JoinNode joinNode; // corresponding join node
 
-  public void addVertex(JoinVertex vertex) {
-    this.vertexes.add(vertex);
-  }
+  private JoinEdge mostLeftEdge = null;
+  private JoinEdge mostRightEdge = null;
+
+//  public void addVertex(JoinVertex vertex) {
+//    this.vertexes.add(vertex);
+//  }
 
   public void addPredicates(Set<EvalNode> predicates) {
     this.predicates.addAll(predicates);
   }
 
-  public void removeVertex(JoinVertex vertex) {
-    this.vertexes.remove(vertex);
-  }
+//  public void removeVertex(JoinVertex vertex) {
+//    this.vertexes.remove(vertex);
+//  }
 
   public void removePredicates(Set<EvalNode> predicates) {
     this.predicates.removeAll(predicates);
@@ -61,7 +65,24 @@ public class AssociativeGroupVertex implements JoinVertex {
   public void addJoinEdge(JoinEdge joinEdge) {
 //    addVertex(joinEdge.getLeftVertex());
 //    addVertex(joinEdge.getRightVertex());
+    // TODO: connection check
     this.joinEdges.put(new VertexPair(joinEdge.getLeftVertex(), joinEdge.getRightVertex()), joinEdge);
+    if (this.mostLeftEdge == null) {
+      this.mostLeftEdge = joinEdge;
+    }
+    this.mostRightEdge = joinEdge;
+  }
+
+  public JoinEdge getMostLeftEdge() {
+    return this.mostLeftEdge;
+  }
+
+  public JoinEdge getMostRightEdge() {
+    return this.mostRightEdge;
+  }
+
+  public void removeJoinEdge(JoinEdge joinEdge) {
+    // TODO
   }
 
   public boolean isEmpty() {
@@ -91,6 +112,7 @@ public class AssociativeGroupVertex implements JoinVertex {
     Set<JoinEdge> populatedJoins = TUtil.newHashSet();
     VertexPair keyVertexPair;
 
+    // TODO: commutative type check
     for (JoinVertex left : vertexes) {
       for (JoinVertex right : vertexes) {
         if (left.equals(right)) continue;
