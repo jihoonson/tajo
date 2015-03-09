@@ -28,48 +28,57 @@ import java.util.Collections;
 import java.util.Set;
 
 public class JoinEdge {
-  private final JoinType joinType;
-  private final LogicalNode leftRelation;
-  private final LogicalNode rightRelation;
-  private final Set<EvalNode> joinQual = Sets.newHashSet();
+  private JoinType joinType;
+  private final JoinVertex leftVertex;
+  private final JoinVertex rightVertex;
+  private final Set<EvalNode> joinPredicates = Sets.newHashSet();
 
-  public JoinEdge(JoinType joinType, LogicalNode leftRelation, LogicalNode rightRelation) {
+
+  public JoinEdge(JoinType joinType, JoinVertex leftVertex, JoinVertex rightVertex) {
     this.joinType = joinType;
-    this.leftRelation = leftRelation;
-    this.rightRelation = rightRelation;
+    this.leftVertex = leftVertex;
+    this.rightVertex = rightVertex;
   }
 
-  public JoinEdge(JoinType joinType, LogicalNode leftRelation, LogicalNode rightRelation,
-                  EvalNode ... condition) {
-    this(joinType, leftRelation, rightRelation);
-    Collections.addAll(joinQual, condition);
+//  public JoinEdge(JoinType joinType, LogicalNode leftRelation, LogicalNode rightRelation,
+//                  EvalNode ... condition) {
+//    this(joinType, leftRelation, rightRelation);
+//    Collections.addAll(joinQual, condition);
+//  }
+
+  public void setJoinType(JoinType joinType) {
+    this.joinType = joinType;
   }
 
   public JoinType getJoinType() {
     return joinType;
   }
 
-  public LogicalNode getLeftRelation() {
-    return leftRelation;
+  public JoinVertex getLeftRelation() {
+    return leftVertex;
   }
 
-  public LogicalNode getRightRelation() {
-    return rightRelation;
+  public JoinVertex getRightRelation() {
+    return rightVertex;
   }
 
   public boolean hasJoinQual() {
-    return joinQual.size() > 0;
+    return joinPredicates.size() > 0;
   }
 
   public void addJoinQual(EvalNode joinQual) {
-    this.joinQual.add(joinQual);
+    this.joinPredicates.add(joinQual);
+  }
+
+  public void addJoinQuals(Set<EvalNode> joinQuals) {
+    this.joinPredicates.addAll(joinQuals);
   }
 
   public EvalNode [] getJoinQual() {
-    return joinQual.toArray(new EvalNode[joinQual.size()]);
+    return joinPredicates.toArray(new EvalNode[joinPredicates.size()]);
   }
 
   public String toString() {
-    return leftRelation + " " + joinType + " " + rightRelation + " ON " + TUtil.collectionToString(joinQual, ", ");
+    return leftVertex + " " + joinType + " " + rightVertex + " ON " + TUtil.collectionToString(joinPredicates, ", ");
   }
 }

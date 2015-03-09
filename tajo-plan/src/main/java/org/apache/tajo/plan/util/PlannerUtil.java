@@ -97,7 +97,7 @@ public class PlannerUtil {
     boolean noJoin = !plan.getRootBlock().hasNode(NodeType.JOIN);
     boolean singleRelation =
         (plan.getRootBlock().hasNode(NodeType.SCAN) || plan.getRootBlock().hasNode(NodeType.PARTITIONS_SCAN)) &&
-        PlannerUtil.getRelationLineage(plan.getRootBlock().getRoot()).length == 1;
+        PlannerUtil.getRelationNamesLineage(plan.getRootBlock().getRoot()).length == 1;
 
     boolean noComplexComputation = false;
     if (singleRelation) {
@@ -178,12 +178,12 @@ public class PlannerUtil {
   }
 
   /**
-   * Get all RelationNodes which are descendant of a given LogicalNode.
+   * Get all names of RelationNodes which are descendant of a given LogicalNode.
    *
    * @param from The LogicalNode to start visiting LogicalNodes.
    * @return an array of all descendant RelationNode of LogicalNode.
    */
-  public static String[] getRelationLineage(LogicalNode from) {
+  public static String[] getRelationNamesLineage(LogicalNode from) {
     LogicalNode[] scans = findAllNodes(from, NodeType.SCAN, NodeType.PARTITIONS_SCAN);
     String[] tableNames = new String[scans.length];
     ScanNode scan;
@@ -194,6 +194,15 @@ public class PlannerUtil {
     return tableNames;
   }
 
+  public static Collection<String> getRelationNamesLineageWithinQueryBlock(LogicalPlan plan, LogicalNode from)
+      throws PlanningException {
+    List<String> names = TUtil.newList();
+    for (RelationNode relationNode : getRelationLineageWithinQueryBlock(plan, from)) {
+      names.add(relationNode.getCanonicalName());
+    }
+    return names;
+  }
+
   /**
    * Get all RelationNodes which are descendant of a given LogicalNode.
    * The finding is restricted within a query block.
@@ -201,17 +210,27 @@ public class PlannerUtil {
    * @param from The LogicalNode to start visiting LogicalNodes.
    * @return an array of all descendant RelationNode of LogicalNode.
    */
-  public static Collection<String> getRelationLineageWithinQueryBlock(LogicalPlan plan, LogicalNode from)
+  public static Collection<RelationNode> getRelationLineageWithinQueryBlock(LogicalPlan plan, LogicalNode from)
       throws PlanningException {
     RelationFinderVisitor visitor = new RelationFinderVisitor();
     visitor.visit(null, plan, null, from, new Stack<LogicalNode>());
     return visitor.getFoundRelations();
   }
 
-  public static class RelationFinderVisitor extends BasicLogicalPlanVisitor<Object, LogicalNode> {
-    private Set<String> foundRelNameSet = Sets.newHashSet();
+  public static RelationNode getMostLeftRelNameWithinLineage(LogicalPlan plan, LogicalNode root) throws PlanningException {
+    List<RelationNode> names = TUtil.newList(PlannerUtil.getRelationLineageWithinQueryBlock(plan, root));
+    return names.get(0);
+  }
+  public static RelationNode getMostRightRelNameWithinLineage(LogicalPlan plan, LogicalNode root) throws PlanningException {
+    List<RelationNode> names = TUtil.newList(PlannerUtil.getRelationLineageWithinQueryBlock(plan, root));
+    return names.get(names.size()-1);
+  }
 
-    public Set<String> getFoundRelations() {
+
+  public static class RelationFinderVisitor extends BasicLogicalPlanVisitor<Object, LogicalNode> {
+    private List<RelationNode> foundRelNameSet = TUtil.newList();
+
+    public List<RelationNode> getFoundRelations() {
       return foundRelNameSet;
     }
 
@@ -223,7 +242,7 @@ public class PlannerUtil {
       }
 
       if (node instanceof RelationNode) {
-        foundRelNameSet.add(((RelationNode) node).getCanonicalName());
+        foundRelNameSet.add(((RelationNode) node));
       }
 
       return node;
@@ -732,7 +751,47 @@ public class PlannerUtil {
   }
 
   public static boolean isCommutativeJoin(JoinType joinType) {
-    return joinType == JoinType.INNER;
+    return joinType == JoinType.INNER || joinType == JoinType.CROSS;
+  }
+
+  /**
+   * Associativity rules
+   *
+   * ==============================================================
+   * Left-Hand Bracketed  | Right-Hand Bracketed  | Equivalence
+   * ==============================================================
+   * (A inner B) inner C  | A inner (B inner C)   | Equivalent
+   * (A left B) inner C   | A left (B inner C)    | Not equivalent
+   * (A right B) inner C  | A right (B inner C)   | Equivalent
+   * (A full B) inner C   | A full (B inner C)    | Not equivalent
+   * (A inner B) left C   | A inner (B left C)    | Equivalent
+   * (A left B) left C    | A left (B left C)     | Equivalent
+   * (A right B) left C   | A right (B left C)    | Equivalent
+   * (A full B) left C    | A full (B left C)     | Equivalent
+   * (A inner B) right C  | A inner (B right C)   | Not equivalent
+   * (A left B) right C   | A left (B right C)    | Not equivalent
+   * (A right B) right C  | A right (B right C)   | Equivalent
+   * (A full B) right C   | A full (B right C)    | Not equivalent
+   * (A inner B) full C   | A inner (B full C)    | Not equivalent
+   * (A left B) full C    | A left (B full C)     | Not equivalent
+   * (A right B) full C   | A right (B full C)    | Equivalent
+   * (A full B) full C    | A full (B full C)     | Equivalent
+   * ==============================================================
+   */
+  public static boolean isAssociativeJoin(JoinNode joinNode) {
+    switch(joinNode.getJoinType()) {
+      case LEFT_ANTI:
+      case RIGHT_ANTI:
+      case LEFT_SEMI:
+      case RIGHT_SEMI:
+      case LEFT_OUTER:
+      case RIGHT_OUTER:
+      case FULL_OUTER:
+        return false;
+      case INNER:
+        // TODO: consider when a join qual involves columns from two or more tables
+    }
+    return true;
   }
 
   public static boolean existsAggregationFunction(Expr expr) throws PlanningException {
