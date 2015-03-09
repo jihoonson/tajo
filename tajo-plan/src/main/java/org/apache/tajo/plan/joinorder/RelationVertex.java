@@ -19,6 +19,7 @@
 package org.apache.tajo.plan.joinorder;
 
 import org.apache.tajo.catalog.Schema;
+import org.apache.tajo.plan.logical.LogicalNode;
 import org.apache.tajo.plan.logical.RelationNode;
 
 public class RelationVertex implements JoinVertex {
@@ -50,5 +51,10 @@ public class RelationVertex implements JoinVertex {
   @Override
   public Schema getSchema() {
     return relationNode.getOutSchema();
+  }
+
+  @Override
+  public LogicalNode getCorrespondingNode() {
+    return relationNode;
   }
 }

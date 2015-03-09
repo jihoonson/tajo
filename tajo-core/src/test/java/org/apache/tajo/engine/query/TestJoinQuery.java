@@ -200,9 +200,7 @@ public class TestJoinQuery extends QueryTestCaseBase {
   @Test
   public final void test() throws Exception {
     executeString("select * from customer as c1 left outer join nation n1 on c1.c_nationkey = n1.n_nationkey right outer join customer as c2 on c2.c_custkey = n1.n_nationkey inner join nation n2 on c2.c_custkey = n2.n_regionkey");
-//    executeString("select * from customer as left outer join nation on c_nationkey = n_nationkey right outer join customer on c_custkey = n_nationkey inner join nation on c_custkey = n_regionkey");
   }
-
 
   @Test
   public final void testJoinWithMultipleJoinQual1() throws Exception {
