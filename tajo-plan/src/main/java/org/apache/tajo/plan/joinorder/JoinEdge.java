@@ -33,7 +33,6 @@ public class JoinEdge {
   private final JoinVertex rightVertex;
   private final Set<EvalNode> joinPredicates = Sets.newHashSet();
 
-
   public JoinEdge(JoinType joinType, JoinVertex leftVertex, JoinVertex rightVertex) {
     this.joinType = joinType;
     this.leftVertex = leftVertex;
@@ -54,11 +53,11 @@ public class JoinEdge {
     return joinType;
   }
 
-  public JoinVertex getLeftRelation() {
+  public JoinVertex getLeftVertex() {
     return leftVertex;
   }
 
-  public JoinVertex getRightRelation() {
+  public JoinVertex getRightVertex() {
     return rightVertex;
   }
 

@@ -119,9 +119,7 @@ public class LogicalOptimizer {
       JoinTree tree = new JoinTree(joinTreeContext.joinVertexStack.pop());
 
 //      // finding join order and restore remain filter order
-//      FoundJoinOrder order = joinOrderAlgorithm.findBestOrder(plan, block,
-//          joinGraphContext.joinGraph, joinGraphContext.relationsForProduct);
-      FoundJoinOrder order = null;
+      FoundJoinOrder order = joinOrderAlgorithm.findBestOrder(plan, block, tree);
 
       // replace join node with FoundJoinOrder.
       JoinNode newJoinNode = order.getOrderedJoin();
@@ -222,6 +220,7 @@ public class LogicalOptimizer {
         if (leftChild instanceof RelationVertex || leftChild instanceof NonAssociativeGroupVertex) {
           // create a new associative group
           AssociativeGroupVertex newGroup = new AssociativeGroupVertex();
+          newGroup.setJoinNode(joinNode);
           // add both children to the group
           newGroup.addVertex(leftChild);
           newGroup.addVertex(rightChild);
@@ -233,6 +232,7 @@ public class LogicalOptimizer {
         } else if (leftChild instanceof AssociativeGroupVertex) {
           // add the right child to the associative group
           AssociativeGroupVertex groupVertex = (AssociativeGroupVertex) leftChild;
+          groupVertex.setJoinNode(joinNode);
           groupVertex.addVertex(rightChild);
           // find all possible predicates for this join
           joinConditions.addAll(findJoinConditionForJoinVertex(context.joinPredicateCandidates, groupVertex));
@@ -244,6 +244,7 @@ public class LogicalOptimizer {
         JoinEdge nonAssociativeEdge = new JoinEdge(joinNode.getJoinType(), leftChild, rightChild);
         nonAssociativeEdge.addJoinQuals(joinConditions);
         NonAssociativeGroupVertex newGroup = new NonAssociativeGroupVertex(nonAssociativeEdge);
+        newGroup.setJoinNode(joinNode);
         context.joinVertexStack.push(newGroup);
       }
 
@@ -287,8 +288,8 @@ public class LogicalOptimizer {
 //      rightVertexes.addAll(group.getVertexes());
 //      for (JoinEdge joinEdge : group.getJoinEdges()) {
 //        if (!PlannerUtil.isCommutativeJoin(joinEdge.getJoinType())) {
-//          rightVertexes.remove(joinEdge.getLeftRelation());
-//          leftVertexes.remove(joinEdge.getRightRelation());
+//          rightVertexes.remove(joinEdge.getLeftVertex());
+//          leftVertexes.remove(joinEdge.getRightVertex());
 //        }
 //      }
 //

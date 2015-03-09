@@ -18,7 +18,6 @@
 
 package org.apache.tajo.plan.joinorder;
 
-import org.apache.tajo.algebra.JoinType;
 import org.apache.tajo.catalog.Schema;
 import org.apache.tajo.plan.LogicalPlan;
 import org.apache.tajo.plan.util.PlannerUtil;
@@ -39,8 +38,16 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
   public static double DEFAULT_SELECTION_FACTOR = 0.1;
 
   @Override
-  public FoundJoinOrder findBestOrder(LogicalPlan plan, LogicalPlan.QueryBlock block, JoinGraph joinGraph,
-                                      Set<String> relationsWithoutQual) throws PlanningException {
+  public FoundJoinOrder findBestOrder(LogicalPlan plan, LogicalPlan.QueryBlock block, JoinTree joinTree)
+      throws PlanningException {
+
+    JoinTreeVisitorContext context = new JoinTreeVisitorContext(plan, block);
+    JoinTreeVisitor visitor = new JoinTreeVisitor();
+    visitor.visit(context, new Stack<JoinVertex>(), joinTree.getRoot());
+
+    // all generated nodes should be registered to corresponding blocks
+    block.registerNode(context.latestJoin);
+    return new FoundJoinOrder(context.latestJoin, getCost(context.latestJoin));
 
 //    // Setup a remain relation set to be joined
 //    // Why we should use LinkedHashSet? - it should keep the deterministic for the order of joins.
@@ -106,8 +113,8 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
 //        LinkedHashSet<String[]> removingJoinEdges = new LinkedHashSet<String[]>();
 //        bestPair = getBestPair(plan, joinGraph, checkingRelations, removingJoinEdges);
 //
-//        checkingRelations.remove(bestPair.getLeftRelation());
-//        checkingRelations.remove(bestPair.getRightRelation());
+//        checkingRelations.remove(bestPair.getLeftVertex());
+//        checkingRelations.remove(bestPair.getRightVertex());
 //        for (String[] joinEdge: removingJoinEdges) {
 //          // remove the edge of the best pair from join graph
 //          joinGraph.removeEdge(joinEdge[0], joinEdge[1]);
@@ -129,100 +136,193 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
 //    // all generated nodes should be registered to corresponding blocks
 //    block.registerNode(joinTree);
 //    return new FoundJoinOrder(joinTree, getCost(joinTree));
-
-    return null;
   }
 
-//  private static JoinNode createJoinNode(LogicalPlan plan, JoinEdge joinEdge) {
-//    LogicalNode left = joinEdge.getLeftRelation();
-//    LogicalNode right = joinEdge.getRightRelation();
-//
-//    JoinNode joinNode = plan.createNode(JoinNode.class);
-//
-//    if (PlannerUtil.isCommutativeJoin(joinEdge.getJoinType())) {
-//      // if only one operator is relation
-//      if ((left instanceof RelationNode) && !(right instanceof RelationNode)) {
-//        // for left deep
-//        joinNode.init(joinEdge.getJoinType(), right, left);
-//      } else {
-//        // if both operators are relation or if both are relations
-//        // we don't need to concern the left-right position.
-//        joinNode.init(joinEdge.getJoinType(), left, right);
-//      }
-//    } else {
-//      joinNode.init(joinEdge.getJoinType(), left, right);
-//    }
-//
-//    Schema mergedSchema = SchemaUtil.merge(joinNode.getLeftChild().getOutSchema(),
-//        joinNode.getRightChild().getOutSchema());
-//    joinNode.setInSchema(mergedSchema);
-//    joinNode.setOutSchema(mergedSchema);
-//    if (joinEdge.hasJoinQual()) {
-//      joinNode.setJoinQual(AlgebraicUtil.createSingletonExprFromCNF(joinEdge.getJoinQual()));
-//    }
-//    return joinNode;
-//  }
+  private static class JoinTreeVisitorContext {
+    private LogicalPlan plan;
+    private LogicalPlan.QueryBlock block;
+    private JoinNode latestJoin;
+
+    public JoinTreeVisitorContext(LogicalPlan plan, LogicalPlan.QueryBlock block) {
+      this.plan = plan;
+      this.block = block;
+    }
+  }
+
+  private static class JoinTreeVisitor {
+
+    public void visit(JoinTreeVisitorContext context, Stack<JoinVertex> stack, JoinVertex vertex) {
+      stack.push(vertex);
+      if (vertex instanceof RelationVertex) {
+        visitRelationVertex(context, stack, (RelationVertex) vertex);
+      } else if (vertex instanceof AssociativeGroupVertex) {
+        visitAssociativeGroupVertex(context, stack, (AssociativeGroupVertex) vertex);
+      } else if (vertex instanceof NonAssociativeGroupVertex) {
+        visitNonAssociativeGroupVertex(context, stack, (NonAssociativeGroupVertex) vertex);
+      }
+      stack.pop();
+    }
+
+    private void visitRelationVertex(JoinTreeVisitorContext context, Stack<JoinVertex> stack,
+                                     RelationVertex vertex) {
+
+    }
+
+    private void visitAssociativeGroupVertex(JoinTreeVisitorContext context, Stack<JoinVertex> stack,
+                                             AssociativeGroupVertex vertex) {
+      for (JoinVertex nestedVertex : vertex.getVertexes()) {
+        visit(context, stack, nestedVertex);
+      }
+
+      while (vertex.size() > 1) {
+        JoinEdge bestPair = getBestPair(vertex);
+        removePairFromGroup(vertex, bestPair);
+        context.latestJoin = createJoinNode(context.plan, bestPair);
+
+        // all logical nodes should be registered to corresponding blocks
+        context.block.registerNode(context.latestJoin);
+
+        // Even though the join type is associative, they are treated as a non-associative type
+        // because the join order is fixed.
+        NonAssociativeGroupVertex newVertex = new NonAssociativeGroupVertex(bestPair);
+        newVertex.setJoinNode(context.latestJoin);
+        vertex.addVertex(newVertex);
+      }
+    }
+
+    private void visitNonAssociativeGroupVertex(JoinTreeVisitorContext context, Stack<JoinVertex> stack,
+                                                NonAssociativeGroupVertex vertex) {
+      visit(context, stack, vertex.getJoinEdge().getLeftVertex());
+      visit(context, stack, vertex.getJoinEdge().getRightVertex());
+      context.latestJoin = createJoinNode(context.plan, vertex.getJoinEdge());
+      context.block.registerNode(context.latestJoin);
+    }
+  }
+
+  private static JoinNode createJoinNode(LogicalPlan plan, JoinEdge joinEdge) {
+    LogicalNode left = joinEdge.getLeftVertex().getCorrespondingNode();
+    LogicalNode right = joinEdge.getRightVertex().getCorrespondingNode();
+
+    JoinNode joinNode = plan.createNode(JoinNode.class);
+
+    if (PlannerUtil.isCommutativeJoin(joinEdge.getJoinType())) {
+      // if only one operator is relation
+      if ((left instanceof RelationNode) && !(right instanceof RelationNode)) {
+        // for left deep
+        joinNode.init(joinEdge.getJoinType(), right, left);
+      } else {
+        // if both operators are relation or if both are relations
+        // we don't need to concern the left-right position.
+        joinNode.init(joinEdge.getJoinType(), left, right);
+      }
+    } else {
+      joinNode.init(joinEdge.getJoinType(), left, right);
+    }
+
+    Schema mergedSchema = SchemaUtil.merge(joinNode.getLeftChild().getOutSchema(),
+        joinNode.getRightChild().getOutSchema());
+    joinNode.setInSchema(mergedSchema);
+    joinNode.setOutSchema(mergedSchema);
+    if (joinEdge.hasJoinQual()) {
+      joinNode.setJoinQual(AlgebraicUtil.createSingletonExprFromCNF(joinEdge.getJoinQual()));
+    }
+    return joinNode;
+  }
 
   /**
    * Find the best join pair among all joinable operators in candidate set.
    *
-   * @param plan a logical plan
-   * @param graph a join graph which consists of vertices and edges, where vertex is relation and
-   *              each edge is join condition.
-   * @param candidateSet candidate operators to be joined.
    * @return The best join pair among them
    * @throws PlanningException
    */
-  private JoinEdge getBestPair(LogicalPlan plan, JoinGraph graph, Set<LogicalNode> candidateSet, Set<String[]> bestJoinEdges)
-      throws PlanningException {
+  public static JoinEdge getBestPair(AssociativeGroupVertex vertex) {
     double minCost = Double.MAX_VALUE;
-    JoinEdge bestJoin = null;
-    LinkedHashSet<String[]> relatedJoinEdges = null;
-    LinkedHashSet<String[]> relatedNonCrossJoinEdges = null;
-
     double minNonCrossJoinCost = Double.MAX_VALUE;
+    JoinEdge bestJoin = null;
     JoinEdge bestNonCrossJoin = null;
 
-    for (LogicalNode outer : candidateSet) {
-      for (LogicalNode inner : candidateSet) {
-        if (outer.equals(inner)) {
-          continue;
-        }
+    for (JoinEdge candidate : vertex.getJoinEdges()) {
+      double cost = getCost(candidate);
 
-        LinkedHashSet<String[]> joinEdgePairs = new LinkedHashSet<String[]>();
-        JoinEdge foundJoin = findJoin(plan, graph, outer, inner, joinEdgePairs);
-        if (foundJoin == null) {
-          continue;
-        }
-        double cost = getCost(foundJoin);
+      if (cost < minCost) {
+        minCost = cost;
+        bestJoin = candidate;
+      }
 
-        if (cost < minCost) {
-          minCost = cost;
-          bestJoin = foundJoin;
-          relatedJoinEdges = joinEdgePairs;
-        }
-
-        // Keep the min cost join
-        // But, if there exists a qualified join, the qualified join must be chosen
-        // rather than cross join regardless of cost.
-        if (foundJoin.hasJoinQual()) {
-          if (cost < minNonCrossJoinCost) {
-            minNonCrossJoinCost = cost;
-            bestNonCrossJoin = foundJoin;
-            relatedNonCrossJoinEdges = joinEdgePairs;
-          }
+      // Keep the min cost join
+      // But, if there exists a qualified join, the qualified join must be chosen
+      // rather than cross join regardless of cost.
+      if (candidate.hasJoinQual()) {
+        if (cost < minNonCrossJoinCost) {
+          minNonCrossJoinCost = cost;
+          bestNonCrossJoin = candidate;
         }
       }
     }
 
     if (bestNonCrossJoin != null) {
-      bestJoinEdges.addAll(relatedNonCrossJoinEdges);
       return bestNonCrossJoin;
     } else {
-      bestJoinEdges.addAll(relatedJoinEdges);
       return bestJoin;
     }
   }
+
+  private static void removePairFromGroup(AssociativeGroupVertex vertex, JoinEdge edge) {
+    vertex.removeVertex(edge.getLeftVertex());
+    vertex.removeVertex(edge.getRightVertex());
+    vertex.removePredicates(TUtil.newHashSet(edge.getJoinQual()));
+  }
+
+//  private JoinEdge getBestPair(LogicalPlan plan, JoinGraph graph, Set<LogicalNode> candidateSet, Set<String[]> bestJoinEdges)
+//      throws PlanningException {
+//    double minCost = Double.MAX_VALUE;
+//    JoinEdge bestJoin = null;
+//    LinkedHashSet<String[]> relatedJoinEdges = null;
+//    LinkedHashSet<String[]> relatedNonCrossJoinEdges = null;
+//
+//    double minNonCrossJoinCost = Double.MAX_VALUE;
+//    JoinEdge bestNonCrossJoin = null;
+//
+//    for (LogicalNode outer : candidateSet) {
+//      for (LogicalNode inner : candidateSet) {
+//        if (outer.equals(inner)) {
+//          continue;
+//        }
+//
+//        LinkedHashSet<String[]> joinEdgePairs = new LinkedHashSet<String[]>();
+//        JoinEdge foundJoin = findJoin(plan, graph, outer, inner, joinEdgePairs);
+//        if (foundJoin == null) {
+//          continue;
+//        }
+//        double cost = getCost(foundJoin);
+//
+//        if (cost < minCost) {
+//          minCost = cost;
+//          bestJoin = foundJoin;
+//          relatedJoinEdges = joinEdgePairs;
+//        }
+//
+//        // Keep the min cost join
+//        // But, if there exists a qualified join, the qualified join must be chosen
+//        // rather than cross join regardless of cost.
+//        if (foundJoin.hasJoinQual()) {
+//          if (cost < minNonCrossJoinCost) {
+//            minNonCrossJoinCost = cost;
+//            bestNonCrossJoin = foundJoin;
+//            relatedNonCrossJoinEdges = joinEdgePairs;
+//          }
+//        }
+//      }
+//    }
+//
+//    if (bestNonCrossJoin != null) {
+//      bestJoinEdges.addAll(relatedNonCrossJoinEdges);
+//      return bestNonCrossJoin;
+//    } else {
+//      bestJoinEdges.addAll(relatedJoinEdges);
+//      return bestJoin;
+//    }
+//  }
 
   /**
    * Find a join between two logical operator trees
@@ -313,12 +413,13 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
       // TODO - should consider join type
       // TODO - should statistic information obtained from query history
       filterFactor = filterFactor * Math.pow(DEFAULT_SELECTION_FACTOR, joinEdge.getJoinQual().length);
-//      return getCost(joinEdge.getLeftRelation()) * getCost(joinEdge.getRightRelation()) * filterFactor;
+      return getCost(joinEdge.getLeftVertex().getCorrespondingNode())
+          * getCost(joinEdge.getRightVertex().getCorrespondingNode()) * filterFactor;
     } else {
       // make cost bigger if cross join
-//      return Math.pow(getCost(joinEdge.getLeftRelation()) * getCost(joinEdge.getRightRelation()), 2);
+      return Math.pow(getCost(joinEdge.getLeftVertex().getCorrespondingNode())
+          * getCost(joinEdge.getRightVertex().getCorrespondingNode()), 2);
     }
-    return 0;
   }
 
   // TODO - costs of other operator operators (e.g., group-by and sort) should be computed in proper manners.
