@@ -29,22 +29,17 @@ import org.apache.tajo.plan.logical.JoinNode;
 import org.apache.tajo.plan.logical.LogicalNode;
 import org.apache.tajo.util.TUtil;
 
-import java.util.Collection;
 import java.util.Map;
 import java.util.Set;
 
 public class AssociativeGroupVertex implements JoinVertex {
   private Set<JoinVertex> vertexes = TUtil.newHashSet();
-//  private Map<VertexPair, JoinEdge> joinEdges = TUtil.newHashMap();
+  private Map<VertexPair, JoinEdge> joinEdges = TUtil.newHashMap();
   private Set<EvalNode> predicates = TUtil.newHashSet();
   private JoinNode joinNode; // corresponding join node
 
   public void addVertex(JoinVertex vertex) {
     this.vertexes.add(vertex);
-  }
-
-  public void addPredicate(EvalNode predicate) {
-    this.predicates.add(predicate);
   }
 
   public void addPredicates(Set<EvalNode> predicates) {
@@ -62,12 +57,12 @@ public class AssociativeGroupVertex implements JoinVertex {
 //  public void addJoinEdge(JoinVertex left, JoinVertex right, JoinEdge edge) {
 //    this.joinEdges.put(new VertexPair(left, right), edge);
 //  }
-//
-//  public void addJoinEdge(JoinEdge joinEdge) {
-////    addVertex(joinEdge.getLeftVertex());
-////    addVertex(joinEdge.getRightVertex());
-//    this.addJoinEdge(joinEdge.getLeftVertex(), joinEdge.getRightVertex(), joinEdge);
-//  }
+
+  public void addJoinEdge(JoinEdge joinEdge) {
+//    addVertex(joinEdge.getLeftVertex());
+//    addVertex(joinEdge.getRightVertex());
+    this.joinEdges.put(new VertexPair(joinEdge.getLeftVertex(), joinEdge.getRightVertex()), joinEdge);
+  }
 
   public boolean isEmpty() {
     return vertexes.isEmpty();
@@ -85,44 +80,42 @@ public class AssociativeGroupVertex implements JoinVertex {
     return predicates;
   }
 
-//  public Map<VertexPair, JoinEdge> getJoinEdgeMap() {
-//    return joinEdges;
-//  }
-//
-//  public Collection<JoinEdge> getJoinEdges() {
-//    return joinEdges.values();
-//  }
-
-  public Collection<JoinEdge> getJoinEdges() {
-    return populateVertexPairs().values();
+  public Set<JoinEdge> getJoinEdges() {
+//    this.joinEdges.addAll(populateVertexPairs());
+    return populateVertexPairs();
   }
 
-  public Map<VertexPair, JoinEdge> populateVertexPairs() {
+  public Set<JoinEdge> populateVertexPairs() {
 
     // get or create join nodes for every vertex pairs
-    Map<VertexPair, JoinEdge> populatedJoins = TUtil.newHashMap();
+    Set<JoinEdge> populatedJoins = TUtil.newHashSet();
     VertexPair keyVertexPair;
 
     for (JoinVertex left : vertexes) {
       for (JoinVertex right : vertexes) {
         if (left.equals(right)) continue;
         keyVertexPair = new VertexPair(left, right);
-        JoinEdge joinEdge = createJoinEdge(JoinType.CROSS, left, right);
-        // join conditions must be referred to decide the join type between INNER and CROSS.
-        // In addition, some join conditions can be moved to the optimal places due to the changed join order
-        Set<EvalNode> conditionsForThisJoin = TUtil.newHashSet();
-        for (EvalNode predicate : predicates) {
-          if (EvalTreeUtil.isJoinQual(null, left.getSchema(), right.getSchema(), predicate, false)
-              && checkIfBeEvaluatedAtJoin(predicate, left, right)) {
-            conditionsForThisJoin.add(predicate);
+        JoinEdge joinEdge;
+        if (joinEdges.containsKey(keyVertexPair)) {
+          joinEdge = joinEdges.get(keyVertexPair);
+        } else {
+          joinEdge =createJoinEdge(JoinType.CROSS, left, right);
+          // join conditions must be referred to decide the join type between INNER and CROSS.
+          // In addition, some join conditions can be moved to the optimal places due to the changed join order
+          Set<EvalNode> conditionsForThisJoin = TUtil.newHashSet();
+          for (EvalNode predicate : predicates) {
+            if (EvalTreeUtil.isJoinQual(null, left.getSchema(), right.getSchema(), predicate, false)
+                && checkIfBeEvaluatedAtJoin(predicate, left, right)) {
+              conditionsForThisJoin.add(predicate);
+            }
+          }
+          if (!conditionsForThisJoin.isEmpty()) {
+            joinEdge.setJoinType(JoinType.INNER);
+            joinEdge.addJoinQuals(conditionsForThisJoin);
           }
         }
-        if (!conditionsForThisJoin.isEmpty()) {
-          joinEdge.setJoinType(JoinType.INNER);
-          joinEdge.addJoinQuals(conditionsForThisJoin);
-        }
 
-        populatedJoins.put(keyVertexPair, joinEdge);
+        populatedJoins.add(joinEdge);
       }
     }
     return populatedJoins;
@@ -153,7 +146,7 @@ public class AssociativeGroupVertex implements JoinVertex {
 
   @Override
   public String toString() {
-    return "V (" + TUtil.collectionToString(vertexes, ",") + ")";
+    return "(" + TUtil.collectionToString(vertexes, ",") + ")";
   }
 
   @Override

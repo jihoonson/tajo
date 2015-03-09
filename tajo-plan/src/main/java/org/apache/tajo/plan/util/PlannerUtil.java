@@ -778,19 +778,10 @@ public class PlannerUtil {
    * (A full B) full C    | A full (B full C)     | Equivalent
    * ==============================================================
    */
-  public static boolean isAssociativeJoin(JoinNode joinNode) {
-    switch(joinNode.getJoinType()) {
-      case LEFT_ANTI:
-      case RIGHT_ANTI:
-      case LEFT_SEMI:
-      case RIGHT_SEMI:
-      case LEFT_OUTER:
-      case RIGHT_OUTER:
-      case FULL_OUTER:
-        return false;
-      case INNER:
-        // TODO: consider when a join qual involves columns from two or more tables
-    }
+  public static boolean isAssociativeJoin(JoinType leftType, JoinType rightType) {
+    // TODO
+
+    // TODO: consider when a join qual involves columns from two or more tables
     return true;
   }
 
