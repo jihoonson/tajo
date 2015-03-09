@@ -20,38 +20,37 @@ package org.apache.tajo.plan.joinorder;
 
 import org.apache.tajo.catalog.Schema;
 import org.apache.tajo.catalog.SchemaUtil;
+import org.apache.tajo.plan.expr.EvalNode;
 import org.apache.tajo.util.TUtil;
 
-import java.util.Collection;
-import java.util.Map;
 import java.util.Set;
 
 public class AssociativeGroupVertex implements JoinVertex {
   private Set<JoinVertex> vertexes = TUtil.newHashSet();
-  private Map<VertexPair, JoinEdge> joinEdges = TUtil.newHashMap();
-//  private Set<EvalNode> predicates = TUtil.newHashSet();
+//  private Map<VertexPair, JoinEdge> joinEdges = TUtil.newHashMap();
+  private Set<EvalNode> predicates = TUtil.newHashSet();
 
   public void addVertex(JoinVertex vertex) {
     this.vertexes.add(vertex);
   }
 
-//  public void addPredicate(EvalNode predicate) {
-//    this.predicates.add(predicate);
-//  }
-
-//  public void addPredicates(Set<EvalNode> predicates) {
-//    this.predicates.addAll(predicates);
-//  }
-
-  public void addJoinEdge(JoinVertex left, JoinVertex right, JoinEdge edge) {
-    this.joinEdges.put(new VertexPair(left, right), edge);
+  public void addPredicate(EvalNode predicate) {
+    this.predicates.add(predicate);
   }
 
-  public void addJoinEdge(JoinEdge joinEdge) {
-//    addVertex(joinEdge.getLeftRelation());
-//    addVertex(joinEdge.getRightRelation());
-    this.addJoinEdge(joinEdge.getLeftRelation(), joinEdge.getRightRelation(), joinEdge);
+  public void addPredicates(Set<EvalNode> predicates) {
+    this.predicates.addAll(predicates);
   }
+
+//  public void addJoinEdge(JoinVertex left, JoinVertex right, JoinEdge edge) {
+//    this.joinEdges.put(new VertexPair(left, right), edge);
+//  }
+//
+//  public void addJoinEdge(JoinEdge joinEdge) {
+////    addVertex(joinEdge.getLeftRelation());
+////    addVertex(joinEdge.getRightRelation());
+//    this.addJoinEdge(joinEdge.getLeftRelation(), joinEdge.getRightRelation(), joinEdge);
+//  }
 
   public boolean isEmpty() {
     return vertexes.isEmpty();
@@ -61,13 +60,17 @@ public class AssociativeGroupVertex implements JoinVertex {
     return vertexes;
   }
 
-  public Map<VertexPair, JoinEdge> getJoinEdgeMap() {
-    return joinEdges;
+  public Set<EvalNode> getPredicates() {
+    return predicates;
   }
 
-  public Collection<JoinEdge> getJoinEdges() {
-    return joinEdges.values();
-  }
+//  public Map<VertexPair, JoinEdge> getJoinEdgeMap() {
+//    return joinEdges;
+//  }
+//
+//  public Collection<JoinEdge> getJoinEdges() {
+//    return joinEdges.values();
+//  }
 
   @Override
   public String toString() {
