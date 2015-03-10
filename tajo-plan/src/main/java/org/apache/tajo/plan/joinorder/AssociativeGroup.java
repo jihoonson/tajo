@@ -22,9 +22,16 @@ import org.apache.tajo.algebra.JoinType;
 import org.apache.tajo.catalog.Column;
 import org.apache.tajo.catalog.Schema;
 import org.apache.tajo.catalog.SchemaUtil;
+import org.apache.tajo.plan.LogicalPlan;
+import org.apache.tajo.plan.expr.AlgebraicUtil;
 import org.apache.tajo.plan.expr.EvalNode;
 import org.apache.tajo.plan.expr.EvalTreeUtil;
 import org.apache.tajo.plan.expr.EvalType;
+import org.apache.tajo.plan.logical.JoinNode;
+import org.apache.tajo.plan.logical.LogicalNode;
+import org.apache.tajo.plan.logical.RelationNode;
+import org.apache.tajo.plan.util.PlannerUtil;
+import org.apache.tajo.util.Pair;
 import org.apache.tajo.util.TUtil;
 
 import java.util.Set;
@@ -32,41 +39,34 @@ import java.util.Stack;
 
 public class AssociativeGroup {
 
-  private JoinGroupVertex vertex;
-  private JoinEdge mostLeftEdge;
-  private JoinEdge mostRightEdge;
+  private JoinGroupVertex mostLeftVertex;
+  private JoinGroupVertex mostRightVertex;
   private int edgeNum = 0;
 
   public void addVertex(JoinGroupVertex vertex) {
     // TODO: connectivity check
-    this.vertex = vertex;
-    if (this.mostLeftEdge == null) {
-      this.mostLeftEdge = vertex.getJoinEdge();
+    if (this.mostLeftVertex == null) {
+      this.mostLeftVertex = vertex;
     }
-    this.mostRightEdge = vertex.getJoinEdge();
+    this.mostRightVertex = vertex;
     this.edgeNum++;
   }
 
   public JoinType getMostRightJoinType() {
-    return getMostRightEdge().getJoinType();
-  }
-
-  public JoinEdge getMostRightEdge() {
-    return mostRightEdge;
-  }
-
-  public JoinEdge getMostLeftEdge() {
-    return mostLeftEdge;
+    return mostRightVertex.getJoinType();
   }
 
   public void clear() {
-    this.vertex = null;
-    this.mostLeftEdge = mostRightEdge = null;
+    this.mostLeftVertex = mostRightVertex = null;
     this.edgeNum = 0;
   }
 
-  public JoinVertex getVertex() {
-    return this.vertex;
+  public JoinGroupVertex getMostLeftVertex() {
+    return this.mostLeftVertex;
+  }
+
+  public JoinGroupVertex getMostRightVertex() {
+    return this.mostRightVertex;
   }
 
   public int size() {
@@ -94,7 +94,7 @@ public class AssociativeGroup {
   private Set<EvalNode> collectJoinPredicates() {
     JoinPredicateCollector collector = new JoinPredicateCollector();
     JoinPredicateCollectorContext context = new JoinPredicateCollectorContext();
-    collector.visit(context, new Stack<JoinVertex>(), this.getVertex());
+    collector.visit(context, new Stack<JoinVertex>(), this.getMostRightVertex());
     return context.predicates;
   }
 
@@ -126,10 +126,17 @@ public class AssociativeGroup {
   }
 
   private static class JoinEdgeCollectorContext {
+    private final LogicalPlan plan;
     private final Set<JoinEdge> joinEdges = TUtil.newHashSet();
     private final Set<EvalNode> predicates;
+    private final JoinGroupVertex mostLeftVertex;
+    private final JoinGroupVertex mostRightVertex;
 
-    public JoinEdgeCollectorContext(Set<EvalNode> predicates) {
+    public JoinEdgeCollectorContext(LogicalPlan plan, JoinGroupVertex mostLeftVertex, JoinGroupVertex mostRightVertex,
+                                    Set<EvalNode> predicates) {
+      this.plan = plan;
+      this.mostLeftVertex = mostLeftVertex;
+      this.mostRightVertex = mostRightVertex;
       this.predicates = predicates;
     }
   }
@@ -139,8 +146,12 @@ public class AssociativeGroup {
       stack.push(vertex);
       if (vertex instanceof JoinGroupVertex) {
         JoinGroupVertex groupVertex = (JoinGroupVertex) vertex;
-        visit(context, stack, groupVertex.getJoinEdge().getLeftVertex());
-        visit(context, stack, groupVertex.getJoinEdge().getRightVertex());
+        if (!groupVertex.getJoinEdge().getLeftVertex().equals(context.mostLeftVertex)) {
+          visit(context, stack, groupVertex.getJoinEdge().getLeftVertex());
+        }
+        if (!groupVertex.getJoinEdge().getRightVertex().equals(context.mostRightVertex)) {
+          visit(context, stack, groupVertex.getJoinEdge().getRightVertex());
+        }
 
         // original join edge
         JoinEdge edge = groupVertex.getJoinEdge();
@@ -153,10 +164,13 @@ public class AssociativeGroup {
           }
           edge.setJoinQuals(conditionsForThisJoin);
         }
+        context.joinEdges.add(edge);
 
+        // TODO: how to keep nodes of other types?
         // new join edge according to the associative rule
         JoinVertexFinder finder = new JoinVertexFinder();
-        JoinVertex mostRightRelationFromLeftChild = finder.findMostRightRelationVertex(vertex);
+        JoinVertex mostRightRelationFromLeftChild = finder.findMostRightRelationVertex(
+            groupVertex.getJoinEdge().getLeftVertex());
         JoinEdge newEdge = new JoinEdge(groupVertex.getJoinType(), mostRightRelationFromLeftChild,
             groupVertex.getJoinEdge().getRightVertex());
 
@@ -168,6 +182,22 @@ public class AssociativeGroup {
           }
           newEdge.setJoinQuals(conditionsForThisJoin);
         }
+
+        JoinEdge newJoinEdgeInfo = ((JoinGroupVertex)edge.getLeftVertex()).getJoinEdge();
+        JoinGroupVertex newVertex = new JoinGroupVertex(newEdge);
+        newVertex.setJoinNode(createJoinNode(context.plan, newEdge));
+        newEdge = new JoinEdge(newJoinEdgeInfo.getJoinType(),
+            newJoinEdgeInfo.getLeftVertex(), newVertex);
+        conditionsForThisJoin.clear();
+        conditionsForThisJoin = findConditionsForJoin(context.predicates, newEdge);
+        if (!conditionsForThisJoin.isEmpty()) {
+          if (newEdge.getJoinType() == JoinType.CROSS) {
+            newEdge.setJoinType(JoinType.INNER);
+          }
+          newEdge.setJoinQuals(conditionsForThisJoin);
+        }
+
+        context.joinEdges.add(newEdge);
       }
       stack.pop();
     }
@@ -185,13 +215,45 @@ public class AssociativeGroup {
     }
   }
 
-  public Set<JoinEdge> populateJoinEdges() {
+  private static JoinNode createJoinNode(LogicalPlan plan, JoinEdge joinEdge) {
+    LogicalNode left = joinEdge.getLeftVertex().getCorrespondingNode();
+    LogicalNode right = joinEdge.getRightVertex().getCorrespondingNode();
+
+    JoinNode joinNode = plan.createNode(JoinNode.class);
+
+    // TODO: move to the propoer position
+    if (PlannerUtil.isCommutativeJoin(joinEdge.getJoinType())) {
+      // if only one operator is relation
+      if ((left instanceof RelationNode) && !(right instanceof RelationNode)) {
+        // for left deep
+        joinNode.init(joinEdge.getJoinType(), right, left);
+      } else {
+        // if both operators are relation or if both are relations
+        // we don't need to concern the left-right position.
+        joinNode.init(joinEdge.getJoinType(), left, right);
+      }
+    } else {
+      joinNode.init(joinEdge.getJoinType(), left, right);
+    }
+
+    Schema mergedSchema = SchemaUtil.merge(joinNode.getLeftChild().getOutSchema(),
+        joinNode.getRightChild().getOutSchema());
+    joinNode.setInSchema(mergedSchema);
+    joinNode.setOutSchema(mergedSchema);
+    if (joinEdge.hasJoinQual()) {
+      joinNode.setJoinQual(AlgebraicUtil.createSingletonExprFromCNF(joinEdge.getJoinQual()));
+    }
+    return joinNode;
+  }
+
+  public Set<JoinEdge> populateJoinEdges(LogicalPlan plan) {
     // collect join predicates within the group
     Set<EvalNode> predicates = collectJoinPredicates();
 
-    JoinEdgeCollectorContext context = new JoinEdgeCollectorContext(predicates);
+    JoinEdgeCollectorContext context = new JoinEdgeCollectorContext(plan, mostLeftVertex,
+        mostRightVertex, predicates);
     JoinEdgeCollector collector = new JoinEdgeCollector();
-    collector.visit(context, new Stack<JoinVertex>(), this.vertex);
+    collector.visit(context, new Stack<JoinVertex>(), this.mostRightVertex);
     return context.joinEdges;
   }
 
