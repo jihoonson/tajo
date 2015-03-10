@@ -20,6 +20,7 @@ package org.apache.tajo.plan.joinorder;
 
 import org.apache.tajo.catalog.Schema;
 import org.apache.tajo.plan.LogicalPlan;
+import org.apache.tajo.plan.expr.EvalNode;
 import org.apache.tajo.plan.util.PlannerUtil;
 import org.apache.tajo.plan.PlanningException;
 import org.apache.tajo.catalog.SchemaUtil;
@@ -142,10 +143,12 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
     private LogicalPlan plan;
     private LogicalPlan.QueryBlock block;
     private JoinNode latestJoin;
+    private AssociativeGroup currentGroup;
 
     public JoinTreeVisitorContext(LogicalPlan plan, LogicalPlan.QueryBlock block) {
       this.plan = plan;
       this.block = block;
+      this.currentGroup = new AssociativeGroup();
     }
   }
 
@@ -155,10 +158,8 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
       stack.push(vertex);
       if (vertex instanceof RelationVertex) {
         visitRelationVertex(context, stack, (RelationVertex) vertex);
-      } else if (vertex instanceof AssociativeGroupVertex) {
-        visitAssociativeGroupVertex(context, stack, (AssociativeGroupVertex) vertex);
-      } else if (vertex instanceof NonAssociativeGroupVertex) {
-        visitNonAssociativeGroupVertex(context, stack, (NonAssociativeGroupVertex) vertex);
+     } else if (vertex instanceof JoinGroupVertex) {
+        visitJoinGroupVertex(context, stack, (JoinGroupVertex) vertex);
       }
       stack.pop();
     }
@@ -168,35 +169,56 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
 
     }
 
-    private void visitAssociativeGroupVertex(JoinTreeVisitorContext context, Stack<JoinVertex> stack,
-                                             AssociativeGroupVertex vertex) {
-      for (JoinVertex nestedVertex : vertex.getVertexes()) {
-        visit(context, stack, nestedVertex);
-      }
-
-      while (vertex.size() > 1) {
-        JoinEdge bestPair = getBestPair(vertex);
-        removePairFromGroup(vertex, bestPair);
-        context.latestJoin = createJoinNode(context.plan, bestPair);
-
-        // all logical nodes should be registered to corresponding blocks
-        context.block.registerNode(context.latestJoin);
-
-        // Even though the join type is associative, they are treated as a non-associative type
-        // because the join order is fixed.
-        NonAssociativeGroupVertex newVertex = new NonAssociativeGroupVertex(bestPair);
-        newVertex.setJoinNode(context.latestJoin);
-        vertex.addVertex(newVertex);
-      }
-    }
-
-    private void visitNonAssociativeGroupVertex(JoinTreeVisitorContext context, Stack<JoinVertex> stack,
-                                                NonAssociativeGroupVertex vertex) {
+    private void visitJoinGroupVertex(JoinTreeVisitorContext context, Stack<JoinVertex> stack,
+                                      JoinGroupVertex vertex) {
       visit(context, stack, vertex.getJoinEdge().getLeftVertex());
       visit(context, stack, vertex.getJoinEdge().getRightVertex());
-      context.latestJoin = createJoinNode(context.plan, vertex.getJoinEdge());
+
+      if (context.currentGroup.size() == 0) {
+        context.currentGroup.addVertex(vertex);
+      } else {
+        if (PlannerUtil.isAssociativeJoin(context.currentGroup.getMostRightJoinType(), vertex.getJoinType())) {
+          context.currentGroup.addVertex(vertex);
+        } else {
+
+        }
+      }
+
+    }
+  }
+
+  private static class JoinPredicateCollectorContext {
+    private Set<EvalNode> predicates = TUtil.newHashSet();
+  }
+
+  private static class JoinPredicateCollector {
+    public void visit(JoinPredicateCollectorContext context, Stack<JoinVertex> stack, JoinVertex vertex) {
+      stack.push(vertex);
+      if (vertex instanceof JoinGroupVertex) {
+        JoinGroupVertex groupVertex = (JoinGroupVertex) vertex;
+        visit(context, stack, groupVertex.getJoinEdge().getLeftVertex());
+        visit(context, stack, groupVertex.getJoinEdge().getRightVertex());
+
+        context.predicates.addAll(TUtil.newList(groupVertex.getJoinEdge().getJoinQual()));
+      }
+      stack.pop();
+    }
+  }
+
+  private static JoinNode createJoinNodeFromJoinGroup(JoinTreeVisitorContext context, AssociativeGroup group) {
+    if (group.size() == 1) {
+      context.latestJoin = createJoinNode(context.plan, group.getMostRightEdge());
       context.block.registerNode(context.latestJoin);
     }
+
+    // collect filters within the group
+    JoinPredicateCollector collector = new JoinPredicateCollector();
+    collector.visit();
+
+    // compare costs of join edges. not every pair. only associative compositions
+
+    // choose the best one
+
   }
 
   private static JoinNode createJoinNode(LogicalPlan plan, JoinEdge joinEdge) {
@@ -235,7 +257,7 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
    * @return The best join pair among them
    * @throws PlanningException
    */
-  public static JoinEdge getBestPair(AssociativeGroupVertex vertex) {
+  public static JoinEdge getBestPair(AssociativeGroup vertex) {
     double minCost = Double.MAX_VALUE;
     double minNonCrossJoinCost = Double.MAX_VALUE;
     JoinEdge bestJoin = null;
@@ -267,7 +289,7 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
     }
   }
 
-  private static void removePairFromGroup(AssociativeGroupVertex vertex, JoinEdge edge) {
+  private static void removePairFromGroup(AssociativeGroup vertex, JoinEdge edge) {
     vertex.removeVertex(edge.getLeftVertex());
     vertex.removeVertex(edge.getRightVertex());
     vertex.removePredicates(TUtil.newHashSet(edge.getJoinQual()));

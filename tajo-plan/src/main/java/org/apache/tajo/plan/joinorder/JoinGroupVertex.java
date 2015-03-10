@@ -18,17 +18,18 @@
 
 package org.apache.tajo.plan.joinorder;
 
+import org.apache.tajo.algebra.JoinType;
 import org.apache.tajo.catalog.Schema;
 import org.apache.tajo.catalog.SchemaUtil;
 import org.apache.tajo.plan.logical.JoinNode;
 import org.apache.tajo.plan.logical.LogicalNode;
 
-public class NonAssociativeGroupVertex implements JoinVertex {
+public class JoinGroupVertex implements JoinVertex {
   private final JoinEdge joinEdge;
   private final Schema schema;
   private JoinNode joinNode; // corresponding join node
 
-  public NonAssociativeGroupVertex(JoinEdge joinEdge) {
+  public JoinGroupVertex(JoinEdge joinEdge) {
     this.joinEdge = joinEdge;
     this.schema = SchemaUtil.merge(joinEdge.getLeftVertex().getSchema(),
         joinEdge.getRightVertex().getSchema());
@@ -54,5 +55,9 @@ public class NonAssociativeGroupVertex implements JoinVertex {
 
   public void setJoinNode(JoinNode joinNode) {
     this.joinNode = joinNode;
+  }
+
+  public JoinType getJoinType() {
+    return joinEdge.getJoinType();
   }
 }
