@@ -779,10 +779,37 @@ public class PlannerUtil {
    * ==============================================================
    */
   public static boolean isAssociativeJoin(JoinType leftType, JoinType rightType) {
-    // TODO
+    if (leftType == rightType) {
+      return true;
+    }
+    if (leftType == JoinType.RIGHT_OUTER) {
+      return true;
+    }
+    if (leftType == JoinType.LEFT_OUTER) {
+      // When the left type is the left outer join, input join types are associative
+      // if the right type is also the left outer join.
+      // This case is already checked above.
+      return false;
+    }
+
+    if (leftType == JoinType.INNER) {
+      if (rightType == JoinType.LEFT_OUTER) {
+        return true;
+      } else {
+        return false;
+      }
+    }
+
+    if (leftType == JoinType.FULL_OUTER) {
+      if (rightType == JoinType.LEFT_OUTER) {
+        return true;
+      } else {
+        return false;
+      }
+    }
 
     // TODO: consider when a join qual involves columns from two or more tables
-    return true;
+    return false;
   }
 
   public static boolean existsAggregationFunction(Expr expr) throws PlanningException {

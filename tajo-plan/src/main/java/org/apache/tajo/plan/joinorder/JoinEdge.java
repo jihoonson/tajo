@@ -18,6 +18,7 @@
 
 package org.apache.tajo.plan.joinorder;
 
+import com.google.common.base.Objects;
 import com.google.common.collect.Sets;
 import org.apache.tajo.algebra.JoinType;
 import org.apache.tajo.plan.expr.EvalNode;
@@ -73,11 +74,33 @@ public class JoinEdge {
     this.joinPredicates.addAll(joinQuals);
   }
 
+  public void setJoinQuals(Set<EvalNode> joinPredicates) {
+    this.joinPredicates.clear();
+    this.joinPredicates.addAll(joinPredicates);
+  }
+
   public EvalNode [] getJoinQual() {
     return joinPredicates.toArray(new EvalNode[joinPredicates.size()]);
   }
 
   public String toString() {
     return leftVertex + " " + joinType + " " + rightVertex + " ON " + TUtil.collectionToString(joinPredicates, ", ");
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hashCode(joinType, leftVertex, rightVertex, joinPredicates.hashCode());
+  }
+
+  public boolean equals(Object o) {
+    if (o instanceof JoinEdge) {
+      JoinEdge other = (JoinEdge) o;
+      boolean eq = this.joinType == other.joinType;
+      eq &= this.leftVertex.equals(other.leftVertex);
+      eq &= this.rightVertex.equals(other.rightVertex);
+      eq &= this.joinPredicates.equals(other.joinPredicates);
+      return eq;
+    }
+    return false;
   }
 }

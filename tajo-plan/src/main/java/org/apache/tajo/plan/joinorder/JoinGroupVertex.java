@@ -60,4 +60,17 @@ public class JoinGroupVertex implements JoinVertex {
   public JoinType getJoinType() {
     return joinEdge.getJoinType();
   }
+
+  @Override
+  public boolean equals(Object o) {
+    if (o instanceof JoinGroupVertex) {
+      return this.joinEdge.equals(((JoinGroupVertex) o).joinEdge);
+    }
+    return false;
+  }
+
+  @Override
+  public int hashCode() {
+    return joinEdge.hashCode();
+  }
 }

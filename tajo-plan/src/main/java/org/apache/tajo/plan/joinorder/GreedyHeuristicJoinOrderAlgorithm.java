@@ -180,45 +180,76 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
         if (PlannerUtil.isAssociativeJoin(context.currentGroup.getMostRightJoinType(), vertex.getJoinType())) {
           context.currentGroup.addVertex(vertex);
         } else {
+          if (context.latestJoin == null) {
+            context.latestJoin = createJoinNodeFromJoinGroup(context, context.currentGroup);
+            context.block.registerNode(context.latestJoin);
+          } else {
+            JoinNode tmpJoin = createJoinNodeFromJoinGroup(context, context.currentGroup);
+            context.block.registerNode(tmpJoin);
+            tmpJoin.setLeftChild(context.latestJoin);
+            context.latestJoin = tmpJoin;
+          }
 
+          context.currentGroup.clear();
+          context.currentGroup.addVertex(new JoinGroupVertex());
         }
       }
 
     }
   }
 
-  private static class JoinPredicateCollectorContext {
-    private Set<EvalNode> predicates = TUtil.newHashSet();
-  }
-
-  private static class JoinPredicateCollector {
-    public void visit(JoinPredicateCollectorContext context, Stack<JoinVertex> stack, JoinVertex vertex) {
-      stack.push(vertex);
-      if (vertex instanceof JoinGroupVertex) {
-        JoinGroupVertex groupVertex = (JoinGroupVertex) vertex;
-        visit(context, stack, groupVertex.getJoinEdge().getLeftVertex());
-        visit(context, stack, groupVertex.getJoinEdge().getRightVertex());
-
-        context.predicates.addAll(TUtil.newList(groupVertex.getJoinEdge().getJoinQual()));
-      }
-      stack.pop();
-    }
-  }
-
   private static JoinNode createJoinNodeFromJoinGroup(JoinTreeVisitorContext context, AssociativeGroup group) {
     if (group.size() == 1) {
-      context.latestJoin = createJoinNode(context.plan, group.getMostRightEdge());
-      context.block.registerNode(context.latestJoin);
+      return createJoinNode(context.plan, group.getMostRightEdge());
     }
 
-    // collect filters within the group
-    JoinPredicateCollector collector = new JoinPredicateCollector();
-    collector.visit();
+    JoinNode unifiedJoin = null;
 
-    // compare costs of join edges. not every pair. only associative compositions
+    // find the best pair
+    Set<JoinEdge> candidates = group.populateJoinEdges();
+    Set<JoinEdge> bestPairs = TUtil.newHashSet();
+    while (candidates.size() > 0) {
+      JoinEdge bestPair = getBestPair(candidates);
+      bestPairs.add(bestPair);
 
-    // choose the best one
+      // remove the selected one from candidates
+      Set<JoinEdge> willBeRemoved = TUtil.newHashSet();
+      for (JoinEdge candidate : candidates) {
+        if (bestPair.getLeftVertex().equals(candidate.getLeftVertex())) {
+          willBeRemoved.add(candidate);
+        }
+        if (bestPair.getRightVertex().equals(candidate.getRightVertex())) {
+          willBeRemoved.add(candidate);
+        }
+      }
+      candidates.removeAll(willBeRemoved);
+    }
 
+    // build the unified join
+    JoinVertex mostLeft = null, mostRight = null;
+    int joinLength = 0;
+    while (joinLength < bestPairs.size()) {
+      for (JoinEdge edge : bestPairs) {
+        if (unifiedJoin == null) {
+          unifiedJoin = createJoinNode(context.plan, edge);
+          mostLeft = edge.getLeftVertex();
+          mostRight = edge.getRightVertex();
+        } else {
+          if (mostLeft.equals(edge.getRightVertex())) {
+            unifiedJoin.setLeftChild(createJoinNode(context.plan, edge));
+            mostLeft = edge.getLeftVertex();
+          }
+          if (mostRight.equals(edge.getLeftVertex())) {
+            JoinNode tmpJoin = createJoinNode(context.plan, edge);
+            tmpJoin.setLeftChild(unifiedJoin);
+            unifiedJoin = tmpJoin;
+            mostRight = edge.getRightVertex();
+          }
+        }
+      }
+    }
+
+    return unifiedJoin;
   }
 
   private static JoinNode createJoinNode(LogicalPlan plan, JoinEdge joinEdge) {
@@ -227,6 +258,7 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
 
     JoinNode joinNode = plan.createNode(JoinNode.class);
 
+    // TODO: move to the propoer position
     if (PlannerUtil.isCommutativeJoin(joinEdge.getJoinType())) {
       // if only one operator is relation
       if ((left instanceof RelationNode) && !(right instanceof RelationNode)) {
@@ -257,13 +289,13 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
    * @return The best join pair among them
    * @throws PlanningException
    */
-  public static JoinEdge getBestPair(AssociativeGroup vertex) {
+  public static JoinEdge getBestPair(Set<JoinEdge> candidates) {
     double minCost = Double.MAX_VALUE;
     double minNonCrossJoinCost = Double.MAX_VALUE;
     JoinEdge bestJoin = null;
     JoinEdge bestNonCrossJoin = null;
 
-    for (JoinEdge candidate : vertex.getJoinEdges()) {
+    for (JoinEdge candidate : candidates) {
       double cost = getCost(candidate);
 
       if (cost < minCost) {
@@ -287,12 +319,6 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
     } else {
       return bestJoin;
     }
-  }
-
-  private static void removePairFromGroup(AssociativeGroup vertex, JoinEdge edge) {
-    vertex.removeVertex(edge.getLeftVertex());
-    vertex.removeVertex(edge.getRightVertex());
-    vertex.removePredicates(TUtil.newHashSet(edge.getJoinQual()));
   }
 
 //  private JoinEdge getBestPair(LogicalPlan plan, JoinGraph graph, Set<LogicalNode> candidateSet, Set<String[]> bestJoinEdges)

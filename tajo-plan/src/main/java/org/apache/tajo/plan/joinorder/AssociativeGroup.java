@@ -25,14 +25,12 @@ import org.apache.tajo.catalog.SchemaUtil;
 import org.apache.tajo.plan.expr.EvalNode;
 import org.apache.tajo.plan.expr.EvalTreeUtil;
 import org.apache.tajo.plan.expr.EvalType;
-import org.apache.tajo.plan.logical.JoinNode;
-import org.apache.tajo.plan.logical.LogicalNode;
 import org.apache.tajo.util.TUtil;
 
-import java.util.Map;
 import java.util.Set;
+import java.util.Stack;
 
-public class AssociativeGroup implements JoinVertex {
+public class AssociativeGroup {
 
   private JoinGroupVertex vertex;
   private JoinEdge mostLeftEdge;
@@ -46,6 +44,7 @@ public class AssociativeGroup implements JoinVertex {
       this.mostLeftEdge = vertex.getJoinEdge();
     }
     this.mostRightEdge = vertex.getJoinEdge();
+    this.edgeNum++;
   }
 
   public JoinType getMostRightJoinType() {
@@ -66,18 +65,134 @@ public class AssociativeGroup implements JoinVertex {
     this.edgeNum = 0;
   }
 
-  @Override
-  public Schema getSchema() {
-    return vertex == null ? null : vertex.getSchema();
-  }
-
-  @Override
-  public LogicalNode getCorrespondingNode() {
-    return vertex == null ? null : vertex.getCorrespondingNode();
+  public JoinVertex getVertex() {
+    return this.vertex;
   }
 
   public int size() {
     return edgeNum;
+  }
+
+  private static class JoinPredicateCollectorContext {
+    private final Set<EvalNode> predicates = TUtil.newHashSet();
+  }
+
+  private static class JoinPredicateCollector {
+    public void visit(JoinPredicateCollectorContext context, Stack<JoinVertex> stack, JoinVertex vertex) {
+      stack.push(vertex);
+      if (vertex instanceof JoinGroupVertex) {
+        JoinGroupVertex groupVertex = (JoinGroupVertex) vertex;
+        visit(context, stack, groupVertex.getJoinEdge().getLeftVertex());
+        visit(context, stack, groupVertex.getJoinEdge().getRightVertex());
+
+        context.predicates.addAll(TUtil.newList(groupVertex.getJoinEdge().getJoinQual()));
+      }
+      stack.pop();
+    }
+  }
+
+  private Set<EvalNode> collectJoinPredicates() {
+    JoinPredicateCollector collector = new JoinPredicateCollector();
+    JoinPredicateCollectorContext context = new JoinPredicateCollectorContext();
+    collector.visit(context, new Stack<JoinVertex>(), this.getVertex());
+    return context.predicates;
+  }
+
+  private static class JoinVertexFinderContext {
+    boolean findMostLeft = false;
+    boolean findMostRight = false;
+    JoinVertex foundVertex;
+  }
+
+  private static class JoinVertexFinder {
+
+    public JoinVertex findMostRightRelationVertex(JoinVertex vertex) {
+      JoinVertexFinderContext context = new JoinVertexFinderContext();
+      context.findMostRight = true;
+      visit(context, new Stack<JoinVertex>(), vertex);
+      return context.foundVertex;
+    }
+
+    private void visit(JoinVertexFinderContext context, Stack<JoinVertex> stack, JoinVertex vertex) {
+      stack.push(vertex);
+      if (vertex instanceof JoinGroupVertex) {
+        JoinGroupVertex groupVertex = (JoinGroupVertex) vertex;
+        visit(context, stack, groupVertex.getJoinEdge().getRightVertex());
+      } else if (vertex instanceof RelationVertex) {
+        context.foundVertex = vertex;
+      }
+      stack.pop();
+    }
+  }
+
+  private static class JoinEdgeCollectorContext {
+    private final Set<JoinEdge> joinEdges = TUtil.newHashSet();
+    private final Set<EvalNode> predicates;
+
+    public JoinEdgeCollectorContext(Set<EvalNode> predicates) {
+      this.predicates = predicates;
+    }
+  }
+
+  private static class JoinEdgeCollector {
+    public void visit(JoinEdgeCollectorContext context, Stack<JoinVertex> stack, JoinVertex vertex) {
+      stack.push(vertex);
+      if (vertex instanceof JoinGroupVertex) {
+        JoinGroupVertex groupVertex = (JoinGroupVertex) vertex;
+        visit(context, stack, groupVertex.getJoinEdge().getLeftVertex());
+        visit(context, stack, groupVertex.getJoinEdge().getRightVertex());
+
+        // original join edge
+        JoinEdge edge = groupVertex.getJoinEdge();
+        // join conditions must be referred to decide the join type between INNER and CROSS.
+        // In addition, some join conditions can be moved to the optimal places due to the changed join order
+        Set<EvalNode> conditionsForThisJoin = findConditionsForJoin(context.predicates, edge);
+        if (!conditionsForThisJoin.isEmpty()) {
+          if (edge.getJoinType() == JoinType.CROSS) {
+            edge.setJoinType(JoinType.INNER);
+          }
+          edge.setJoinQuals(conditionsForThisJoin);
+        }
+
+        // new join edge according to the associative rule
+        JoinVertexFinder finder = new JoinVertexFinder();
+        JoinVertex mostRightRelationFromLeftChild = finder.findMostRightRelationVertex(vertex);
+        JoinEdge newEdge = new JoinEdge(groupVertex.getJoinType(), mostRightRelationFromLeftChild,
+            groupVertex.getJoinEdge().getRightVertex());
+
+        conditionsForThisJoin.clear();
+        conditionsForThisJoin = findConditionsForJoin(context.predicates, newEdge);
+        if (!conditionsForThisJoin.isEmpty()) {
+          if (newEdge.getJoinType() == JoinType.CROSS) {
+            newEdge.setJoinType(JoinType.INNER);
+          }
+          newEdge.setJoinQuals(conditionsForThisJoin);
+        }
+      }
+      stack.pop();
+    }
+
+    private Set<EvalNode> findConditionsForJoin(Set<EvalNode> candidates, JoinEdge edge) {
+      Set<EvalNode> conditionsForThisJoin = TUtil.newHashSet();
+      for (EvalNode predicate : candidates) {
+        if (EvalTreeUtil.isJoinQual(null, edge.getLeftVertex().getSchema(),
+            edge.getRightVertex().getSchema(), predicate, false)
+            && checkIfBeEvaluatedAtJoin(predicate, edge.getLeftVertex(), edge.getRightVertex())) {
+          conditionsForThisJoin.add(predicate);
+        }
+      }
+      return conditionsForThisJoin;
+    }
+  }
+
+  public Set<JoinEdge> populateJoinEdges() {
+    // collect join predicates within the group
+    Set<EvalNode> predicates = collectJoinPredicates();
+
+    JoinEdgeCollectorContext context = new JoinEdgeCollectorContext(predicates);
+    JoinEdgeCollector collector = new JoinEdgeCollector();
+    collector.visit(context, new Stack<JoinVertex>(), this.vertex);
+    return context.joinEdges;
   }
 
 //  private Set<JoinVertex> vertexes = TUtil.newHashSet();
@@ -177,24 +292,24 @@ public class AssociativeGroup implements JoinVertex {
 //    return populatedJoins;
 //  }
 //
-//  private static boolean checkIfBeEvaluatedAtJoin(EvalNode evalNode, JoinVertex left, JoinVertex right) {
-//    Set<Column> columnRefs = EvalTreeUtil.findUniqueColumns(evalNode);
-//
-//    if (EvalTreeUtil.findDistinctAggFunction(evalNode).size() > 0) {
-//      return false;
-//    }
-//
-//    if (EvalTreeUtil.findEvalsByType(evalNode, EvalType.WINDOW_FUNCTION).size() > 0) {
-//      return false;
-//    }
-//
-//    Schema merged = SchemaUtil.merge(left.getSchema(), right.getSchema());
-//    if (columnRefs.size() > 0 && !merged.containsAll(columnRefs)) {
-//      return false;
-//    }
-//
-//    return true;
-//  }
+  private static boolean checkIfBeEvaluatedAtJoin(EvalNode evalNode, JoinVertex left, JoinVertex right) {
+    Set<Column> columnRefs = EvalTreeUtil.findUniqueColumns(evalNode);
+
+    if (EvalTreeUtil.findDistinctAggFunction(evalNode).size() > 0) {
+      return false;
+    }
+
+    if (EvalTreeUtil.findEvalsByType(evalNode, EvalType.WINDOW_FUNCTION).size() > 0) {
+      return false;
+    }
+
+    Schema merged = SchemaUtil.merge(left.getSchema(), right.getSchema());
+    if (columnRefs.size() > 0 && !merged.containsAll(columnRefs)) {
+      return false;
+    }
+
+    return true;
+  }
 //
 //  private static JoinEdge createJoinEdge(JoinType joinType, JoinVertex leftVertex, JoinVertex rightVertex) {
 //    return new JoinEdge(joinType, leftVertex, rightVertex);
