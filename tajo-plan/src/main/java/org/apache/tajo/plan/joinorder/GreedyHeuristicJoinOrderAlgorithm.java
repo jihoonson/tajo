@@ -226,6 +226,7 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
 
       // remove the selected one from candidates
       Set<JoinEdge> willBeRemoved = TUtil.newHashSet();
+      // TODO: when an edge is chosen, the other related edge must be removed. how to figure out the related join edges?
       for (JoinEdge candidate : candidates) {
         if (bestPair.getLeftVertex().equals(candidate.getLeftVertex())) {
           willBeRemoved.add(candidate);
