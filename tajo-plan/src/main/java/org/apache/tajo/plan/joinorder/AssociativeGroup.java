@@ -110,72 +110,13 @@ public class AssociativeGroup {
   }
 
   private static class JoinEdgeCollector extends JoinTreeVisitor<JoinEdgeCollectorContext> {
-//    public void visit(JoinEdgeCollectorContext context, Stack<JoinVertex> stack, JoinVertex vertex) {
-//      stack.push(vertex);
-//      if (vertex instanceof JoinGroupVertex) {
-//        JoinGroupVertex groupVertex = (JoinGroupVertex) vertex;
-//        if (!groupVertex.getJoinEdge().getLeftVertex().equals(context.mostLeftVertex)) {
-//          visit(context, stack, groupVertex.getJoinEdge().getLeftVertex());
-//        }
-//        if (!groupVertex.getJoinEdge().getRightVertex().equals(context.mostRightVertex)) {
-//          visit(context, stack, groupVertex.getJoinEdge().getRightVertex());
-//        }
-//
-//        // original join edge
-//        JoinEdge edge = groupVertex.getJoinEdge();
-//        // join conditions must be referred to decide the join type between INNER and CROSS.
-//        // In addition, some join conditions can be moved to the optimal places due to the changed join order
-//        Set<EvalNode> conditionsForThisJoin = findConditionsForJoin(context.predicates, edge);
-//        if (!conditionsForThisJoin.isEmpty()) {
-//          if (edge.getJoinType() == JoinType.CROSS) {
-//            edge.setJoinType(JoinType.INNER);
-//          }
-//          edge.setJoinQuals(conditionsForThisJoin);
-//        }
-//        context.joinEdges.add(edge);
-//
-//        // TODO: how to keep nodes of other types?
-//        // new join edge according to the associative rule
-//        RelationVertexFinder finder = new RelationVertexFinder();
-//        JoinVertex mostRightRelationFromLeftChild = finder.findMostRightRelationVertex(
-//            groupVertex.getJoinEdge().getLeftVertex()).iterator().next();
-//        JoinEdge newEdge = new JoinEdge(groupVertex.getJoinType(), mostRightRelationFromLeftChild,
-//            groupVertex.getJoinEdge().getRightVertex());
-//
-//        conditionsForThisJoin.clear();
-//        conditionsForThisJoin = findConditionsForJoin(context.predicates, newEdge);
-//        if (!conditionsForThisJoin.isEmpty()) {
-//          if (newEdge.getJoinType() == JoinType.CROSS) {
-//            newEdge.setJoinType(JoinType.INNER);
-//          }
-//          newEdge.setJoinQuals(conditionsForThisJoin);
-//        }
-//
-//        JoinEdge newJoinEdgeInfo = ((JoinGroupVertex)edge.getLeftVertex()).getJoinEdge();
-//        JoinGroupVertex newVertex = new JoinGroupVertex(newEdge);
-//        newVertex.setJoinNode(createJoinNode(context.plan, newEdge));
-//        newEdge = new JoinEdge(newJoinEdgeInfo.getJoinType(),
-//            newJoinEdgeInfo.getLeftVertex(), newVertex);
-//        conditionsForThisJoin.clear();
-//        conditionsForThisJoin = findConditionsForJoin(context.predicates, newEdge);
-//        if (!conditionsForThisJoin.isEmpty()) {
-//          if (newEdge.getJoinType() == JoinType.CROSS) {
-//            newEdge.setJoinType(JoinType.INNER);
-//          }
-//          newEdge.setJoinQuals(conditionsForThisJoin);
-//        }
-//
-//        context.joinEdges.add(newEdge);
-//      }
-//      stack.pop();
-//    }
 
     @Override
     public void visitJoinGroupVertex(JoinEdgeCollectorContext context, Stack<JoinVertex> stack, JoinGroupVertex vertex) {
-      if (!vertex.getJoinEdge().getLeftVertex().equals(context.mostLeftVertex)) {
+      if (!vertex.equals(context.mostLeftVertex)) {
         visit(context, stack, vertex.getJoinEdge().getLeftVertex());
       }
-      if (!vertex.getJoinEdge().getRightVertex().equals(context.mostRightVertex)) {
+      if (!vertex.equals(context.mostRightVertex)) {
         visit(context, stack, vertex.getJoinEdge().getRightVertex());
       }
 
@@ -217,6 +158,8 @@ public class AssociativeGroup {
           eachChild.setJoinQuals(conditionsForThisJoin);
         }
       }
+
+      context.joinEdges.addAll(childEdges);
 
       Set<JoinEdge> newEdges = TUtil.newHashSet();
       JoinEdge newJoinEdgeInfo = ((JoinGroupVertex)edge.getLeftVertex()).getJoinEdge();
@@ -297,103 +240,6 @@ public class AssociativeGroup {
     return context.joinEdges;
   }
 
-//  private Set<JoinVertex> vertexes = TUtil.newHashSet();
-//  private Map<VertexPair, JoinEdge> joinEdges = TUtil.newHashMap();
-//  private Set<EvalNode> predicateCandiates = TUtil.newHashSet();
-//  private JoinNode joinNode; // corresponding join node
-//
-//  private JoinEdge mostLeftEdge;
-//  private JoinEdge mostRightEdge;
-//
-////  public void addVertex(JoinVertex vertex) {
-////    this.vertexes.add(vertex);
-////  }
-//
-//  public void addPredicates(Set<EvalNode> predicates) {
-//    this.predicateCandiates.addAll(predicates);
-//  }
-//
-////  public void removeVertex(JoinVertex vertex) {
-////    this.vertexes.remove(vertex);
-////  }
-//
-//  public void removePredicates(Set<EvalNode> predicates) {
-//    this.predicateCandiates.removeAll(predicates);
-//  }
-//
-////  public void addJoinEdge(JoinVertex left, JoinVertex right, JoinEdge edge) {
-////    this.joinEdges.put(new VertexPair(left, right), edge);
-////  }
-//
-//  public void addJoinEdge(JoinEdge joinEdge) {
-////    addVertex(joinEdge.getLeftVertex());
-////    addVertex(joinEdge.getRightVertex());
-//    // TODO: connection check
-//    this.joinEdges.put(new VertexPair(joinEdge.getLeftVertex(), joinEdge.getRightVertex()), joinEdge);
-//  }
-//
-//  public void removeJoinEdge(JoinEdge joinEdge) {
-//    // TODO
-//  }
-//
-//  public boolean isEmpty() {
-//    return vertexes.isEmpty();
-//  }
-//
-//  public int size() {
-//    return vertexes.size();
-//  }
-//
-//  public Set<JoinVertex> getVertexes() {
-//    return vertexes;
-//  }
-//
-//  public Set<EvalNode> getPredicates() {
-//    return predicateCandiates;
-//  }
-//
-//  public Set<JoinEdge> getJoinEdges() {
-////    this.joinEdges.addAll(populateVertexPairs());
-//    return populateVertexPairs();
-//  }
-//
-//  public Set<JoinEdge> populateVertexPairs() {
-//
-//    // get or create join nodes for every vertex pairs
-//    Set<JoinEdge> populatedJoins = TUtil.newHashSet();
-//    VertexPair keyVertexPair;
-//
-//    // TODO: commutative type check
-//    for (JoinVertex left : vertexes) {
-//      for (JoinVertex right : vertexes) {
-//        if (left.equals(right)) continue;
-//        keyVertexPair = new VertexPair(left, right);
-//        JoinEdge joinEdge;
-//        if (joinEdges.containsKey(keyVertexPair)) {
-//          joinEdge = joinEdges.get(keyVertexPair);
-//        } else {
-//          joinEdge =createJoinEdge(JoinType.CROSS, left, right);
-//          // join conditions must be referred to decide the join type between INNER and CROSS.
-//          // In addition, some join conditions can be moved to the optimal places due to the changed join order
-//          Set<EvalNode> conditionsForThisJoin = TUtil.newHashSet();
-//          for (EvalNode predicate : predicateCandiates) {
-//            if (EvalTreeUtil.isJoinQual(null, left.getSchema(), right.getSchema(), predicate, false)
-//                && checkIfBeEvaluatedAtJoin(predicate, left, right)) {
-//              conditionsForThisJoin.add(predicate);
-//            }
-//          }
-//          if (!conditionsForThisJoin.isEmpty()) {
-//            joinEdge.setJoinType(JoinType.INNER);
-//            joinEdge.addJoinQuals(conditionsForThisJoin);
-//          }
-//        }
-//
-//        populatedJoins.add(joinEdge);
-//      }
-//    }
-//    return populatedJoins;
-//  }
-//
   private static boolean checkIfBeEvaluatedAtJoin(EvalNode evalNode, JoinVertex left, JoinVertex right) {
     Set<Column> columnRefs = EvalTreeUtil.findUniqueColumns(evalNode);
 
@@ -412,45 +258,4 @@ public class AssociativeGroup {
 
     return true;
   }
-//
-//  private static JoinEdge createJoinEdge(JoinType joinType, JoinVertex leftVertex, JoinVertex rightVertex) {
-//    return new JoinEdge(joinType, leftVertex, rightVertex);
-//  }
-//
-//  @Override
-//  public String toString() {
-//    return "(" + TUtil.collectionToString(vertexes, ",") + ")";
-//  }
-//
-//  @Override
-//  public boolean equals(Object o) {
-//    if (o instanceof AssociativeGroup) {
-//      AssociativeGroup other = (AssociativeGroup) o;
-//      return TUtil.checkEquals(this.vertexes, other.vertexes);
-//    }
-//    return false;
-//  }
-//
-//  @Override
-//  public int hashCode() {
-//    return vertexes.hashCode();
-//  }
-//
-//  @Override
-//  public Schema getSchema() {
-//    Schema schema = new Schema();
-//    for (JoinVertex v : vertexes) {
-//      schema = SchemaUtil.merge(schema, v.getSchema());
-//    }
-//    return schema;
-//  }
-//
-//  @Override
-//  public LogicalNode getCorrespondingNode() {
-//    return joinNode;
-//  }
-//
-//  public void setJoinNode(JoinNode joinNode) {
-//    this.joinNode = joinNode;
-//  }
 }

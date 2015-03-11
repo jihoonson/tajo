@@ -209,8 +209,8 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
     LeafVertexCollectorContext collectorContext = new LeafVertexCollectorContext(group);
     LeafVertexCollector collector = new LeafVertexCollector();
     collector.visit(collectorContext, new Stack<JoinVertex>(), group.getMostRightVertex());
-    Set<JoinVertex> leftCandidateVertexes = collectorContext.leftVertexes;
-    Set<JoinVertex> rightCandidateVertexes = collectorContext.rightVertexes;
+    Set<JoinVertex> leftCandidateVertexes = TUtil.newHashSet();
+    Set<JoinVertex> rightCandidateVertexes = TUtil.newHashSet();
 
     for (JoinEdge candidateEdge : candidateEdges) {
 //      leftCandidateVertexes.add(candidateEdge.getLeftVertex());
@@ -219,6 +219,12 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
 //        leftCandidateVertexes.add(candidateEdge.getRightVertex());
 //        rightCandidateVertexes.add(candidateEdge.getLeftVertex());
 //      }
+      if (collectorContext.founds.contains(candidateEdge.getLeftVertex())) {
+        leftCandidateVertexes.add(candidateEdge.getLeftVertex());
+      }
+      if (collectorContext.founds.contains(candidateEdge.getRightVertex())) {
+        rightCandidateVertexes.add(candidateEdge.getRightVertex());
+      }
       edgeMap.put(new VertexPair(candidateEdge.getLeftVertex(), candidateEdge.getRightVertex()), candidateEdge);
     }
 
@@ -273,8 +279,7 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
   private static class LeafVertexCollectorContext {
     JoinVertex mostLeftVertex;
     JoinVertex mostRightVertex;
-    Set<JoinVertex> leftVertexes = TUtil.newHashSet();
-    Set<JoinVertex> rightVertexes = TUtil.newHashSet();
+    Set<JoinVertex> founds = TUtil.newHashSet();
 
     public LeafVertexCollectorContext(AssociativeGroup group) {
       this.mostLeftVertex = group.getMostLeftVertex();
@@ -289,21 +294,21 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
                                      JoinGroupVertex vertex) {
       if (!vertex.equals(context.mostLeftVertex)) {
         if (vertex.getJoinEdge().getLeftVertex() instanceof RelationVertex) {
-          context.leftVertexes.add(vertex.getJoinEdge().getLeftVertex());
+          context.founds.add(vertex.getJoinEdge().getLeftVertex());
         } else {
           visit(context, stack, vertex.getJoinEdge().getLeftVertex());
         }
       } else {
-        context.leftVertexes.add(vertex.getJoinEdge().getLeftVertex());
+        context.founds.add(vertex.getJoinEdge().getLeftVertex());
       }
       if (!vertex.equals(context.mostRightVertex)) {
         if (vertex.getJoinEdge().getRightVertex() instanceof RelationVertex) {
-          context.rightVertexes.add(vertex.getJoinEdge().getRightVertex());
+          context.founds.add(vertex.getJoinEdge().getRightVertex());
         } else {
           visit(context, stack, vertex.getJoinEdge().getRightVertex());
         }
       } else {
-        context.rightVertexes.add(vertex.getJoinEdge().getRightVertex());
+        context.founds.add(vertex.getJoinEdge().getRightVertex());
       }
     }
   }
@@ -355,6 +360,7 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
     VertexPair key = new VertexPair();
     for (JoinVertex left : leftVertexes) {
       for (JoinVertex right : rightVertexes) {
+        if (left.equals(right)) continue;
         key.set(left, right);
         JoinEdge candidateEdge = candidates.get(key);
         if (candidateEdge == null) {
