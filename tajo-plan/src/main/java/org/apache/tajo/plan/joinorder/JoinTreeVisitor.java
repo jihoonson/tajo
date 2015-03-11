@@ -18,15 +18,26 @@
 
 package org.apache.tajo.plan.joinorder;
 
-import org.apache.tajo.util.Pair;
+import java.util.Stack;
 
-public class VertexPair extends Pair<JoinVertex, JoinVertex> {
+public class JoinTreeVisitor<CONTEXT> {
 
-  public VertexPair() {
-
+  public void visit(CONTEXT context, Stack<JoinVertex> stack, JoinVertex vertex) {
+    stack.push(vertex);
+    if (vertex instanceof RelationVertex) {
+      visitRelationVertex(context, stack, (RelationVertex) vertex);
+    } else {
+      // JoinGroupVertex
+      visitJoinGroupVertex(context, stack, (JoinGroupVertex) vertex);
+    }
+    stack.pop();
   }
 
-  public VertexPair(JoinVertex left, JoinVertex right) {
-    super(left, right);
+  public void visitRelationVertex(CONTEXT context, Stack<JoinVertex> stack, RelationVertex vertex) {
+  }
+
+  public void visitJoinGroupVertex(CONTEXT context, Stack<JoinVertex> stack, JoinGroupVertex vertex) {
+    visit(context, stack, vertex.getJoinEdge().getLeftVertex());
+    visit(context, stack, vertex.getJoinEdge().getRightVertex());
   }
 }

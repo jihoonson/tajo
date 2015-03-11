@@ -31,7 +31,6 @@ import org.apache.tajo.plan.logical.JoinNode;
 import org.apache.tajo.plan.logical.LogicalNode;
 import org.apache.tajo.plan.logical.RelationNode;
 import org.apache.tajo.plan.util.PlannerUtil;
-import org.apache.tajo.util.Pair;
 import org.apache.tajo.util.TUtil;
 
 import java.util.Set;
@@ -77,17 +76,13 @@ public class AssociativeGroup {
     private final Set<EvalNode> predicates = TUtil.newHashSet();
   }
 
-  private static class JoinPredicateCollector {
-    public void visit(JoinPredicateCollectorContext context, Stack<JoinVertex> stack, JoinVertex vertex) {
-      stack.push(vertex);
-      if (vertex instanceof JoinGroupVertex) {
-        JoinGroupVertex groupVertex = (JoinGroupVertex) vertex;
-        visit(context, stack, groupVertex.getJoinEdge().getLeftVertex());
-        visit(context, stack, groupVertex.getJoinEdge().getRightVertex());
+  private static class JoinPredicateCollector extends JoinTreeVisitor<JoinPredicateCollectorContext> {
 
-        context.predicates.addAll(TUtil.newList(groupVertex.getJoinEdge().getJoinQual()));
-      }
-      stack.pop();
+    @Override
+    public void visitJoinGroupVertex(JoinPredicateCollectorContext context, Stack<JoinVertex> stack,
+                                     JoinGroupVertex vertex) {
+      super.visitJoinGroupVertex(context, stack, vertex);
+      context.predicates.addAll(TUtil.newList(vertex.getJoinEdge().getJoinQual()));
     }
   }
 
@@ -96,33 +91,6 @@ public class AssociativeGroup {
     JoinPredicateCollectorContext context = new JoinPredicateCollectorContext();
     collector.visit(context, new Stack<JoinVertex>(), this.getMostRightVertex());
     return context.predicates;
-  }
-
-  private static class JoinVertexFinderContext {
-    boolean findMostLeft = false;
-    boolean findMostRight = false;
-    JoinVertex foundVertex;
-  }
-
-  private static class JoinVertexFinder {
-
-    public JoinVertex findMostRightRelationVertex(JoinVertex vertex) {
-      JoinVertexFinderContext context = new JoinVertexFinderContext();
-      context.findMostRight = true;
-      visit(context, new Stack<JoinVertex>(), vertex);
-      return context.foundVertex;
-    }
-
-    private void visit(JoinVertexFinderContext context, Stack<JoinVertex> stack, JoinVertex vertex) {
-      stack.push(vertex);
-      if (vertex instanceof JoinGroupVertex) {
-        JoinGroupVertex groupVertex = (JoinGroupVertex) vertex;
-        visit(context, stack, groupVertex.getJoinEdge().getRightVertex());
-      } else if (vertex instanceof RelationVertex) {
-        context.foundVertex = vertex;
-      }
-      stack.pop();
-    }
   }
 
   private static class JoinEdgeCollectorContext {
@@ -141,65 +109,137 @@ public class AssociativeGroup {
     }
   }
 
-  private static class JoinEdgeCollector {
-    public void visit(JoinEdgeCollectorContext context, Stack<JoinVertex> stack, JoinVertex vertex) {
-      stack.push(vertex);
-      if (vertex instanceof JoinGroupVertex) {
-        JoinGroupVertex groupVertex = (JoinGroupVertex) vertex;
-        if (!groupVertex.getJoinEdge().getLeftVertex().equals(context.mostLeftVertex)) {
-          visit(context, stack, groupVertex.getJoinEdge().getLeftVertex());
-        }
-        if (!groupVertex.getJoinEdge().getRightVertex().equals(context.mostRightVertex)) {
-          visit(context, stack, groupVertex.getJoinEdge().getRightVertex());
-        }
+  private static class JoinEdgeCollector extends JoinTreeVisitor<JoinEdgeCollectorContext> {
+//    public void visit(JoinEdgeCollectorContext context, Stack<JoinVertex> stack, JoinVertex vertex) {
+//      stack.push(vertex);
+//      if (vertex instanceof JoinGroupVertex) {
+//        JoinGroupVertex groupVertex = (JoinGroupVertex) vertex;
+//        if (!groupVertex.getJoinEdge().getLeftVertex().equals(context.mostLeftVertex)) {
+//          visit(context, stack, groupVertex.getJoinEdge().getLeftVertex());
+//        }
+//        if (!groupVertex.getJoinEdge().getRightVertex().equals(context.mostRightVertex)) {
+//          visit(context, stack, groupVertex.getJoinEdge().getRightVertex());
+//        }
+//
+//        // original join edge
+//        JoinEdge edge = groupVertex.getJoinEdge();
+//        // join conditions must be referred to decide the join type between INNER and CROSS.
+//        // In addition, some join conditions can be moved to the optimal places due to the changed join order
+//        Set<EvalNode> conditionsForThisJoin = findConditionsForJoin(context.predicates, edge);
+//        if (!conditionsForThisJoin.isEmpty()) {
+//          if (edge.getJoinType() == JoinType.CROSS) {
+//            edge.setJoinType(JoinType.INNER);
+//          }
+//          edge.setJoinQuals(conditionsForThisJoin);
+//        }
+//        context.joinEdges.add(edge);
+//
+//        // TODO: how to keep nodes of other types?
+//        // new join edge according to the associative rule
+//        RelationVertexFinder finder = new RelationVertexFinder();
+//        JoinVertex mostRightRelationFromLeftChild = finder.findMostRightRelationVertex(
+//            groupVertex.getJoinEdge().getLeftVertex()).iterator().next();
+//        JoinEdge newEdge = new JoinEdge(groupVertex.getJoinType(), mostRightRelationFromLeftChild,
+//            groupVertex.getJoinEdge().getRightVertex());
+//
+//        conditionsForThisJoin.clear();
+//        conditionsForThisJoin = findConditionsForJoin(context.predicates, newEdge);
+//        if (!conditionsForThisJoin.isEmpty()) {
+//          if (newEdge.getJoinType() == JoinType.CROSS) {
+//            newEdge.setJoinType(JoinType.INNER);
+//          }
+//          newEdge.setJoinQuals(conditionsForThisJoin);
+//        }
+//
+//        JoinEdge newJoinEdgeInfo = ((JoinGroupVertex)edge.getLeftVertex()).getJoinEdge();
+//        JoinGroupVertex newVertex = new JoinGroupVertex(newEdge);
+//        newVertex.setJoinNode(createJoinNode(context.plan, newEdge));
+//        newEdge = new JoinEdge(newJoinEdgeInfo.getJoinType(),
+//            newJoinEdgeInfo.getLeftVertex(), newVertex);
+//        conditionsForThisJoin.clear();
+//        conditionsForThisJoin = findConditionsForJoin(context.predicates, newEdge);
+//        if (!conditionsForThisJoin.isEmpty()) {
+//          if (newEdge.getJoinType() == JoinType.CROSS) {
+//            newEdge.setJoinType(JoinType.INNER);
+//          }
+//          newEdge.setJoinQuals(conditionsForThisJoin);
+//        }
+//
+//        context.joinEdges.add(newEdge);
+//      }
+//      stack.pop();
+//    }
 
-        // original join edge
-        JoinEdge edge = groupVertex.getJoinEdge();
-        // join conditions must be referred to decide the join type between INNER and CROSS.
-        // In addition, some join conditions can be moved to the optimal places due to the changed join order
-        Set<EvalNode> conditionsForThisJoin = findConditionsForJoin(context.predicates, edge);
-        if (!conditionsForThisJoin.isEmpty()) {
-          if (edge.getJoinType() == JoinType.CROSS) {
-            edge.setJoinType(JoinType.INNER);
-          }
-          edge.setJoinQuals(conditionsForThisJoin);
-        }
-        context.joinEdges.add(edge);
-
-        // TODO: how to keep nodes of other types?
-        // new join edge according to the associative rule
-        JoinVertexFinder finder = new JoinVertexFinder();
-        JoinVertex mostRightRelationFromLeftChild = finder.findMostRightRelationVertex(
-            groupVertex.getJoinEdge().getLeftVertex());
-        JoinEdge newEdge = new JoinEdge(groupVertex.getJoinType(), mostRightRelationFromLeftChild,
-            groupVertex.getJoinEdge().getRightVertex());
-
-        conditionsForThisJoin.clear();
-        conditionsForThisJoin = findConditionsForJoin(context.predicates, newEdge);
-        if (!conditionsForThisJoin.isEmpty()) {
-          if (newEdge.getJoinType() == JoinType.CROSS) {
-            newEdge.setJoinType(JoinType.INNER);
-          }
-          newEdge.setJoinQuals(conditionsForThisJoin);
-        }
-
-        JoinEdge newJoinEdgeInfo = ((JoinGroupVertex)edge.getLeftVertex()).getJoinEdge();
-        JoinGroupVertex newVertex = new JoinGroupVertex(newEdge);
-        newVertex.setJoinNode(createJoinNode(context.plan, newEdge));
-        newEdge = new JoinEdge(newJoinEdgeInfo.getJoinType(),
-            newJoinEdgeInfo.getLeftVertex(), newVertex);
-        conditionsForThisJoin.clear();
-        conditionsForThisJoin = findConditionsForJoin(context.predicates, newEdge);
-        if (!conditionsForThisJoin.isEmpty()) {
-          if (newEdge.getJoinType() == JoinType.CROSS) {
-            newEdge.setJoinType(JoinType.INNER);
-          }
-          newEdge.setJoinQuals(conditionsForThisJoin);
-        }
-
-        context.joinEdges.add(newEdge);
+    @Override
+    public void visitJoinGroupVertex(JoinEdgeCollectorContext context, Stack<JoinVertex> stack, JoinGroupVertex vertex) {
+      if (!vertex.getJoinEdge().getLeftVertex().equals(context.mostLeftVertex)) {
+        visit(context, stack, vertex.getJoinEdge().getLeftVertex());
       }
-      stack.pop();
+      if (!vertex.getJoinEdge().getRightVertex().equals(context.mostRightVertex)) {
+        visit(context, stack, vertex.getJoinEdge().getRightVertex());
+      }
+
+      // original join edge
+      JoinEdge edge = vertex.getJoinEdge();
+      // join conditions must be referred to decide the join type between INNER and CROSS.
+      // In addition, some join conditions can be moved to the optimal places due to the changed join order
+      Set<EvalNode> conditionsForThisJoin = findConditionsForJoin(context.predicates, edge);
+      if (!conditionsForThisJoin.isEmpty()) {
+        if (edge.getJoinType() == JoinType.CROSS) {
+          edge.setJoinType(JoinType.INNER);
+        }
+        edge.setJoinQuals(conditionsForThisJoin);
+      }
+      context.joinEdges.add(edge);
+      if (PlannerUtil.isCommutativeJoin(edge.getJoinType())) {
+        context.joinEdges.add(new JoinEdge(edge.getJoinType(), edge.getRightVertex(), edge.getLeftVertex()));
+      }
+
+      // TODO: how to keep nodes of other types?
+      // new join edge according to the associative rule
+      JoinVertex mostRightRelationFromLeftChild = JoinOrderUtil.findMostRightRelationVertex(
+          vertex.getJoinEdge().getLeftVertex());
+      Set<JoinEdge> childEdges = TUtil.newHashSet();
+      JoinEdge childEdge = new JoinEdge(vertex.getJoinType(), mostRightRelationFromLeftChild,
+          vertex.getJoinEdge().getRightVertex());
+      childEdges.add(childEdge);
+      if (PlannerUtil.isCommutativeJoin(childEdge.getJoinType())) {
+        childEdges.add(new JoinEdge(childEdge.getJoinType(), childEdge.getRightVertex(), childEdge.getLeftVertex()));
+      }
+
+      conditionsForThisJoin.clear();
+      conditionsForThisJoin = findConditionsForJoin(context.predicates, childEdge);
+      if (!conditionsForThisJoin.isEmpty()) {
+        for (JoinEdge eachChild : childEdges) {
+          if (eachChild.getJoinType() == JoinType.CROSS) {
+            eachChild.setJoinType(JoinType.INNER);
+          }
+          eachChild.setJoinQuals(conditionsForThisJoin);
+        }
+      }
+
+      Set<JoinEdge> newEdges = TUtil.newHashSet();
+      JoinEdge newJoinEdgeInfo = ((JoinGroupVertex)edge.getLeftVertex()).getJoinEdge();
+      JoinGroupVertex newVertex = new JoinGroupVertex(childEdge);
+      newVertex.setJoinNode(createJoinNode(context.plan, childEdge));
+      JoinEdge newEdge = new JoinEdge(newJoinEdgeInfo.getJoinType(),
+          newJoinEdgeInfo.getLeftVertex(), newVertex);
+      newEdges.add(newEdge);
+      if (PlannerUtil.isCommutativeJoin(newEdge.getJoinType())) {
+        newEdges.add(new JoinEdge(newEdge.getJoinType(), newEdge.getRightVertex(), newEdge.getLeftVertex()));
+      }
+      conditionsForThisJoin.clear();
+      conditionsForThisJoin = findConditionsForJoin(context.predicates, newEdge);
+      if (!conditionsForThisJoin.isEmpty()) {
+        for (JoinEdge eachEdge : newEdges) {
+          if (eachEdge.getJoinType() == JoinType.CROSS) {
+            eachEdge.setJoinType(JoinType.INNER);
+          }
+          eachEdge.setJoinQuals(conditionsForThisJoin);
+        }
+      }
+
+      context.joinEdges.addAll(newEdges);
     }
 
     private Set<EvalNode> findConditionsForJoin(Set<EvalNode> candidates, JoinEdge edge) {

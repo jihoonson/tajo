@@ -20,7 +20,6 @@ package org.apache.tajo.plan.joinorder;
 
 import org.apache.tajo.catalog.Schema;
 import org.apache.tajo.plan.LogicalPlan;
-import org.apache.tajo.plan.expr.EvalNode;
 import org.apache.tajo.plan.util.PlannerUtil;
 import org.apache.tajo.plan.PlanningException;
 import org.apache.tajo.catalog.SchemaUtil;
@@ -43,8 +42,8 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
   public FoundJoinOrder findBestOrder(LogicalPlan plan, LogicalPlan.QueryBlock block, JoinTree joinTree)
       throws PlanningException {
 
-    JoinTreeVisitorContext context = new JoinTreeVisitorContext(plan, block);
-    JoinTreeVisitor visitor = new JoinTreeVisitor();
+    JoinOrderBuilderContext context = new JoinOrderBuilderContext(plan, block);
+    JoinOrderBuilder visitor = new JoinOrderBuilder();
     visitor.visit(context, new Stack<JoinVertex>(), joinTree.getRoot());
 
     Pair<JoinGroupVertex, JoinNode> pair = createJoinNodeFromJoinGroup(context, context.currentGroup);
@@ -146,40 +145,25 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
 //    return new FoundJoinOrder(joinTree, getCost(joinTree));
   }
 
-  private static class JoinTreeVisitorContext {
+  private static class JoinOrderBuilderContext {
     private LogicalPlan plan;
     private LogicalPlan.QueryBlock block;
     private JoinNode latestJoin;
     private AssociativeGroup currentGroup;
 
-    public JoinTreeVisitorContext(LogicalPlan plan, LogicalPlan.QueryBlock block) {
+    public JoinOrderBuilderContext(LogicalPlan plan, LogicalPlan.QueryBlock block) {
       this.plan = plan;
       this.block = block;
       this.currentGroup = new AssociativeGroup();
     }
   }
 
-  private static class JoinTreeVisitor {
+  private static class JoinOrderBuilder extends JoinTreeVisitor<JoinOrderBuilderContext> {
 
-    public void visit(JoinTreeVisitorContext context, Stack<JoinVertex> stack, JoinVertex vertex) {
-      stack.push(vertex);
-      if (vertex instanceof RelationVertex) {
-        visitRelationVertex(context, stack, (RelationVertex) vertex);
-     } else if (vertex instanceof JoinGroupVertex) {
-        visitJoinGroupVertex(context, stack, (JoinGroupVertex) vertex);
-      }
-      stack.pop();
-    }
-
-    private void visitRelationVertex(JoinTreeVisitorContext context, Stack<JoinVertex> stack,
-                                     RelationVertex vertex) {
-
-    }
-
-    private void visitJoinGroupVertex(JoinTreeVisitorContext context, Stack<JoinVertex> stack,
+    @Override
+    public void visitJoinGroupVertex(JoinOrderBuilderContext context, Stack<JoinVertex> stack,
                                       JoinGroupVertex vertex) {
-      visit(context, stack, vertex.getJoinEdge().getLeftVertex());
-      visit(context, stack, vertex.getJoinEdge().getRightVertex());
+      super.visitJoinGroupVertex(context, stack, vertex);
 
       if (context.currentGroup.size() == 0) {
         context.currentGroup.addVertex(vertex);
@@ -208,7 +192,7 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
     }
   }
 
-  private static Pair<JoinGroupVertex,JoinNode> createJoinNodeFromJoinGroup(JoinTreeVisitorContext context,
+  private static Pair<JoinGroupVertex,JoinNode> createJoinNodeFromJoinGroup(JoinOrderBuilderContext context,
                                                                             AssociativeGroup group) {
     if (group.size() == 1) {
       return createJoinNode(context.plan, group.getMostRightVertex().getJoinEdge());
@@ -218,24 +202,37 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
     JoinGroupVertex unifiedVertex = null;
 
     // find the best pair
-    Set<JoinEdge> candidates = group.populateJoinEdges(context.plan);
-    Set<JoinEdge> bestPairs = TUtil.newHashSet();
-    while (candidates.size() > 0) {
-      JoinEdge bestPair = getBestPair(candidates);
-      bestPairs.add(bestPair);
+    Set<JoinEdge> candidateEdges = group.populateJoinEdges(context.plan);
+    Map<VertexPair, JoinEdge> edgeMap = TUtil.newHashMap();
+//    Set<JoinVertex> leftCandidateVertexes = TUtil.newHashSet();
+//    Set<JoinVertex> rightCandidateVertexes = TUtil.newHashSet();
+    LeafVertexCollectorContext collectorContext = new LeafVertexCollectorContext(group);
+    LeafVertexCollector collector = new LeafVertexCollector();
+    collector.visit(collectorContext, new Stack<JoinVertex>(), group.getMostRightVertex());
+    Set<JoinVertex> leftCandidateVertexes = collectorContext.leftVertexes;
+    Set<JoinVertex> rightCandidateVertexes = collectorContext.rightVertexes;
 
-      // remove the selected one from candidates
-      Set<JoinEdge> willBeRemoved = TUtil.newHashSet();
-      // TODO: when an edge is chosen, the other related edge must be removed. how to figure out the related join edges?
-      for (JoinEdge candidate : candidates) {
-        if (bestPair.getLeftVertex().equals(candidate.getLeftVertex())) {
-          willBeRemoved.add(candidate);
-        }
-        if (bestPair.getRightVertex().equals(candidate.getRightVertex())) {
-          willBeRemoved.add(candidate);
-        }
+    for (JoinEdge candidateEdge : candidateEdges) {
+//      leftCandidateVertexes.add(candidateEdge.getLeftVertex());
+//      rightCandidateVertexes.add(candidateEdge.getRightVertex());
+//      if (PlannerUtil.isCommutativeJoin(candidateEdge.getJoinType())) {
+//        leftCandidateVertexes.add(candidateEdge.getRightVertex());
+//        rightCandidateVertexes.add(candidateEdge.getLeftVertex());
+//      }
+      edgeMap.put(new VertexPair(candidateEdge.getLeftVertex(), candidateEdge.getRightVertex()), candidateEdge);
+    }
+
+    Set<JoinEdge> bestPairs = TUtil.newHashSet();
+    while (!leftCandidateVertexes.isEmpty() && !rightCandidateVertexes.isEmpty()) {
+      JoinEdge bestPair = getBestPair(leftCandidateVertexes, rightCandidateVertexes, edgeMap);
+      bestPairs.add(bestPair);
+      leftCandidateVertexes.remove(bestPair.getLeftVertex());
+      rightCandidateVertexes.remove(bestPair.getRightVertex());
+      if (PlannerUtil.isCommutativeJoin(bestPair.getJoinType())) {
+        rightCandidateVertexes.remove(bestPair.getLeftVertex());
+        leftCandidateVertexes.remove(bestPair.getRightVertex());
       }
-      candidates.removeAll(willBeRemoved);
+      leftCandidateVertexes.add(new JoinGroupVertex(bestPair));
     }
 
     // build the unified join
@@ -271,6 +268,44 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
 
     pair = new Pair<JoinGroupVertex, JoinNode>(unifiedVertex, unifiedJoin);
     return pair;
+  }
+
+  private static class LeafVertexCollectorContext {
+    JoinVertex mostLeftVertex;
+    JoinVertex mostRightVertex;
+    Set<JoinVertex> leftVertexes = TUtil.newHashSet();
+    Set<JoinVertex> rightVertexes = TUtil.newHashSet();
+
+    public LeafVertexCollectorContext(AssociativeGroup group) {
+      this.mostLeftVertex = group.getMostLeftVertex();
+      this.mostRightVertex = group.getMostRightVertex();
+    }
+  }
+
+  private static class LeafVertexCollector extends JoinTreeVisitor<LeafVertexCollectorContext> {
+
+    @Override
+    public void visitJoinGroupVertex(LeafVertexCollectorContext context, Stack<JoinVertex> stack,
+                                     JoinGroupVertex vertex) {
+      if (!vertex.equals(context.mostLeftVertex)) {
+        if (vertex.getJoinEdge().getLeftVertex() instanceof RelationVertex) {
+          context.leftVertexes.add(vertex.getJoinEdge().getLeftVertex());
+        } else {
+          visit(context, stack, vertex.getJoinEdge().getLeftVertex());
+        }
+      } else {
+        context.leftVertexes.add(vertex.getJoinEdge().getLeftVertex());
+      }
+      if (!vertex.equals(context.mostRightVertex)) {
+        if (vertex.getJoinEdge().getRightVertex() instanceof RelationVertex) {
+          context.rightVertexes.add(vertex.getJoinEdge().getRightVertex());
+        } else {
+          visit(context, stack, vertex.getJoinEdge().getRightVertex());
+        }
+      } else {
+        context.rightVertexes.add(vertex.getJoinEdge().getRightVertex());
+      }
+    }
   }
 
   private static Pair<JoinGroupVertex,JoinNode> createJoinNode(LogicalPlan plan, JoinEdge joinEdge) {
@@ -310,27 +345,36 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
    * @return The best join pair among them
    * @throws PlanningException
    */
-  public static JoinEdge getBestPair(Set<JoinEdge> candidates) {
+  public static JoinEdge getBestPair(Set<JoinVertex> leftVertexes, Set<JoinVertex> rightVertexes,
+                                     Map<VertexPair, JoinEdge> candidates) {
     double minCost = Double.MAX_VALUE;
     double minNonCrossJoinCost = Double.MAX_VALUE;
     JoinEdge bestJoin = null;
     JoinEdge bestNonCrossJoin = null;
 
-    for (JoinEdge candidate : candidates) {
-      double cost = getCost(candidate);
+    VertexPair key = new VertexPair();
+    for (JoinVertex left : leftVertexes) {
+      for (JoinVertex right : rightVertexes) {
+        key.set(left, right);
+        JoinEdge candidateEdge = candidates.get(key);
+        if (candidateEdge == null) {
+          continue;
+        }
+        double cost = getCost(candidateEdge);
 
-      if (cost < minCost) {
-        minCost = cost;
-        bestJoin = candidate;
-      }
+        if (cost < minCost) {
+          minCost = cost;
+          bestJoin = candidateEdge;
+        }
 
-      // Keep the min cost join
-      // But, if there exists a qualified join, the qualified join must be chosen
-      // rather than cross join regardless of cost.
-      if (candidate.hasJoinQual()) {
-        if (cost < minNonCrossJoinCost) {
-          minNonCrossJoinCost = cost;
-          bestNonCrossJoin = candidate;
+        // Keep the min cost join
+        // But, if there exists a qualified join, the qualified join must be chosen
+        // rather than cross join regardless of cost.
+        if (candidateEdge.hasJoinQual()) {
+          if (cost < minNonCrossJoinCost) {
+            minNonCrossJoinCost = cost;
+            bestNonCrossJoin = candidateEdge;
+          }
         }
       }
     }
