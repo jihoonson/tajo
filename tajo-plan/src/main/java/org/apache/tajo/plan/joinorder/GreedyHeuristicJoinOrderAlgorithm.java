@@ -204,21 +204,13 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
     // find the best pair
     Set<JoinEdge> candidateEdges = group.populateJoinEdges(context.plan);
     Map<VertexPair, JoinEdge> edgeMap = TUtil.newHashMap();
-//    Set<JoinVertex> leftCandidateVertexes = TUtil.newHashSet();
-//    Set<JoinVertex> rightCandidateVertexes = TUtil.newHashSet();
+    Set<JoinVertex> leftCandidateVertexes = TUtil.newHashSet();
+    Set<JoinVertex> rightCandidateVertexes = TUtil.newHashSet();
     LeafVertexCollectorContext collectorContext = new LeafVertexCollectorContext(group);
     LeafVertexCollector collector = new LeafVertexCollector();
     collector.visit(collectorContext, new Stack<JoinVertex>(), group.getMostRightVertex());
-    Set<JoinVertex> leftCandidateVertexes = TUtil.newHashSet();
-    Set<JoinVertex> rightCandidateVertexes = TUtil.newHashSet();
 
     for (JoinEdge candidateEdge : candidateEdges) {
-//      leftCandidateVertexes.add(candidateEdge.getLeftVertex());
-//      rightCandidateVertexes.add(candidateEdge.getRightVertex());
-//      if (PlannerUtil.isCommutativeJoin(candidateEdge.getJoinType())) {
-//        leftCandidateVertexes.add(candidateEdge.getRightVertex());
-//        rightCandidateVertexes.add(candidateEdge.getLeftVertex());
-//      }
       if (collectorContext.founds.contains(candidateEdge.getLeftVertex())) {
         leftCandidateVertexes.add(candidateEdge.getLeftVertex());
       }
@@ -229,16 +221,44 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
     }
 
     Set<JoinEdge> bestPairs = TUtil.newHashSet();
-    while (!leftCandidateVertexes.isEmpty() && !rightCandidateVertexes.isEmpty()) {
-      JoinEdge bestPair = getBestPair(leftCandidateVertexes, rightCandidateVertexes, edgeMap);
+    Set<JoinEdge> selected = TUtil.newHashSet();
+    int totalRelationNum = JoinOrderUtil.findRelationVertexes(group.getMostRightVertex()).size();
+    Set<RelationVertex> connectedRelations = TUtil.newHashSet();
+    Set<JoinVertex> willBeRemoved = TUtil.newHashSet();
+    while (totalRelationNum > connectedRelations.size()) {
+      JoinEdge bestPair = getBestPair(leftCandidateVertexes, rightCandidateVertexes, edgeMap, selected);
       bestPairs.add(bestPair);
-      leftCandidateVertexes.remove(bestPair.getLeftVertex());
-      rightCandidateVertexes.remove(bestPair.getRightVertex());
+      selected.add(bestPair);
       if (PlannerUtil.isCommutativeJoin(bestPair.getJoinType())) {
-        rightCandidateVertexes.remove(bestPair.getLeftVertex());
-        leftCandidateVertexes.remove(bestPair.getRightVertex());
+        JoinEdge commutativeJoin = new JoinEdge(bestPair.getJoinType(), bestPair.getRightVertex(),
+            bestPair.getLeftVertex());
+        commutativeJoin.setJoinQuals(TUtil.newHashSet(bestPair.getJoinQual()));
+        selected.add(commutativeJoin);
       }
-      leftCandidateVertexes.add(new JoinGroupVertex(bestPair));
+
+      // TODO: validation
+      willBeRemoved.clear();
+      for (RelationVertex rel : JoinOrderUtil.findRelationVertexes(bestPair.getLeftVertex())) {
+        for (JoinVertex candidate : leftCandidateVertexes) {
+          if (JoinOrderUtil.findRelationVertexes(candidate).contains(rel)) {
+            willBeRemoved.add(candidate);
+          }
+        }
+      }
+      leftCandidateVertexes.removeAll(willBeRemoved);
+      willBeRemoved.clear();
+      for (RelationVertex rel : JoinOrderUtil.findRelationVertexes(bestPair.getRightVertex())) {
+        for (JoinVertex candidate : rightCandidateVertexes) {
+          if (JoinOrderUtil.findRelationVertexes(candidate).contains(rel)) {
+            willBeRemoved.add(candidate);
+          }
+        }
+      }
+      rightCandidateVertexes.removeAll(willBeRemoved);
+
+      JoinGroupVertex newVertex = new JoinGroupVertex(bestPair);
+      leftCandidateVertexes.add(newVertex);
+      connectedRelations.addAll(JoinOrderUtil.findRelationVertexes(newVertex));
     }
 
     // build the unified join
@@ -351,7 +371,7 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
    * @throws PlanningException
    */
   public static JoinEdge getBestPair(Set<JoinVertex> leftVertexes, Set<JoinVertex> rightVertexes,
-                                     Map<VertexPair, JoinEdge> candidates) {
+                                     Map<VertexPair, JoinEdge> candidates, Set<JoinEdge> selected) {
     double minCost = Double.MAX_VALUE;
     double minNonCrossJoinCost = Double.MAX_VALUE;
     JoinEdge bestJoin = null;
@@ -366,6 +386,7 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
         if (candidateEdge == null) {
           continue;
         }
+        if (selected.contains(candidateEdge)) continue;
         double cost = getCost(candidateEdge);
 
         if (cost < minCost) {
