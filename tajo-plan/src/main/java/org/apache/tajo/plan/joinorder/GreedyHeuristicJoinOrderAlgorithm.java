@@ -220,7 +220,7 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
       edgeMap.put(new VertexPair(candidateEdge.getLeftVertex(), candidateEdge.getRightVertex()), candidateEdge);
     }
 
-    Set<JoinEdge> bestPairs = TUtil.newHashSet();
+    List<JoinEdge> bestPairs = TUtil.newList();
     int totalRelationNum = JoinOrderUtil.findRelationVertexes(group.getMostRightVertex()).size();
     Set<RelationVertex> connectedRelations = TUtil.newHashSet();
     Set<JoinVertex> willBeRemoved = TUtil.newHashSet();
@@ -238,6 +238,7 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
         }
       }
       leftCandidateVertexes.removeAll(willBeRemoved);
+      rightCandidateVertexes.removeAll(willBeRemoved);
       willBeRemoved.clear();
       for (RelationVertex rel : JoinOrderUtil.findRelationVertexes(bestPair.getRightVertex())) {
         for (JoinVertex candidate : rightCandidateVertexes) {
@@ -247,42 +248,53 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
         }
       }
       rightCandidateVertexes.removeAll(willBeRemoved);
+      leftCandidateVertexes.removeAll(willBeRemoved);
 
       JoinGroupVertex newVertex = new JoinGroupVertex(bestPair);
-      // TODO ????
       leftCandidateVertexes.add(newVertex);
+      rightCandidateVertexes.add(newVertex);
       connectedRelations.addAll(JoinOrderUtil.findRelationVertexes(newVertex));
     }
 
     // build the unified join
-    JoinVertex mostLeft = null, mostRight = null;
+//    JoinVertex mostLeft = null, mostRight = null;
+//    Pair<JoinGroupVertex, JoinNode> pair;
+//    int joinLength = 0;
+//    while (joinLength < bestPairs.size()) {
+//      for (JoinEdge edge : bestPairs) {
+//        if (unifiedJoin == null) {
+//          pair = createJoinNode(context.plan, edge);
+//          unifiedVertex = pair.getFirst();
+//          unifiedJoin = pair.getSecond();
+//          mostLeft = edge.getLeftVertex();
+//          mostRight = edge.getRightVertex();
+//          joinLength++;
+//        } else {
+//          if (mostLeft.equals(edge.getRightVertex())) {
+//            pair = createJoinNode(context.plan, edge);
+//            unifiedJoin.setLeftChild(pair.getSecond());
+//            unifiedVertex.setJoinNode(unifiedJoin);
+//            mostLeft = edge.getLeftVertex();
+//            joinLength++;
+//          }
+//          if (mostRight.equals(edge.getLeftVertex())) {
+//            pair = createJoinNode(context.plan, edge);
+//            JoinNode tmpJoin = pair.getSecond();
+//            tmpJoin.setLeftChild(unifiedJoin);
+//            unifiedJoin = tmpJoin;
+//            unifiedVertex.setJoinNode(unifiedJoin);
+//            mostRight = edge.getRightVertex();
+//            joinLength++;
+//          }
+//        }
+//      }
+//    }
+
     Pair<JoinGroupVertex, JoinNode> pair;
-    int joinLength = 0;
-    while (joinLength < bestPairs.size()) {
-      for (JoinEdge edge : bestPairs) {
-        if (unifiedJoin == null) {
-          pair = createJoinNode(context.plan, edge);
-          unifiedVertex = pair.getFirst();
-          unifiedJoin = pair.getSecond();
-          mostLeft = edge.getLeftVertex();
-          mostRight = edge.getRightVertex();
-        } else {
-          if (mostLeft.equals(edge.getRightVertex())) {
-            pair = createJoinNode(context.plan, edge);
-            unifiedJoin.setLeftChild(pair.getSecond());
-            unifiedVertex.setJoinNode(unifiedJoin);
-            mostLeft = edge.getLeftVertex();
-          }
-          if (mostRight.equals(edge.getLeftVertex())) {
-            pair = createJoinNode(context.plan, edge);
-            JoinNode tmpJoin = pair.getSecond();
-            tmpJoin.setLeftChild(unifiedJoin);
-            unifiedJoin = tmpJoin;
-            unifiedVertex.setJoinNode(unifiedJoin);
-            mostRight = edge.getRightVertex();
-          }
-        }
-      }
+    for (JoinEdge edge : bestPairs) {
+      pair = createJoinNode(context.plan, edge);
+      unifiedVertex = pair.getFirst();
+      unifiedJoin = pair.getSecond();
     }
 
     pair = new Pair<JoinGroupVertex, JoinNode>(unifiedVertex, unifiedJoin);
@@ -364,7 +376,7 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
    * @throws PlanningException
    */
   public static JoinEdge getBestPair(Set<JoinVertex> leftVertexes, Set<JoinVertex> rightVertexes,
-                                     Map<VertexPair, JoinEdge> candidates, Set<JoinEdge> selected) {
+                                     Map<VertexPair, JoinEdge> candidates, List<JoinEdge> selected) {
     double minCost = Double.MAX_VALUE;
     double minNonCrossJoinCost = Double.MAX_VALUE;
     JoinEdge bestJoin = null;

@@ -136,55 +136,57 @@ public class AssociativeGroup {
 //        context.joinEdges.add(new JoinEdge(edge.getJoinType(), edge.getRightVertex(), edge.getLeftVertex()));
 //      }
 
-      // TODO: how to keep nodes of other types?
-      // new join edge according to the associative rule
-      JoinVertex mostRightRelationFromLeftChild = JoinOrderUtil.findMostRightRelationVertex(
-          vertex.getJoinEdge().getLeftVertex());
+      if (!vertex.equals(context.mostLeftVertex)) {
+        // TODO: how to keep nodes of other types?
+        // new join edge according to the associative rule
+        JoinVertex mostRightRelationFromLeftChild = JoinOrderUtil.findMostRightRelationVertex(
+            vertex.getJoinEdge().getLeftVertex());
 //      Set<JoinEdge> childEdges = TUtil.newHashSet();
-      JoinEdge childEdge = new JoinEdge(vertex.getJoinType(), mostRightRelationFromLeftChild,
-          vertex.getJoinEdge().getRightVertex());
+        JoinEdge childEdge = new JoinEdge(vertex.getJoinType(), mostRightRelationFromLeftChild,
+            vertex.getJoinEdge().getRightVertex());
 //      childEdges.add(childEdge);
 //      if (PlannerUtil.isCommutativeJoin(childEdge.getJoinType())) {
 //        childEdges.add(new JoinEdge(childEdge.getJoinType(), childEdge.getRightVertex(), childEdge.getLeftVertex()));
 //      }
 
-      conditionsForThisJoin.clear();
-      conditionsForThisJoin = findConditionsForJoin(context.predicates, childEdge);
-      if (!conditionsForThisJoin.isEmpty()) {
+        conditionsForThisJoin.clear();
+        conditionsForThisJoin = findConditionsForJoin(context.predicates, childEdge);
+        if (!conditionsForThisJoin.isEmpty()) {
 //        for (JoinEdge eachChild : childEdges) {
 //          if (eachChild.getJoinType() == JoinType.CROSS) {
 //            eachChild.setJoinType(JoinType.INNER);
 //          }
 //          eachChild.setJoinQuals(conditionsForThisJoin);
 //        }
-        childEdge.setJoinQuals(conditionsForThisJoin);
-      }
+          childEdge.setJoinQuals(conditionsForThisJoin);
+        }
 
-      context.joinEdges.add(childEdge);
+        context.joinEdges.add(childEdge);
 
 //      Set<JoinEdge> newEdges = TUtil.newHashSet();
-      JoinEdge newJoinEdgeInfo = ((JoinGroupVertex)edge.getLeftVertex()).getJoinEdge();
-      JoinGroupVertex newVertex = new JoinGroupVertex(childEdge);
-      newVertex.setJoinNode(createJoinNode(context.plan, childEdge));
-      JoinEdge newEdge = new JoinEdge(newJoinEdgeInfo.getJoinType(),
-          newJoinEdgeInfo.getLeftVertex(), newVertex);
+        JoinEdge newEdgeInfo = ((JoinGroupVertex)edge.getLeftVertex()).getJoinEdge();
+        JoinGroupVertex newVertex = new JoinGroupVertex(childEdge);
+        newVertex.setJoinNode(createJoinNode(context.plan, childEdge));
+        JoinEdge newEdge = new JoinEdge(newEdgeInfo.getJoinType(),
+            newEdgeInfo.getLeftVertex(), newVertex);
 //      newEdges.add(newEdge);
 //      if (PlannerUtil.isCommutativeJoin(newEdge.getJoinType())) {
 //        newEdges.add(new JoinEdge(newEdge.getJoinType(), newEdge.getRightVertex(), newEdge.getLeftVertex()));
 //      }
-      conditionsForThisJoin.clear();
-      conditionsForThisJoin = findConditionsForJoin(context.predicates, newEdge);
-      if (!conditionsForThisJoin.isEmpty()) {
+        conditionsForThisJoin.clear();
+        conditionsForThisJoin = findConditionsForJoin(context.predicates, newEdge);
+        if (!conditionsForThisJoin.isEmpty()) {
 //        for (JoinEdge eachEdge : newEdges) {
 //          if (eachEdge.getJoinType() == JoinType.CROSS) {
 //            eachEdge.setJoinType(JoinType.INNER);
 //          }
 //          eachEdge.setJoinQuals(conditionsForThisJoin);
 //        }
-        newEdge.setJoinQuals(conditionsForThisJoin);
-      }
+          newEdge.setJoinQuals(conditionsForThisJoin);
+        }
 
-      context.joinEdges.add(newEdge);
+        context.joinEdges.add(newEdge);
+      }
     }
 
     private Set<EvalNode> findConditionsForJoin(Set<EvalNode> candidates, JoinEdge edge) {
@@ -206,7 +208,6 @@ public class AssociativeGroup {
 
     JoinNode joinNode = plan.createNode(JoinNode.class);
 
-    // TODO: move to the propoer position
     if (PlannerUtil.isCommutativeJoin(joinEdge.getJoinType())) {
       // if only one operator is relation
       if ((left instanceof RelationNode) && !(right instanceof RelationNode)) {
