@@ -782,6 +782,10 @@ public class PlannerUtil {
     if (leftType == rightType) {
       return true;
     }
+    if (leftType == JoinType.INNER && rightType == JoinType.CROSS ||
+        leftType == JoinType.CROSS && rightType ==JoinType.INNER) {
+      return true;
+    }
     if (leftType == JoinType.RIGHT_OUTER) {
       return true;
     }

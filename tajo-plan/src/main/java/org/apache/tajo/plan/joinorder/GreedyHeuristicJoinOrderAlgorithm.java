@@ -47,10 +47,14 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
     visitor.visit(context, new Stack<JoinVertex>(), joinTree.getRoot());
 
     Pair<JoinGroupVertex, JoinNode> pair = createJoinNodeFromJoinGroup(context, context.currentGroup);
-    JoinNode tmpJoin = pair.getSecond();
-    context.block.registerNode(tmpJoin);
-    tmpJoin.setLeftChild(context.latestJoin);
-    context.latestJoin = tmpJoin;
+    if (context.latestJoin == null) {
+      context.latestJoin = pair.getSecond();
+    } else {
+      JoinNode tmpJoin = pair.getSecond();
+      context.block.registerNode(tmpJoin);
+      tmpJoin.setLeftChild(context.latestJoin);
+      context.latestJoin = tmpJoin;
+    }
 
     // all generated nodes should be registered to corresponding blocks
     block.registerNode(context.latestJoin);
@@ -204,18 +208,19 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
     // find the best pair
     Set<JoinEdge> candidateEdges = group.populateJoinEdges(context.plan);
     Map<VertexPair, JoinEdge> edgeMap = TUtil.newHashMap();
-    Set<JoinVertex> leftCandidateVertexes = TUtil.newHashSet();
-    Set<JoinVertex> rightCandidateVertexes = TUtil.newHashSet();
+//    Set<JoinVertex> leftCandidateVertexes = TUtil.newHashSet();
+//    Set<JoinVertex> rightCandidateVertexes = TUtil.newHashSet();
+    Set<JoinVertex> vertexes = TUtil.newHashSet();
     LeafVertexCollectorContext collectorContext = new LeafVertexCollectorContext(group);
     LeafVertexCollector collector = new LeafVertexCollector();
     collector.visit(collectorContext, new Stack<JoinVertex>(), group.getMostRightVertex());
 
     for (JoinEdge candidateEdge : candidateEdges) {
       if (collectorContext.founds.contains(candidateEdge.getLeftVertex())) {
-        leftCandidateVertexes.add(candidateEdge.getLeftVertex());
+        vertexes.add(candidateEdge.getLeftVertex());
       }
       if (collectorContext.founds.contains(candidateEdge.getRightVertex())) {
-        rightCandidateVertexes.add(candidateEdge.getRightVertex());
+        vertexes.add(candidateEdge.getRightVertex());
       }
       edgeMap.put(new VertexPair(candidateEdge.getLeftVertex(), candidateEdge.getRightVertex()), candidateEdge);
     }
@@ -223,36 +228,39 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
     List<JoinEdge> bestPairs = TUtil.newList();
     int totalRelationNum = JoinOrderUtil.findRelationVertexes(group.getMostRightVertex()).size();
     Set<RelationVertex> connectedRelations = TUtil.newHashSet();
-    Set<JoinVertex> willBeRemoved = TUtil.newHashSet();
+//    Set<JoinVertex> willBeRemoved = TUtil.newHashSet();
     while (totalRelationNum > connectedRelations.size()) {
-      JoinEdge bestPair = getBestPair(leftCandidateVertexes, rightCandidateVertexes, edgeMap, bestPairs);
+      JoinEdge bestPair = getBestPair(vertexes, edgeMap, bestPairs);
       bestPairs.add(bestPair);
 
       // TODO: validation
-      willBeRemoved.clear();
-      for (RelationVertex rel : JoinOrderUtil.findRelationVertexes(bestPair.getLeftVertex())) {
-        for (JoinVertex candidate : leftCandidateVertexes) {
-          if (JoinOrderUtil.findRelationVertexes(candidate).contains(rel)) {
-            willBeRemoved.add(candidate);
-          }
-        }
-      }
-      leftCandidateVertexes.removeAll(willBeRemoved);
-      rightCandidateVertexes.removeAll(willBeRemoved);
-      willBeRemoved.clear();
-      for (RelationVertex rel : JoinOrderUtil.findRelationVertexes(bestPair.getRightVertex())) {
-        for (JoinVertex candidate : rightCandidateVertexes) {
-          if (JoinOrderUtil.findRelationVertexes(candidate).contains(rel)) {
-            willBeRemoved.add(candidate);
-          }
-        }
-      }
-      rightCandidateVertexes.removeAll(willBeRemoved);
-      leftCandidateVertexes.removeAll(willBeRemoved);
+      vertexes.remove(bestPair.getLeftVertex());
+      vertexes.remove(bestPair.getRightVertex());
+//      willBeRemoved.clear();
+//      for (RelationVertex rel : JoinOrderUtil.findRelationVertexes(bestPair.getLeftVertex())) {
+//        for (JoinVertex candidate : leftCandidateVertexes) {
+//          if (JoinOrderUtil.findRelationVertexes(candidate).contains(rel)) {
+//            willBeRemoved.add(candidate);
+//          }
+//        }
+//      }
+//      leftCandidateVertexes.removeAll(willBeRemoved);
+//      rightCandidateVertexes.removeAll(willBeRemoved);
+//      willBeRemoved.clear();
+//      for (RelationVertex rel : JoinOrderUtil.findRelationVertexes(bestPair.getRightVertex())) {
+//        for (JoinVertex candidate : rightCandidateVertexes) {
+//          if (JoinOrderUtil.findRelationVertexes(candidate).contains(rel)) {
+//            willBeRemoved.add(candidate);
+//          }
+//        }
+//      }
+//      rightCandidateVertexes.removeAll(willBeRemoved);
+//      leftCandidateVertexes.removeAll(willBeRemoved);
 
       JoinGroupVertex newVertex = new JoinGroupVertex(bestPair);
-      leftCandidateVertexes.add(newVertex);
-      rightCandidateVertexes.add(newVertex);
+      vertexes.add(newVertex);
+//      leftCandidateVertexes.add(newVertex);
+//      rightCandidateVertexes.add(newVertex);
       connectedRelations.addAll(JoinOrderUtil.findRelationVertexes(newVertex));
     }
 
@@ -375,7 +383,7 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
    * @return The best join pair among them
    * @throws PlanningException
    */
-  public static JoinEdge getBestPair(Set<JoinVertex> leftVertexes, Set<JoinVertex> rightVertexes,
+  public static JoinEdge getBestPair(Set<JoinVertex> vertexes,
                                      Map<VertexPair, JoinEdge> candidates, List<JoinEdge> selected) {
     double minCost = Double.MAX_VALUE;
     double minNonCrossJoinCost = Double.MAX_VALUE;
@@ -383,8 +391,8 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
     JoinEdge bestNonCrossJoin = null;
 
     VertexPair key = new VertexPair();
-    for (JoinVertex left : leftVertexes) {
-      for (JoinVertex right : rightVertexes) {
+    for (JoinVertex left : vertexes) {
+      for (JoinVertex right : vertexes) {
         if (left.equals(right)) continue;
         key.set(left, right);
         JoinEdge candidateEdge = candidates.get(key);
