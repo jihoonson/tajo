@@ -63,6 +63,9 @@ public class BroadcastPlanAnnotator {
       super.visitJoin(context, plan, block, node, stack);
       if (isBroadcastable(context, node)) {
         node.enableBroadcast();
+      } else {
+        context.largeRelationNumbers.clear();
+        context.largeRelationNumbers.push(1);
       }
       return null;
     }

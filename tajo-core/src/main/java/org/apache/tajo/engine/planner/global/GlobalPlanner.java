@@ -360,30 +360,21 @@ public class GlobalPlanner {
       BroadcastRelationCollector collector = new BroadcastRelationCollector();
       LogicalPlan logicalPlan = context.plan.getLogicalPlan();
       collector.visit(collectorContext, logicalPlan, logicalPlan.getRootBlock(), joinNode, new Stack<LogicalNode>());
+      collectorContext.broadcastRelations.remove(joinNode);
 
       if (!collectorContext.broadcastRelations.isEmpty()) {
         // make new execution block
         currentBlock = masterPlan.newExecutionBlock();
-
-        LogicalNode leftChild = joinNode.getLeftChild();
-        LogicalNode rightChild = joinNode.getRightChild();
-
-        boolean leftEnabled = false, rightEnabled = false;
-
-        if (leftChild instanceof Broadcastable) {
-          Broadcastable leftBroadcastable = (Broadcastable) leftChild;
-          if (leftBroadcastable.isBroadcastEnabled()) {
-            leftEnabled = true;
-          }
-        }
-        if (rightChild instanceof Broadcastable) {
-          Broadcastable rightBroadcastable = (Broadcastable) rightChild;
-          if (rightBroadcastable.isBroadcastEnabled()) {
-            rightEnabled = true;
-          }
+        if (joinNode.isBroadcastEnabled()) {
+          currentBlock.enableBroadcast();
+        } else {
+          currentBlock.disableBroadcast();
         }
 
-        if (!leftEnabled && !rightEnabled) {
+//        LogicalNode leftChild = joinNode.getLeftChild();
+//        LogicalNode rightChild = joinNode.getRightChild();
+
+        if (!currentBlock.isBroadcastEnabled()) {
           DataChannel leftChannel = createDataChannelFromJoin(leftBlock, rightBlock, currentBlock, joinNode, true);
           ScanNode leftScan = buildInputExecutor(masterPlan.getLogicalPlan(), leftChannel);
           joinNode.setLeftChild(leftScan);
@@ -395,6 +386,33 @@ public class GlobalPlanner {
           masterPlan.addConnect(rightChannel);
         }
 
+//        boolean leftEnabled = false, rightEnabled = false;
+
+//        if (leftChild instanceof Broadcastable) {
+//          Broadcastable leftBroadcastable = (Broadcastable) leftChild;
+//          if (!leftBroadcastable.isBroadcastEnabled()) {
+//            leftEnabled = true;
+//          }
+//        }
+//        if (rightChild instanceof Broadcastable) {
+//          Broadcastable rightBroadcastable = (Broadcastable) rightChild;
+//          if (!rightBroadcastable.isBroadcastEnabled()) {
+//            rightEnabled = true;
+//          }
+//        }
+
+//        if (!leftEnabled && !rightEnabled) {
+//          DataChannel leftChannel = createDataChannelFromJoin(leftBlock, rightBlock, currentBlock, joinNode, true);
+//          ScanNode leftScan = buildInputExecutor(masterPlan.getLogicalPlan(), leftChannel);
+//          joinNode.setLeftChild(leftScan);
+//          masterPlan.addConnect(leftChannel);
+//
+//          DataChannel rightChannel = createDataChannelFromJoin(leftBlock, rightBlock, currentBlock, joinNode, false);
+//          ScanNode rightScan = buildInputExecutor(masterPlan.getLogicalPlan(), rightChannel);
+//          joinNode.setRightChild(rightScan);
+//          masterPlan.addConnect(rightChannel);
+//        }
+
 //        if (blockJoinNode != null) {
 //          LOG.info("Set execution's plan with join " + blockJoinNode + " for broadcast join");
 //          // set current execution block's plan with last broadcast join node
@@ -403,14 +421,53 @@ public class GlobalPlanner {
 //          currentBlock.setPlan(joinNode);
 //        }
 
-        LOG.info("Set execution's plan with join " + joinNode + " for broadcast join");
         // set current execution block's plan with last broadcast join node
         currentBlock.setPlan(joinNode);
 
-        for (ScanNode eachBroadcastTarget : collectorContext.broadcastRelations) {
-          currentBlock.addBroadcastTable(eachBroadcastTarget.getCanonicalName());
-          context.execBlockMap.remove(eachBroadcastTarget.getPID());
+        if (currentBlock.isBroadcastEnabled()) {
+          LOG.info("Set execution's plan with join " + joinNode + " for broadcast join");
+
+          for (LogicalNode eachBroadcastTarget : collectorContext.broadcastRelations) {
+            if (eachBroadcastTarget.getType() == NodeType.SCAN) {
+              ScanNode broadcastScan = (ScanNode) eachBroadcastTarget;
+              currentBlock.addBroadcastTable(broadcastScan.getCanonicalName());
+            }
+            context.execBlockMap.remove(eachBroadcastTarget.getPID());
+          }
+
+          if (joinNode.getLeftChild().getType() == NodeType.JOIN) {
+            JoinNode broadcastTogether = joinNode.getLeftChild();
+            ExecutionBlock willBeRemoved = context.execBlockMap.get(broadcastTogether.getPID());
+            if (willBeRemoved != null && context.plan.getChildCount(willBeRemoved.getId()) > 0) {
+              for (ExecutionBlock childOfWillBeRemoved : context.plan.getChilds(willBeRemoved)) {
+                DataChannel channel = context.plan.getChannel(childOfWillBeRemoved, willBeRemoved);
+                context.plan.disconnect(childOfWillBeRemoved, willBeRemoved);
+                context.plan.addConnect(childOfWillBeRemoved, currentBlock, channel.getShuffleType());
+              }
+            }
+          }
+
+          if (joinNode.getRightChild().getType() == NodeType.JOIN) {
+            JoinNode broadcastTogether = joinNode.getRightChild();
+            ExecutionBlock willBeRemoved = context.execBlockMap.get(broadcastTogether.getPID());
+            if (willBeRemoved != null && context.plan.getChildCount(willBeRemoved.getId()) > 0) {
+              for (ExecutionBlock childOfWillBeRemoved : context.plan.getChilds(willBeRemoved)) {
+                DataChannel channel = context.plan.getChannel(childOfWillBeRemoved, willBeRemoved);
+                context.plan.disconnect(childOfWillBeRemoved, willBeRemoved);
+                context.plan.addConnect(childOfWillBeRemoved, currentBlock, channel.getShuffleType());
+              }
+            }
+          }
+        } else {
+          for (LogicalNode eachBroadcastTarget : collectorContext.broadcastRelations) {
+            if (eachBroadcastTarget.getType() == NodeType.SCAN) {
+              ScanNode broadcastScan = (ScanNode) eachBroadcastTarget;
+              currentBlock.addBroadcastTable(broadcastScan.getCanonicalName());
+            }
+          }
         }
+
+
 
         return currentBlock;
       }
@@ -503,7 +560,7 @@ public class GlobalPlanner {
   }
 
   private static class BroadcastRelationCollectorContext {
-    Set<ScanNode> broadcastRelations = TUtil.newHashSet();
+    Set<LogicalNode> broadcastRelations = TUtil.newHashSet();
   }
 
   private static class BroadcastRelationCollector
@@ -513,6 +570,18 @@ public class GlobalPlanner {
     public LogicalNode visitScan(BroadcastRelationCollectorContext context, LogicalPlan plan,
                                  LogicalPlan.QueryBlock block, ScanNode node, Stack<LogicalNode> stack)
         throws PlanningException {
+      super.visitScan(context, plan, block, node, stack);
+      if (node.isBroadcastEnabled()) {
+        context.broadcastRelations.add(node);
+      }
+      return null;
+    }
+
+    @Override
+    public LogicalNode visitJoin(BroadcastRelationCollectorContext context, LogicalPlan plan,
+                                 LogicalPlan.QueryBlock block, JoinNode node, Stack<LogicalNode> stack)
+        throws PlanningException {
+      super.visitJoin(context, plan, block, node, stack);
       if (node.isBroadcastEnabled()) {
         context.broadcastRelations.add(node);
       }
@@ -1398,14 +1467,14 @@ public class GlobalPlanner {
       // In the case of broadcast join leftChildBlock can be replaced with upper join node.
       // So if the current join node is a child node of leftChildBlock's plan(join node)
       // the current join node already participates in broadcast join.
-      LogicalNode leftChildBlockNode = leftChildBlock.getPlan();
-      // If child block is union, child block has not plan
-      if (leftChildBlockNode != null && leftChildBlockNode.getType() == NodeType.JOIN) {
-        if (leftChildBlockNode.getPID() > node.getPID()) {
-          context.execBlockMap.put(node.getPID(), leftChildBlock);
-          return node;
-        }
-      }
+//      LogicalNode leftChildBlockNode = leftChildBlock.getPlan();
+//      // If child block is union, child block has not plan
+//      if (leftChildBlockNode != null && leftChildBlockNode.getType() == NodeType.JOIN) {
+//        if (leftChildBlockNode.getPID() > node.getPID()) {
+//          context.execBlockMap.put(node.getPID(), leftChildBlock);
+//          return node;
+//        }
+//      }
 
       ExecutionBlock newExecBlock = buildJoinPlan(context, node, leftChildBlock, rightChildBlock);
       context.execBlockMap.put(node.getPID(), newExecBlock);

@@ -27,7 +27,7 @@ import java.util.*;
  * tables), and output information (e.g., partition type, partition key, and partition number).
  * In addition, it includes a logical plan to be executed in each node.
  */
-public class ExecutionBlock {
+public class ExecutionBlock implements Broadcastable {
   private ExecutionBlockId executionBlockId;
   private LogicalNode plan = null;
   private StoreTableNode store = null;
@@ -40,6 +40,7 @@ public class ExecutionBlock {
   private boolean hasJoinPlan;
   private boolean hasUnionPlan;
 
+  private boolean broadcastEnabled = false;
   private Set<String> broadcasted = new HashSet<String>();
 
   public ExecutionBlock(ExecutionBlockId executionBlockId) {
@@ -140,5 +141,20 @@ public class ExecutionBlock {
 
   public String toString() {
     return executionBlockId.toString();
+  }
+
+  @Override
+  public boolean isBroadcastEnabled() {
+    return broadcastEnabled;
+  }
+
+  @Override
+  public void enableBroadcast() {
+    broadcastEnabled = true;
+  }
+
+  @Override
+  public void disableBroadcast() {
+    broadcastEnabled = false;
   }
 }
