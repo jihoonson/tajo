@@ -30,43 +30,43 @@ import org.apache.tajo.plan.logical.ScanNode;
 import java.util.Stack;
 
 public class BroadcastJoinMarkCandidateVisitor extends BasicLogicalPlanVisitor<GlobalPlanner.GlobalPlanContext, LogicalNode> {
-  @Override
-  public LogicalNode visitJoin(GlobalPlanner.GlobalPlanContext context, LogicalPlan plan, LogicalPlan.QueryBlock block,
-                               JoinNode node, Stack<LogicalNode> stack) throws PlanningException {
-    LogicalNode leftChild = node.getLeftChild();
-    LogicalNode rightChild = node.getRightChild();
-
-    if (ScanNode.isScanNode(leftChild) && ScanNode.isScanNode(rightChild)) {
-      node.setCandidateBroadcast(true);
-      return node;
-    }
-
-    if(!ScanNode.isScanNode(leftChild)) {
-      visit(context, plan, block, leftChild, stack);
-    }
-
-    if(!ScanNode.isScanNode(rightChild)) {
-      visit(context, plan, block, rightChild, stack);
-    }
-
-    if(isBroadcastCandidateNode(leftChild) &&
-        isBroadcastCandidateNode(rightChild)) {
-      node.setCandidateBroadcast(true);
-    }
-
-    return node;
-  }
-
-  public static boolean isBroadcastCandidateNode(LogicalNode node) {
-    if(node.getType() == NodeType.SCAN ||
-        node.getType() == NodeType.PARTITIONS_SCAN) {
-      return true;
-    }
-
-    if(node.getType() == NodeType.JOIN && ((JoinNode)node).isCandidateBroadcast()) {
-      return true;
-    }
-
-    return false;
-  }
+//  @Override
+//  public LogicalNode visitJoin(GlobalPlanner.GlobalPlanContext context, LogicalPlan plan, LogicalPlan.QueryBlock block,
+//                               JoinNode node, Stack<LogicalNode> stack) throws PlanningException {
+//    LogicalNode leftChild = node.getLeftChild();
+//    LogicalNode rightChild = node.getRightChild();
+//
+//    if (ScanNode.isScanNode(leftChild) && ScanNode.isScanNode(rightChild)) {
+//      node.setCandidateBroadcast(true);
+//      return node;
+//    }
+//
+//    if(!ScanNode.isScanNode(leftChild)) {
+//      visit(context, plan, block, leftChild, stack);
+//    }
+//
+//    if(!ScanNode.isScanNode(rightChild)) {
+//      visit(context, plan, block, rightChild, stack);
+//    }
+//
+//    if(isBroadcastCandidateNode(leftChild) &&
+//        isBroadcastCandidateNode(rightChild)) {
+//      node.setCandidateBroadcast(true);
+//    }
+//
+//    return node;
+//  }
+//
+//  public static boolean isBroadcastCandidateNode(LogicalNode node) {
+//    if(node.getType() == NodeType.SCAN ||
+//        node.getType() == NodeType.PARTITIONS_SCAN) {
+//      return true;
+//    }
+//
+//    if(node.getType() == NodeType.JOIN && ((JoinNode)node).isCandidateBroadcast()) {
+//      return true;
+//    }
+//
+//    return false;
+//  }
 }

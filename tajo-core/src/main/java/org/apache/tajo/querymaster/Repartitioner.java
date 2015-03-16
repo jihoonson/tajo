@@ -217,7 +217,7 @@ public class Repartitioner {
         maxStatsScanIdx = 0;
       }
       int baseScanIdx = maxStatsScanIdx;
-      scans[baseScanIdx].setBroadcastTable(false);
+      scans[baseScanIdx].disableBroadcast();
       execBlock.removeBroadcastTable(scans[baseScanIdx].getCanonicalName());
       LOG.info(String.format("[Distributed Join Strategy] : Broadcast Join with all tables, base_table=%s, base_volume=%d",
           scans[baseScanIdx].getCanonicalName(), stats[baseScanIdx]));
@@ -286,7 +286,7 @@ public class Repartitioner {
         ScanNode[] broadcastScans = new ScanNode[broadcastIndexList.size()];
         index = 0;
         for (Integer eachIdx : broadcastIndexList) {
-          scans[eachIdx].setBroadcastTable(true);
+          scans[eachIdx].enableBroadcast();
           broadcastScans[index] = scans[eachIdx];
           broadcastFragments[index] = fragments[eachIdx];
           index++;
@@ -513,7 +513,7 @@ public class Repartitioner {
 
     for (int i = 0; i < scans.length; i++) {
       if (i != baseScanId) {
-        scans[i].setBroadcastTable(true);
+        scans[i].enableBroadcast();
       }
     }
 

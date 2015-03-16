@@ -30,31 +30,31 @@ import org.apache.tajo.plan.logical.ScanNode;
 import java.util.Stack;
 
 public class BroadcastJoinPlanVisitor extends BasicLogicalPlanVisitor<GlobalPlanner.GlobalPlanContext, LogicalNode> {
-  @Override
-  public LogicalNode visitJoin(GlobalPlanner.GlobalPlanContext context, LogicalPlan plan, LogicalPlan.QueryBlock block,
-                               JoinNode node, Stack<LogicalNode> stack) throws PlanningException {
-    LogicalNode leftChild = node.getLeftChild();
-    LogicalNode rightChild = node.getRightChild();
-
-    if (leftChild.getType() == NodeType.JOIN  && ScanNode.isScanNode(rightChild)) {
-      node.getBroadcastCandidateTargets().add(node);
-    }
-    LogicalNode parentNode = stack.peek();
-    if (parentNode != null && parentNode.getType() == NodeType.JOIN) {
-      node.getBroadcastCandidateTargets().addAll(((JoinNode)parentNode).getBroadcastCandidateTargets());
-    }
-
-    Stack<LogicalNode> currentStack = new Stack<LogicalNode>();
-    currentStack.push(node);
-    if(!ScanNode.isScanNode(leftChild)) {
-      visit(context, plan, block, leftChild, currentStack);
-    }
-
-    if(!ScanNode.isScanNode(rightChild)) {
-      visit(context, plan, block, rightChild, currentStack);
-    }
-    currentStack.pop();
-
-    return node;
-  }
+//  @Override
+//  public LogicalNode visitJoin(GlobalPlanner.GlobalPlanContext context, LogicalPlan plan, LogicalPlan.QueryBlock block,
+//                               JoinNode node, Stack<LogicalNode> stack) throws PlanningException {
+//    LogicalNode leftChild = node.getLeftChild();
+//    LogicalNode rightChild = node.getRightChild();
+//
+//    if (leftChild.getType() == NodeType.JOIN  && ScanNode.isScanNode(rightChild)) {
+//      node.getBroadcastCandidateTargets().add(node);
+//    }
+//    LogicalNode parentNode = stack.peek();
+//    if (parentNode != null && parentNode.getType() == NodeType.JOIN) {
+//      node.getBroadcastCandidateTargets().addAll(((JoinNode)parentNode).getBroadcastCandidateTargets());
+//    }
+//
+//    Stack<LogicalNode> currentStack = new Stack<LogicalNode>();
+//    currentStack.push(node);
+//    if(!ScanNode.isScanNode(leftChild)) {
+//      visit(context, plan, block, leftChild, currentStack);
+//    }
+//
+//    if(!ScanNode.isScanNode(rightChild)) {
+//      visit(context, plan, block, rightChild, currentStack);
+//    }
+//    currentStack.pop();
+//
+//    return node;
+//  }
 }

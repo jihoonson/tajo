@@ -30,13 +30,13 @@ import org.apache.tajo.plan.Target;
 import org.apache.tajo.plan.expr.EvalNode;
 import org.apache.tajo.util.TUtil;
 
-public class ScanNode extends RelationNode implements Projectable, SelectableNode, Cloneable {
+public class ScanNode extends RelationNode implements Projectable, SelectableNode, Cloneable, Broadcastable {
 	@Expose protected TableDesc tableDesc;
   @Expose protected String alias;
   @Expose protected Schema logicalSchema;
 	@Expose protected EvalNode qual;
 	@Expose protected Target[] targets;
-  @Expose protected boolean broadcastTable;
+  @Expose protected boolean broadcastEnabled;
 
   protected ScanNode(int pid, NodeType nodeType) {
     super(pid, nodeType);
@@ -94,12 +94,19 @@ public class ScanNode extends RelationNode implements Projectable, SelectableNod
     return alias;
   }
 
-  public void setBroadcastTable(boolean broadcastTable) {
-    this.broadcastTable = broadcastTable;
+  @Override
+  public void enableBroadcast() {
+    this.broadcastEnabled = true;
   }
 
-  public boolean isBroadcastTable() {
-    return broadcastTable;
+  @Override
+  public void disableBroadcast() {
+    this.broadcastEnabled = false;
+  }
+
+  @Override
+  public boolean isBroadcastEnabled() {
+    return broadcastEnabled;
   }
 
   public String getCanonicalName() {
@@ -225,6 +232,10 @@ public class ScanNode extends RelationNode implements Projectable, SelectableNod
     PlanString planStr = new PlanString(this).appendTitle(" on ").appendTitle(getTableName());
     if (hasAlias()) {
       planStr.appendTitle(" as ").appendTitle(alias);
+    }
+
+    if (isBroadcastEnabled()) {
+      planStr.addExplan("Broadcast enabled");
     }
 
     if (hasQual()) {

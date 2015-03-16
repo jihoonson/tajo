@@ -32,15 +32,17 @@ import org.apache.tajo.util.TUtil;
 import java.util.ArrayList;
 import java.util.List;
 
-public class JoinNode extends BinaryNode implements Projectable, Cloneable {
+public class JoinNode extends BinaryNode implements Projectable, Cloneable, Broadcastable {
 //  @Expose private JoinType joinType;
 //  @Expose private EvalNode joinQual;
   @Expose private JoinSpec joinSpec = new JoinSpec();
   @Expose private Target[] targets;
 
   // transition states
-  private boolean candidateBroadcast = false;
-  private List<LogicalNode> broadcastCandidateTargets = new ArrayList<LogicalNode>();
+//  private boolean candidateBroadcast = false;
+//  private List<LogicalNode> broadcastCandidateTargets = new ArrayList<LogicalNode>();
+
+  private boolean broadcastEnabled = false;
 
   public JoinNode(int pid) {
     super(pid, NodeType.JOIN);
@@ -52,17 +54,17 @@ public class JoinNode extends BinaryNode implements Projectable, Cloneable {
     setRightChild(right);
   }
 
-  public boolean isCandidateBroadcast() {
-    return candidateBroadcast;
-  }
-
-  public void setCandidateBroadcast(boolean candidateBroadcast) {
-    this.candidateBroadcast = candidateBroadcast;
-  }
-
-  public List<LogicalNode> getBroadcastCandidateTargets() {
-    return broadcastCandidateTargets;
-  }
+//  public boolean isCandidateBroadcast() {
+//    return candidateBroadcast;
+//  }
+//
+//  public void setCandidateBroadcast(boolean candidateBroadcast) {
+//    this.candidateBroadcast = candidateBroadcast;
+//  }
+//
+//  public List<LogicalNode> getBroadcastCandidateTargets() {
+//    return broadcastCandidateTargets;
+//  }
 
   public JoinType getJoinType() {
     return this.joinSpec.getType();
@@ -107,6 +109,9 @@ public class JoinNode extends BinaryNode implements Projectable, Cloneable {
   @Override
   public PlanString getPlanString() {
     PlanString planStr = new PlanString(this).appendTitle("(").appendTitle(joinSpec.getType().name()).appendTitle(")");
+    if (isBroadcastEnabled()) {
+      planStr.addExplan("Broadcast enabled");
+    }
     if (hasJoinQual()) {
       planStr.addExplan("Join Cond: " + joinSpec.getSingletonPredicate().toString());
     }
@@ -163,5 +168,20 @@ public class JoinNode extends BinaryNode implements Projectable, Cloneable {
     }
     sb.append(")");
     return sb.toString();
+  }
+
+  @Override
+  public boolean isBroadcastEnabled() {
+    return broadcastEnabled;
+  }
+
+  @Override
+  public void enableBroadcast() {
+    this.broadcastEnabled = true;
+  }
+
+  @Override
+  public void disableBroadcast() {
+    this.broadcastEnabled = false;
   }
 }

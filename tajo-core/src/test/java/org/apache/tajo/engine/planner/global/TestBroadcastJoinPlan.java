@@ -224,11 +224,11 @@ public class TestBroadcastJoinPlan {
     LogicalNode leftNode = ((JoinNode)joinNode).getLeftChild();
     LogicalNode rightNode = ((JoinNode)joinNode).getRightChild();
 
-    assertEquals(NodeType.JOIN, leftNode.getType());
-    assertEquals(NodeType.SCAN, rightNode.getType());
+    assertEquals(NodeType.JOIN, rightNode.getType());
+    assertEquals(NodeType.SCAN, leftNode.getType());
 
-    LogicalNode lastLeftNode = ((JoinNode)leftNode).getLeftChild();
-    LogicalNode lastRightNode = ((JoinNode)leftNode).getRightChild();
+    LogicalNode lastLeftNode = ((JoinNode)rightNode).getLeftChild();
+    LogicalNode lastRightNode = ((JoinNode)rightNode).getRightChild();
 
     assertEquals(NodeType.SCAN, lastLeftNode.getType());
     assertEquals(NodeType.SCAN, lastRightNode.getType());

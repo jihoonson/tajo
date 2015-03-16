@@ -18,31 +18,25 @@
 
 package org.apache.tajo.engine.planner;
 
-import org.apache.tajo.engine.planner.global.GlobalPlanner;
 import org.apache.tajo.plan.LogicalPlan;
 import org.apache.tajo.plan.PlanningException;
 import org.apache.tajo.plan.logical.*;
 import org.apache.tajo.plan.visitor.BasicLogicalPlanVisitor;
-import org.apache.tajo.util.TUtil;
 
-import java.util.Set;
 import java.util.Stack;
 
 public class BroadcastPlanAnnotator {
-  private final GlobalPlanner.GlobalPlanContext globalPlanContext;
 
-  public BroadcastPlanAnnotator(GlobalPlanner.GlobalPlanContext globalPlanContext) {
-    this.globalPlanContext = globalPlanContext;
-  }
-
-  public void visit() {
-
+  public void annotate(long broadcastSizeThreshold, LogicalPlan plan, LogicalPlan.QueryBlock block, LogicalNode planRoot)
+      throws PlanningException {
+    VisitorContext context = new VisitorContext(broadcastSizeThreshold);
+    Visitor visitor = new Visitor();
+    visitor.visit(context, plan, block, planRoot, new Stack<LogicalNode>());
   }
 
   private static class VisitorContext {
     private final long broadcastTableSizeThreshold;
-    private int largeRelationNumber = 0;
-    private Set<ScanNode> broadcastScans = TUtil.newHashSet();
+    private Stack<Integer> largeRelationNumbers = new Stack<Integer>();
 
     public VisitorContext(long broadcastTableSizeThreshold) {
       this.broadcastTableSizeThreshold = broadcastTableSizeThreshold;
@@ -52,21 +46,13 @@ public class BroadcastPlanAnnotator {
   private static class Visitor extends BasicLogicalPlanVisitor<VisitorContext, LogicalNode> {
 
     @Override
-    public LogicalNode visit(VisitorContext context, LogicalPlan plan, LogicalPlan.QueryBlock block, LogicalNode node,
-                             Stack<LogicalNode> stack) throws PlanningException {
-      if (context.largeRelationNumber < 2) {
-        super.visit(context, plan, block, node, stack);
-      }
-      return null;
-    }
-
-    @Override
     public LogicalNode visitScan(VisitorContext context, LogicalPlan plan, LogicalPlan.QueryBlock block, ScanNode node,
                                  Stack<LogicalNode> stack) throws PlanningException {
       if (isBroadcastable(context, node)) {
-        context.broadcastScans.add(node);
+        node.enableBroadcast();
+        context.largeRelationNumbers.push(0);
       } else {
-        context.largeRelationNumber++;
+        context.largeRelationNumbers.push(1);
       }
       return null;
     }
@@ -76,7 +62,7 @@ public class BroadcastPlanAnnotator {
                                  Stack<LogicalNode> stack) throws PlanningException {
       super.visitJoin(context, plan, block, node, stack);
       if (isBroadcastable(context, node)) {
-
+        node.enableBroadcast();
       }
       return null;
     }
@@ -86,9 +72,29 @@ public class BroadcastPlanAnnotator {
     }
 
     private static boolean isBroadcastable(VisitorContext context, JoinNode joinNode) {
-      
+      // TODO: consider when the child node is not neither scan nor join
 
-      return context.largeRelationNumber < 2;
+      LogicalNode left = joinNode.getLeftChild();
+      LogicalNode right = joinNode.getRightChild();
+      boolean leftEnabled = false, rightEnabled = false;
+
+      if (left instanceof Broadcastable) {
+        Broadcastable leftBroadcastable = (Broadcastable) left;
+        if (leftBroadcastable.isBroadcastEnabled()) {
+          leftEnabled = true;
+        }
+      }
+      if (right instanceof Broadcastable) {
+        Broadcastable rightBroadcastable = (Broadcastable) right;
+        if (rightBroadcastable.isBroadcastEnabled()) {
+          rightEnabled = true;
+        }
+      }
+      Integer largeRelationNumFromChild = context.largeRelationNumbers.pop() + context.largeRelationNumbers.pop();
+      boolean hasTwoLargeChilds = largeRelationNumFromChild >= 2;
+      context.largeRelationNumbers.push(largeRelationNumFromChild);
+
+      return !hasTwoLargeChilds && (leftEnabled || rightEnabled);
     }
 
     /**
