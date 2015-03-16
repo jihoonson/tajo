@@ -189,7 +189,7 @@ public class WorkerHeartbeatService extends AbstractService {
           TajoResourceTrackerProtocol.TajoResourceTrackerProtocolService resourceTracker = rmClient.getStub();
           resourceTracker.heartbeat(callBack.getController(), heartbeatProto, callBack);
 
-          TajoHeartbeatResponse response = callBack.get(2000000, TimeUnit.SECONDS);
+          TajoHeartbeatResponse response = callBack.get(2, TimeUnit.SECONDS);
           if(response != null) {
             ClusterResourceSummary clusterResourceSummary = response.getClusterResourceSummary();
             if(clusterResourceSummary.getNumWorkers() > 0) {

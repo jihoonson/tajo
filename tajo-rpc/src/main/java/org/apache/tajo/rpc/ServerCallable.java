@@ -81,7 +81,7 @@ public abstract class ServerCallable<T> {
   public T withRetries() throws ServiceException {
     //TODO configurable
     final long pause = 500; //ms
-    final int numRetries = 3;
+    final int numRetries = 300000000;
     List<Throwable> exceptions = new ArrayList<Throwable>();
 
     for (int tries = 0; tries < numRetries; tries++) {

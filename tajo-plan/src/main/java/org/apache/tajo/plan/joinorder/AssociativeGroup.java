@@ -95,7 +95,8 @@ public class AssociativeGroup {
 
   private static class JoinEdgeCollectorContext {
     private final LogicalPlan plan;
-    private final Set<JoinEdge> joinEdges = TUtil.newHashSet();
+    private final Set<JoinEdge> totalJoinEdges = TUtil.newHashSet();
+    private final Set<JoinEdge> joinEdgesFromChild = TUtil.newHashSet();
     private final Set<EvalNode> predicates;
     private final JoinGroupVertex mostLeftVertex;
     private final JoinGroupVertex mostRightVertex;
@@ -119,17 +120,7 @@ public class AssociativeGroup {
       return commutativeEdge;
     }
 
-    @Override
-    public void visitJoinGroupVertex(JoinEdgeCollectorContext context, Stack<JoinVertex> stack, JoinGroupVertex vertex) {
-      if (!vertex.equals(context.mostLeftVertex)) {
-        visit(context, stack, vertex.getJoinEdge().getLeftVertex());
-      }
-      if (!vertex.equals(context.mostRightVertex)) {
-        visit(context, stack, vertex.getJoinEdge().getRightVertex());
-      }
-
-      // original join edge
-      JoinEdge edge = vertex.getJoinEdge();
+    private static JoinEdge updateJoinQualIfNecessary(JoinEdgeCollectorContext context, JoinEdge edge) {
       // join conditions must be referred to decide the join type between INNER and CROSS.
       // In addition, some join conditions can be moved to the optimal places due to the changed join order
       Set<EvalNode> conditionsForThisJoin = findConditionsForJoin(context.predicates, edge);
@@ -139,61 +130,101 @@ public class AssociativeGroup {
         }
         edge.setJoinQuals(conditionsForThisJoin);
       }
-      context.joinEdges.add(edge);
-      if (PlannerUtil.isCommutativeJoin(edge.getJoinType())) {
-        context.joinEdges.add(getCommutativeJoinEdge(edge));
+      return edge;
+    }
+
+    @Override
+    public void visitJoinGroupVertex(JoinEdgeCollectorContext context, Stack<JoinVertex> stack, JoinGroupVertex vertex) {
+      if (!vertex.equals(context.mostLeftVertex)) {
+        visit(context, stack, vertex.getJoinEdge().getLeftVertex());
+      }
+      if (!vertex.equals(context.mostRightVertex)) {
+        visit(context, stack, vertex.getJoinEdge().getRightVertex());
+      }
+
+      if (context.joinEdgesFromChild.isEmpty()) {
+        // case 1: (a - b)
+        context.joinEdgesFromChild.add(vertex.getJoinEdge());
+        context.totalJoinEdges.add(vertex.getJoinEdge());
+        if (PlannerUtil.isCommutativeJoin(vertex.getJoinEdge().getJoinType())) {
+          // case 2: (b - a)
+          JoinEdge commutativeEdge = getCommutativeJoinEdge(vertex.getJoinEdge());
+          context.joinEdgesFromChild.add(commutativeEdge);
+          context.totalJoinEdges.add(commutativeEdge);
+        }
+        return;
+      }
+
+      Set<JoinEdge> created = TUtil.newHashSet();
+      JoinEdge thisEdge = vertex.getJoinEdge();
+
+      // case 3: ((a - b) - c)
+      JoinVertex cVertex = thisEdge.getRightVertex();
+      for (JoinEdge abEdge : context.joinEdgesFromChild) {
+        if (!abEdge.getLeftVertex().equals(cVertex) && !abEdge.getRightVertex().equals(cVertex)) {
+          JoinGroupVertex abVertex = new JoinGroupVertex(abEdge);
+          abVertex.setJoinNode(JoinOrderUtil.createJoinNode(context.plan, abEdge));
+          JoinEdge abcEdge = new JoinEdge(thisEdge.getJoinType(), abVertex, cVertex);
+          abcEdge = updateJoinQualIfNecessary(context, abcEdge);
+          created.add(abcEdge);
+        }
       }
 
       if (!vertex.equals(context.mostLeftVertex)) {
-        // TODO: how to keep nodes of other types?
-        // new join edge according to the associative rule
-        JoinVertex mostRightRelationFromLeftChild = JoinOrderUtil.findMostRightRelationVertex(
-            vertex.getJoinEdge().getLeftVertex());
-        JoinEdge childEdge = new JoinEdge(vertex.getJoinType(), mostRightRelationFromLeftChild,
-            vertex.getJoinEdge().getRightVertex());
+        // case 4: (a - (b - c))
+        Set<JoinEdge> bcEdges = TUtil.newHashSet();
 
-        conditionsForThisJoin.clear();
-        conditionsForThisJoin = findConditionsForJoin(context.predicates, childEdge);
-        if (!conditionsForThisJoin.isEmpty()) {
-          if (childEdge.getJoinType() == JoinType.CROSS) {
-            childEdge.setJoinType(JoinType.INNER);
-          }
-          childEdge.setJoinQuals(conditionsForThisJoin);
-        }
-
-        Set<JoinEdge> childEdges = TUtil.newHashSet();
-        childEdges.add(childEdge);
-        context.joinEdges.add(childEdge);
-        if (PlannerUtil.isCommutativeJoin(childEdge.getJoinType())) {
-          JoinEdge commutativeChildEdge = getCommutativeJoinEdge(childEdge);
-          childEdges.add(commutativeChildEdge);
-          context.joinEdges.add(commutativeChildEdge);
-        }
-
-        JoinEdge newEdgeInfo = ((JoinGroupVertex)edge.getLeftVertex()).getJoinEdge();
-        for (JoinEdge eachChild : childEdges) {
-          JoinGroupVertex newVertex = new JoinGroupVertex(eachChild);
-          newVertex.setJoinNode(createJoinNode(context.plan, eachChild));
-          JoinEdge newEdge = new JoinEdge(newEdgeInfo.getJoinType(),
-              newEdgeInfo.getLeftVertex(), newVertex);
-          conditionsForThisJoin.clear();
-          conditionsForThisJoin = findConditionsForJoin(context.predicates, newEdge);
-          if (!conditionsForThisJoin.isEmpty()) {
-            if (newEdge.getJoinType() == JoinType.CROSS) {
-              newEdge.setJoinType(JoinType.INNER);
+        // create edges for (b - c)
+        for (JoinEdge abEdge : context.joinEdgesFromChild) {
+          if (!abEdge.getLeftVertex().equals(cVertex) && !abEdge.getRightVertex().equals(cVertex)) {
+            JoinGroupVertex abVertex = new JoinGroupVertex(abEdge);
+            abVertex.setJoinNode(JoinOrderUtil.createJoinNode(context.plan, abEdge));
+            JoinVertex bVertex = JoinOrderUtil.findMostRightRelationVertex(abVertex);
+            JoinEdge bcEdge = new JoinEdge(thisEdge.getJoinType(), bVertex, cVertex);
+            bcEdge = updateJoinQualIfNecessary(context, bcEdge);
+            bcEdges.add(bcEdge);
+            if (PlannerUtil.isCommutativeJoin(bcEdge.getJoinType())) {
+              bcEdges.add(getCommutativeJoinEdge(bcEdge));
             }
-            newEdge.setJoinQuals(conditionsForThisJoin);
           }
+        }
+        created.addAll(bcEdges);
 
-          context.joinEdges.add(newEdge);
-          if (PlannerUtil.isCommutativeJoin(newEdge.getJoinType())) {
-            context.joinEdges.add(getCommutativeJoinEdge(newEdge));
+        // create edges for (a - (b - c))
+        JoinEdge abEdge = ((JoinGroupVertex)thisEdge.getLeftVertex()).getJoinEdge();
+        Set<JoinVertex> aVertexes = TUtil.newHashSet();
+        aVertexes.add(abEdge.getLeftVertex());
+        if (PlannerUtil.isCommutativeJoin(abEdge.getJoinType())) {
+          aVertexes.add(abEdge.getRightVertex());
+        }
+        for (JoinEdge bcEdge : bcEdges) {
+          for (JoinVertex aVertex : aVertexes) {
+            if (!bcEdge.getLeftVertex().equals(aVertex) && !bcEdge.getRightVertex().equals(aVertex)) {
+              JoinGroupVertex bcVertex = new JoinGroupVertex(bcEdge);
+              bcVertex.setJoinNode(JoinOrderUtil.createJoinNode(context.plan, bcEdge));
+              JoinEdge abcEdge = new JoinEdge(abEdge.getJoinType(), aVertex, bcVertex);
+              abcEdge = updateJoinQualIfNecessary(context, abcEdge);
+              created.add(abcEdge);
+            }
           }
+        }
+      }
+
+      context.joinEdgesFromChild.clear();
+      context.joinEdgesFromChild.addAll(created);
+      context.totalJoinEdges.addAll(created);
+
+      // handle commutative edges
+      for (JoinEdge eachEdge : created) {
+        if (PlannerUtil.isCommutativeJoin(eachEdge.getJoinType())) {
+          JoinEdge commutativeEdge = getCommutativeJoinEdge(eachEdge);
+          context.joinEdgesFromChild.add(commutativeEdge);
+          context.totalJoinEdges.add(commutativeEdge);
         }
       }
     }
 
-    private Set<EvalNode> findConditionsForJoin(Set<EvalNode> candidates, JoinEdge edge) {
+    private static Set<EvalNode> findConditionsForJoin(Set<EvalNode> candidates, JoinEdge edge) {
       Set<EvalNode> conditionsForThisJoin = TUtil.newHashSet();
       for (EvalNode predicate : candidates) {
         if (EvalTreeUtil.isJoinQual(null, edge.getLeftVertex().getSchema(),
@@ -206,36 +237,6 @@ public class AssociativeGroup {
     }
   }
 
-  private static JoinNode createJoinNode(LogicalPlan plan, JoinEdge joinEdge) {
-    LogicalNode left = joinEdge.getLeftVertex().getCorrespondingNode();
-    LogicalNode right = joinEdge.getRightVertex().getCorrespondingNode();
-
-    JoinNode joinNode = plan.createNode(JoinNode.class);
-
-    if (PlannerUtil.isCommutativeJoin(joinEdge.getJoinType())) {
-      // if only one operator is relation
-      if ((left instanceof RelationNode) && !(right instanceof RelationNode)) {
-        // for left deep
-        joinNode.init(joinEdge.getJoinType(), right, left);
-      } else {
-        // if both operators are relation or if both are relations
-        // we don't need to concern the left-right position.
-        joinNode.init(joinEdge.getJoinType(), left, right);
-      }
-    } else {
-      joinNode.init(joinEdge.getJoinType(), left, right);
-    }
-
-    Schema mergedSchema = SchemaUtil.merge(joinNode.getLeftChild().getOutSchema(),
-        joinNode.getRightChild().getOutSchema());
-    joinNode.setInSchema(mergedSchema);
-    joinNode.setOutSchema(mergedSchema);
-    if (joinEdge.hasJoinQual()) {
-      joinNode.setJoinQual(AlgebraicUtil.createSingletonExprFromCNF(joinEdge.getJoinQual()));
-    }
-    return joinNode;
-  }
-
   public Set<JoinEdge> populateJoinEdges(LogicalPlan plan) {
     // collect join predicates within the group
     Set<EvalNode> predicates = collectJoinPredicates();
@@ -244,7 +245,7 @@ public class AssociativeGroup {
         mostRightVertex, predicates);
     JoinEdgeCollector collector = new JoinEdgeCollector();
     collector.visit(context, new Stack<JoinVertex>(), this.mostRightVertex);
-    return context.joinEdges;
+    return context.totalJoinEdges;
   }
 
   private static boolean checkIfBeEvaluatedAtJoin(EvalNode evalNode, JoinVertex left, JoinVertex right) {

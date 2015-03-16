@@ -146,7 +146,8 @@ public class BlockingRpcClient extends NettyClientBase {
       getChannel().writeAndFlush(rpcRequest, channelPromise);
 
       try {
-        return callFuture.get(60, TimeUnit.SECONDS);
+//        return callFuture.get(60, TimeUnit.SECONDS);
+        return callFuture.get();
       } catch (Throwable t) {
         if (t instanceof ExecutionException) {
           Throwable cause = t.getCause();

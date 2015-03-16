@@ -18,6 +18,12 @@
 
 package org.apache.tajo.plan.joinorder;
 
+import org.apache.tajo.catalog.Schema;
+import org.apache.tajo.catalog.SchemaUtil;
+import org.apache.tajo.plan.LogicalPlan;
+import org.apache.tajo.plan.expr.AlgebraicUtil;
+import org.apache.tajo.plan.logical.JoinNode;
+import org.apache.tajo.plan.logical.LogicalNode;
 import org.apache.tajo.util.TUtil;
 
 import java.util.Set;
@@ -67,5 +73,22 @@ public class JoinOrderUtil {
         visit(context, stack, vertex.getJoinEdge().getRightVertex());
       }
     }
+  }
+
+  public static JoinNode createJoinNode(LogicalPlan plan, JoinEdge joinEdge) {
+    LogicalNode left = joinEdge.getLeftVertex().getCorrespondingNode();
+    LogicalNode right = joinEdge.getRightVertex().getCorrespondingNode();
+
+    JoinNode joinNode = plan.createNode(JoinNode.class);
+    joinNode.init(joinEdge.getJoinType(), left, right);
+
+    Schema mergedSchema = SchemaUtil.merge(joinNode.getLeftChild().getOutSchema(),
+        joinNode.getRightChild().getOutSchema());
+    joinNode.setInSchema(mergedSchema);
+    joinNode.setOutSchema(mergedSchema);
+    if (joinEdge.hasJoinQual()) {
+      joinNode.setJoinQual(AlgebraicUtil.createSingletonExprFromCNF(joinEdge.getJoinQual()));
+    }
+    return joinNode;
   }
 }
