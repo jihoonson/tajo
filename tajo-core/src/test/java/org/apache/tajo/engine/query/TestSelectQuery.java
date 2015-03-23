@@ -115,6 +115,7 @@ public class TestSelectQuery extends QueryTestCaseBase {
           "select l_linenumber, count(*), count(distinct l_orderkey), sum(distinct l_orderkey) from lineitem " +
           "group by l_linenumber having sum(distinct l_orderkey) = 6"})
   public final void testExplainSelectPhysical() throws Exception {
+    // Enable this option to fix the shape of the generated plans.
     testingCluster.getConfiguration().set(ConfVars.$TEST_PLAN_SHAPE_FIX_ENABLED.varname, "true");
     runSimpleTests();
   }

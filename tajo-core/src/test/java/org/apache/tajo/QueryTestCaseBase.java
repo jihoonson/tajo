@@ -367,6 +367,7 @@ public class QueryTestCaseBase {
           assertEquals("Result Verification for: " + (i+1) + "th test",
               FileUtil.readTextFromStream(currentResultFS.open(resultPath)), resultSetToString(result).trim());
         } else if (!isNull(result)) {
+          // If there is no result file expected, create gold files for new tests.
           FileUtil.writeTextToStream(resultSetToString(result).trim(), currentResultFS.create(resultPath));
           LOG.info("New test output for " + current.getDisplayName() + " is written to " + resultPath);
           // should be copied to src directory

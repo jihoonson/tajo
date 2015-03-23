@@ -35,6 +35,11 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.Stack;
 
+/**
+ * Tajo's logical planner can generate different shapes of logical plans for the same query,
+ * especially when the query involves one or more joins.
+ * This class guarantees the consistency of the logical plan for the same query.
+ */
 public class ExplainPlanPreprocessorForTest {
   private static final PlanShapeFixerContext shapeFixerContext = new PlanShapeFixerContext();
   private static final PlanShapeFixer shapeFixer = new PlanShapeFixer();
@@ -59,10 +64,32 @@ public class ExplainPlanPreprocessorForTest {
     }
   }
 
+  /**
+   * Given a commutative join, two children of the join node are interchangeable.
+   * This class fix the logical plan according to the following rules.
+   *
+   * <h3>Rules</h3>
+   * <ul>
+   *   <li>When one of the both children has more descendants,
+   *   change the plan in order that the left child is the one who has more descendants.</li>
+   *   <li>When both children have the same number of descendants,
+   *   their order is decided based on their string representation.</li>
+   * </ul>
+   *
+   * In addition, in/out schemas, quals, and targets are sorted by their names.
+   */
   private static class PlanShapeFixer extends BasicLogicalPlanVisitor<PlanShapeFixerContext, LogicalNode> {
     private static final ColumnComparator columnComparator = new ColumnComparator();
     private static final EvalNodeComparator evalNodeComparator = new EvalNodeComparator();
     private static final TargetComparator targetComparator = new TargetComparator();
+
+    @Override
+    public LogicalNode visit(PlanShapeFixerContext context, LogicalPlan plan, LogicalPlan.QueryBlock block,
+                             LogicalNode node, Stack<LogicalNode> stack) throws PlanningException {
+      super.visit(context, plan, block, node, stack);
+      context.childNumbers.push(context.childNumbers.pop()+1);
+      return null;
+    }
 
     @Override
     public LogicalNode visitScan(PlanShapeFixerContext context, LogicalPlan plan, LogicalPlan.QueryBlock block,
@@ -174,6 +201,11 @@ public class ExplainPlanPreprocessorForTest {
     }
   }
 
+  /**
+   * During join order optimization, new join nodes are created based on the chosen join order.
+   * So, each join node has different pids.
+   * This class sequentially assigns unique pids to all logical nodes.
+   */
   private static class PidReseter extends BasicLogicalPlanVisitor<PidResetContext, LogicalNode> {
 
     @Override

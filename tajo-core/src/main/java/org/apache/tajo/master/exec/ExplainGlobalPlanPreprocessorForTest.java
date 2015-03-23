@@ -27,11 +27,20 @@ import org.apache.tajo.engine.planner.global.MasterPlan;
 import java.util.Arrays;
 import java.util.List;
 
+/**
+ * Data channels of a global plan can have multiple shuffle keys, and their appearance order is basically not preserved.
+ * However, to test the equivalence of global plans, the appearance order of shuffle keys must be preserved.
+ * This class guarantees the consistency of the order of shuffle keys.
+ */
 public class ExplainGlobalPlanPreprocessorForTest {
   private static final ExplainPlanPreprocessorForTest.ColumnComparator columnComparator =
       new ExplainPlanPreprocessorForTest.ColumnComparator();
 
-  // Shuffle keys sorter
+  /**
+   * For all data channels, sort shuffle keys by their names.
+   *
+   * @param plan master plan
+   */
   public void prepareTest(MasterPlan plan) {
     ExecutionBlockCursor cursor = new ExecutionBlockCursor(plan);
 
