@@ -1,7 +1,7 @@
 /* Copyright (c) 2007 Jython Developers */
 package org.apache.tajo.org.python.core.io;
 
-import org.python.core.util.StringUtil;
+import org.apache.tajo.org.python.core.util.StringUtil;
 
 import java.nio.ByteBuffer;
 

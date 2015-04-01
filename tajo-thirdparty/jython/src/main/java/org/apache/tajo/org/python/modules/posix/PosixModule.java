@@ -7,12 +7,12 @@ import org.jruby.ext.posix.FileStat;
 import org.jruby.ext.posix.POSIX;
 import org.jruby.ext.posix.POSIXFactory;
 import org.jruby.ext.posix.util.Platform;
-import org.python.core.*;
-import org.python.core.io.FileDescriptors;
-import org.python.core.io.FileIO;
-import org.python.core.io.IOBase;
-import org.python.core.io.RawIOBase;
-import org.python.core.util.StringUtil;
+import org.apache.tajo.org.python.core.*;
+import org.apache.tajo.org.python.core.io.FileDescriptors;
+import org.apache.tajo.org.python.core.io.FileIO;
+import org.apache.tajo.org.python.core.io.IOBase;
+import org.apache.tajo.org.python.core.io.RawIOBase;
+import org.apache.tajo.org.python.core.util.StringUtil;
 
 import java.io.*;
 import java.nio.ByteBuffer;

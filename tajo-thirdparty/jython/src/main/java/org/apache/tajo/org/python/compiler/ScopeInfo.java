@@ -2,10 +2,10 @@
 
 package org.apache.tajo.org.python.compiler;
 
-import org.python.antlr.ParseException;
-import org.python.antlr.PythonTree;
-import org.python.antlr.ast.Return;
-import org.python.antlr.base.expr;
+import org.apache.tajo.org.python.antlr.ParseException;
+import org.apache.tajo.org.python.antlr.PythonTree;
+import org.apache.tajo.org.python.antlr.ast.Return;
+import org.apache.tajo.org.python.antlr.base.expr;
 
 import java.util.*;
 
@@ -17,7 +17,7 @@ public class ScopeInfo extends Object implements ScopeConstants {
     public int func_level;
 
     public void dump() { // for debugging
-        if (org.python.core.Options.verbose < org.python.core.Py.DEBUG)
+        if (org.apache.tajo.org.python.core.Options.verbose < org.apache.tajo.org.python.core.Py.DEBUG)
             return;
         for(int i=0; i<level; i++) System.err.print(' ');
         System.err.print(((kind != CLASSSCOPE)?scope_name:"class "+

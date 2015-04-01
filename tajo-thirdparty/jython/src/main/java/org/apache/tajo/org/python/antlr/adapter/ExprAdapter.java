@@ -1,9 +1,9 @@
 package org.apache.tajo.org.python.antlr.adapter;
 
-import org.python.antlr.ast.Num;
-import org.python.antlr.ast.Str;
-import org.python.antlr.base.expr;
-import org.python.core.*;
+import org.apache.tajo.org.python.antlr.ast.Num;
+import org.apache.tajo.org.python.antlr.ast.Str;
+import org.apache.tajo.org.python.antlr.base.expr;
+import org.apache.tajo.org.python.core.*;
 
 import java.util.ArrayList;
 import java.util.List;
