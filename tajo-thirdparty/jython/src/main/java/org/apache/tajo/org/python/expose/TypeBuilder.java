@@ -1,7 +1,7 @@
 package org.apache.tajo.org.python.expose;
 
-import org.python.core.PyObject;
-import org.python.core.PyType;
+import org.apache.tajo.org.python.core.PyObject;
+import org.apache.tajo.org.python.core.PyType;
 
 /**
  * Contains the basic information needed to construct a builtin Python type.

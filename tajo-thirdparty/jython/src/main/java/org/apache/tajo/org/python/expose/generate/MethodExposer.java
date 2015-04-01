@@ -1,6 +1,6 @@
 package org.apache.tajo.org.python.expose.generate;
 
-import org.objectweb.asm.Type;
+import org.apache.tajo.org.objectweb.asm.Type;
 
 public abstract class MethodExposer extends Exposer {
 

@@ -1,8 +1,8 @@
 package org.apache.tajo.org.python.core;
 
-import org.python.expose.ExposedGet;
-import org.python.expose.ExposedMethod;
-import org.python.expose.ExposedType;
+import org.apache.tajo.org.python.expose.ExposedGet;
+import org.apache.tajo.org.python.expose.ExposedMethod;
+import org.apache.tajo.org.python.expose.ExposedType;
 
 /**
  * Implements type checking and return type coercion for a data descriptor. A

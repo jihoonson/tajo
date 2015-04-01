@@ -1,9 +1,9 @@
 // Copyright (c) Corporation for National Research Initiatives
 package org.apache.tajo.org.python.core;
 
-import org.python.compiler.Module;
-import org.python.core.util.FileUtil;
-import org.python.core.util.PlatformUtil;
+import org.apache.tajo.org.python.compiler.Module;
+import org.apache.tajo.org.python.core.util.FileUtil;
+import org.apache.tajo.org.python.core.util.PlatformUtil;
 
 import java.io.*;
 import java.util.concurrent.locks.ReentrantLock;
@@ -316,7 +316,7 @@ public class imp {
             if(filename == null) {
                 filename = UNKNOWN_SOURCEFILE;
             }
-            org.python.antlr.base.mod node;
+            org.apache.tajo.org.python.antlr.base.mod node;
             try {
                 node = ParserFacade.parse(fp, CompileMode.exec, filename, new CompilerFlags());
             } finally {

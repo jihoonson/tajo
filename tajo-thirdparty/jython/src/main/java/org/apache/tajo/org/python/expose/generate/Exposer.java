@@ -1,7 +1,7 @@
 package org.apache.tajo.org.python.expose.generate;
 
-import org.objectweb.asm.*;
-import org.python.core.BytecodeLoader;
+import org.apache.tajo.org.objectweb.asm.*;
+import org.apache.tajo.org.python.core.BytecodeLoader;
 
 import java.util.HashMap;
 import java.util.Map;

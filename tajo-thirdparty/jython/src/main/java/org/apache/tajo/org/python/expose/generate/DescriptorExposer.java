@@ -1,7 +1,7 @@
 package org.apache.tajo.org.python.expose.generate;
 
-import org.objectweb.asm.Type;
-import org.python.core.PyDataDescr;
+import org.apache.tajo.org.objectweb.asm.Type;
+import org.apache.tajo.org.python.core.PyDataDescr;
 
 /**
  * Generates a class to expose a descriptor on Python type. One of addMethodGetter or addFieldGetter

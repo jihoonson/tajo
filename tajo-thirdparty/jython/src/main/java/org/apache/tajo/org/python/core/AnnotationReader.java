@@ -7,6 +7,7 @@ package org.apache.tajo.org.python.core;
 
 import org.apache.tajo.org.objectweb.asm.AnnotationVisitor;
 import org.apache.tajo.org.objectweb.asm.ClassReader;
+import org.apache.tajo.org.objectweb.asm.commons.EmptyVisitor;
 
 import java.io.IOException;
 

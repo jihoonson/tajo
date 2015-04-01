@@ -1,8 +1,8 @@
 // Copyright (c) Corporation for National Research Initiatives
 package org.apache.tajo.org.python.core;
 
-import org.objectweb.asm.ClassReader;
-import org.python.util.Generic;
+import org.apache.tajo.org.objectweb.asm.ClassReader;
+import org.apache.tajo.org.python.util.Generic;
 
 import java.net.URL;
 import java.net.URLClassLoader;

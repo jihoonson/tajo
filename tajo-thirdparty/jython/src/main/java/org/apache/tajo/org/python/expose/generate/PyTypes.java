@@ -1,8 +1,8 @@
 package org.apache.tajo.org.python.expose.generate;
 
-import org.objectweb.asm.Type;
-import org.python.core.*;
-import org.python.expose.*;
+import org.apache.tajo.org.objectweb.asm.Type;
+import org.apache.tajo.org.python.core.*;
+import org.apache.tajo.org.python.expose.*;
 
 /**
  * Type objects used by exposed generation.

@@ -1,6 +1,6 @@
 package org.apache.tajo.org.python.core;
 
-import org.python.antlr.AST;
+import org.apache.tajo.org.python.antlr.AST;
 
 import java.util.HashSet;
 import java.util.Set;

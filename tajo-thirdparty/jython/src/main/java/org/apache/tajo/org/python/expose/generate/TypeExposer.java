@@ -1,11 +1,11 @@
 package org.apache.tajo.org.python.expose.generate;
 
-import org.objectweb.asm.Type;
-import org.python.core.BytecodeLoader;
-import org.python.expose.BaseTypeBuilder;
-import org.python.expose.ExposedType;
-import org.python.expose.TypeBuilder;
-import org.python.util.Generic;
+import org.apache.tajo.org.objectweb.asm.Type;
+import org.apache.tajo.org.python.core.BytecodeLoader;
+import org.apache.tajo.org.python.expose.BaseTypeBuilder;
+import org.apache.tajo.org.python.expose.ExposedType;
+import org.apache.tajo.org.python.expose.TypeBuilder;
+import org.apache.tajo.org.python.util.Generic;
 
 import java.util.Collection;
 import java.util.Set;

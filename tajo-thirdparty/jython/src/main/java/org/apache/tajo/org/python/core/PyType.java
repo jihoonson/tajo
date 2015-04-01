@@ -2,9 +2,9 @@
 package org.apache.tajo.org.python.core;
 
 import com.google.common.collect.MapMaker;
-import org.python.expose.*;
-import org.python.modules._weakref.WeakrefModule;
-import org.python.util.Generic;
+import org.apache.tajo.org.python.expose.*;
+import org.apache.tajo.org.python.modules._weakref.WeakrefModule;
+import org.apache.tajo.org.python.util.Generic;
 
 import java.io.Serializable;
 import java.lang.ref.Reference;

@@ -2,8 +2,8 @@
 package org.apache.tajo.org.python.core.io;
 
 import com.kenai.constantine.platform.Errno;
-import org.python.core.Py;
-import org.python.core.PyException;
+import org.apache.tajo.org.python.core.Py;
+import org.apache.tajo.org.python.core.PyException;
 
 import java.io.InputStream;
 import java.io.OutputStream;

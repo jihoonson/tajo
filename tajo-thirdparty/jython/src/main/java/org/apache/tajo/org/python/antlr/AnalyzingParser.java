@@ -30,8 +30,8 @@ public class AnalyzingParser extends BaseParser {
             if (!(t instanceof Name)
                 || startToken == null
                 || stopToken == null
-                || startToken.getType() != PythonParser.LPAREN
-                || stopToken.getType() != PythonParser.RPAREN) {
+                || startToken.getType() != org.apache.tajo.org.python.antlr.PythonParser.LPAREN
+                || stopToken.getType() != org.apache.tajo.org.python.antlr.PythonParser.RPAREN) {
                 super.setTokenBoundaries(t, startToken, stopToken);
             }
         }
@@ -47,8 +47,8 @@ public class AnalyzingParser extends BaseParser {
     }
 
     @Override
-    protected PythonParser setupParser(boolean single) {
-        PythonParser parser = super.setupParser(single);
+    protected org.apache.tajo.org.python.antlr.PythonParser setupParser(boolean single) {
+        org.apache.tajo.org.python.antlr.PythonParser parser = super.setupParser(single);
         parser.setTreeAdaptor(new AnalyzerTreeAdaptor());
         return parser;
     }

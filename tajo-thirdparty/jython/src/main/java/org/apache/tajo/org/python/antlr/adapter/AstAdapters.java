@@ -99,100 +99,100 @@ public class AstAdapters {
         }
         return expr_contextType.UNDEFINED;
     }
-//
-//    public static slice py2slice(PyObject o) {
-//        return (slice)sliceAdapter.py2ast(o);
-//    }
-//
-//    public static stmt py2stmt(PyObject o) {
-//        return (stmt)stmtAdapter.py2ast(o);
-//    }
-//
-//    //XXX: Unnecessary but needs to be fixed in the code generation of asdl_antlr.py
-//    public static Object py2string(Object o) {
-//        if (o instanceof PyString) {
-//            return o;
-//        }
-//        return null;
-//    }
-//
-//    public static operatorType py2operator(Object o) {
-//        if (o == null || o instanceof operatorType) {
-//            return (operatorType)o;
-//        } else if (o instanceof PyObject && o != Py.None) {
-//            switch (((PyObject)o).asInt()) {
-//                case 1:
-//                    return operatorType.Add;
-//                case 2:
-//                    return operatorType.Sub;
-//                case 3:
-//                    return operatorType.Mult;
-//                case 4:
-//                    return operatorType.Div;
-//                case 5:
-//                    return operatorType.Mod;
-//                case 6:
-//                    return operatorType.Pow;
-//                case 7:
-//                    return operatorType.LShift;
-//                case 8:
-//                    return operatorType.RShift;
-//                case 9:
-//                    return operatorType.BitOr;
-//                case 10:
-//                    return operatorType.BitXor;
-//                case 11:
-//                    return operatorType.BitAnd;
-//                case 12:
-//                    return operatorType.FloorDiv;
-//                default:
-//                    return operatorType.UNDEFINED;
-//            }
-//        }
-//        return operatorType.UNDEFINED;
-//    }
-//
-//    public static PyObject operator2py(operatorType o) {
-//        switch (o) {
-//            case Add:
-//                return new Add();
-//            case Sub:
-//                return new Sub();
-//            case Mult:
-//                return new Mult();
-//            case Div:
-//                return new Div();
-//            case Mod:
-//                return new Mod();
-//            case Pow:
-//                return new Pow();
-//            case LShift:
-//                return new LShift();
-//            case RShift:
-//                return new RShift();
-//            case BitOr:
-//                return new BitOr();
-//            case BitXor:
-//                return new BitXor();
-//            case BitAnd:
-//                return new BitAnd();
-//            case FloorDiv:
-//                return new FloorDiv();
-//            default:
-//                return Py.None;
-//        }
-//    }
-//
-//    public static PyObject boolop2py(boolopType o) {
-//        switch (o) {
-//            case And:
-//                return new And();
-//            case Or:
-//                return new Or();
-//            default:
-//                return Py.None;
-//        }
-//    }
+
+    public static slice py2slice(PyObject o) {
+        return (slice)sliceAdapter.py2ast(o);
+    }
+
+    public static stmt py2stmt(PyObject o) {
+        return (stmt)stmtAdapter.py2ast(o);
+    }
+
+    //XXX: Unnecessary but needs to be fixed in the code generation of asdl_antlr.py
+    public static Object py2string(Object o) {
+        if (o instanceof PyString) {
+            return o;
+        }
+        return null;
+    }
+
+    public static operatorType py2operator(Object o) {
+        if (o == null || o instanceof operatorType) {
+            return (operatorType)o;
+        } else if (o instanceof PyObject && o != Py.None) {
+            switch (((PyObject)o).asInt()) {
+                case 1:
+                    return operatorType.Add;
+                case 2:
+                    return operatorType.Sub;
+                case 3:
+                    return operatorType.Mult;
+                case 4:
+                    return operatorType.Div;
+                case 5:
+                    return operatorType.Mod;
+                case 6:
+                    return operatorType.Pow;
+                case 7:
+                    return operatorType.LShift;
+                case 8:
+                    return operatorType.RShift;
+                case 9:
+                    return operatorType.BitOr;
+                case 10:
+                    return operatorType.BitXor;
+                case 11:
+                    return operatorType.BitAnd;
+                case 12:
+                    return operatorType.FloorDiv;
+                default:
+                    return operatorType.UNDEFINED;
+            }
+        }
+        return operatorType.UNDEFINED;
+    }
+
+    public static PyObject operator2py(operatorType o) {
+        switch (o) {
+            case Add:
+                return new Add();
+            case Sub:
+                return new Sub();
+            case Mult:
+                return new Mult();
+            case Div:
+                return new Div();
+            case Mod:
+                return new Mod();
+            case Pow:
+                return new Pow();
+            case LShift:
+                return new LShift();
+            case RShift:
+                return new RShift();
+            case BitOr:
+                return new BitOr();
+            case BitXor:
+                return new BitXor();
+            case BitAnd:
+                return new BitAnd();
+            case FloorDiv:
+                return new FloorDiv();
+            default:
+                return Py.None;
+        }
+    }
+
+    public static PyObject boolop2py(boolopType o) {
+        switch (o) {
+            case And:
+                return new And();
+            case Or:
+                return new Or();
+            default:
+                return Py.None;
+        }
+    }
 //
 //    public static PyObject cmpop2py(cmpopType o) {
 //        switch (o) {
@@ -220,21 +220,21 @@ public class AstAdapters {
 //                return Py.None;
 //        }
 //    }
-//
-//    public static PyObject unaryop2py(unaryopType o) {
-//        switch (o) {
-//            case Invert:
-//                return new Invert();
-//            case Not:
-//                return new Not();
-//            case UAdd:
-//                return new UAdd();
-//            case USub:
-//                return new USub();
-//            default:
-//                return Py.None;
-//        }
-//    }
+
+    public static PyObject unaryop2py(unaryopType o) {
+        switch (o) {
+            case Invert:
+                return new Invert();
+            case Not:
+                return new Not();
+            case UAdd:
+                return new UAdd();
+            case USub:
+                return new USub();
+            default:
+                return Py.None;
+        }
+    }
 
 
     public static PyObject expr_context2py(expr_contextType o) {
@@ -255,61 +255,61 @@ public class AstAdapters {
                 return Py.None;
         }
     }
-//
-//    public static boolopType py2boolop(Object o) {
-//        if (o == null || o instanceof boolopType) {
-//            return (boolopType)o;
-//        }
-//        if (o instanceof PyObject && o != Py.None) {
-//            switch (((PyObject)o).asInt()) {
-//                case 1:
-//                    return boolopType.And;
-//                case 2:
-//                    return boolopType.Or;
-//                default:
-//                    return boolopType.UNDEFINED;
-//            }
-//        }
-//        return boolopType.UNDEFINED;
-//    }
-//
-//    public static arguments py2arguments(Object o) {
-//        if (o instanceof arguments) {
-//            return (arguments)o;
-//        }
-//        return null;
-//    }
-//
+
+    public static boolopType py2boolop(Object o) {
+        if (o == null || o instanceof boolopType) {
+            return (boolopType)o;
+        }
+        if (o instanceof PyObject && o != Py.None) {
+            switch (((PyObject)o).asInt()) {
+                case 1:
+                    return boolopType.And;
+                case 2:
+                    return boolopType.Or;
+                default:
+                    return boolopType.UNDEFINED;
+            }
+        }
+        return boolopType.UNDEFINED;
+    }
+
+    public static arguments py2arguments(Object o) {
+        if (o instanceof arguments) {
+            return (arguments)o;
+        }
+        return null;
+    }
+
 //    //XXX: clearly this isn't necessary -- need to adjust the code generation.
-//    public static Object py2object(Object o) {
-//        return o;
-//    }
-//
-//    public static Boolean py2bool(Object o) {
-//        if (o instanceof Boolean) {
-//            return (Boolean)o;
-//        }
-//        return null;
-//    }
-//
-//    public static unaryopType py2unaryop(Object o) {
-//        if (o == null || o instanceof unaryopType) {
-//            return (unaryopType)o;
-//        }
-//        if (o instanceof PyObject && o != Py.None) {
-//            switch (((PyObject)o).asInt()) {
-//                case 1:
-//                    return unaryopType.Invert;
-//                case 2:
-//                    return unaryopType.Not;
-//                case 3:
-//                    return unaryopType.UAdd;
-//                case 4:
-//                    return unaryopType.USub;
-//                default:
-//                    return unaryopType.UNDEFINED;
-//            }
-//        }
-//        return unaryopType.UNDEFINED;
-//    }
+    public static Object py2object(Object o) {
+        return o;
+    }
+
+    public static Boolean py2bool(Object o) {
+        if (o instanceof Boolean) {
+            return (Boolean)o;
+        }
+        return null;
+    }
+
+    public static unaryopType py2unaryop(Object o) {
+        if (o == null || o instanceof unaryopType) {
+            return (unaryopType)o;
+        }
+        if (o instanceof PyObject && o != Py.None) {
+            switch (((PyObject)o).asInt()) {
+                case 1:
+                    return unaryopType.Invert;
+                case 2:
+                    return unaryopType.Not;
+                case 3:
+                    return unaryopType.UAdd;
+                case 4:
+                    return unaryopType.USub;
+                default:
+                    return unaryopType.UNDEFINED;
+            }
+        }
+        return unaryopType.UNDEFINED;
+    }
 }

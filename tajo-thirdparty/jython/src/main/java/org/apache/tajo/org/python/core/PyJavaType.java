@@ -1,7 +1,7 @@
 package org.apache.tajo.org.python.core;
 
-import org.python.core.util.StringUtil;
-import org.python.util.Generic;
+import org.apache.tajo.org.python.core.util.StringUtil;
+import org.apache.tajo.org.python.util.Generic;
 
 import java.io.*;
 import java.lang.reflect.*;

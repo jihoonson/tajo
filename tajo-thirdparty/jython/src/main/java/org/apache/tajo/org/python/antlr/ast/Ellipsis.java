@@ -2,17 +2,17 @@
 package org.apache.tajo.org.python.antlr.ast;
 
 import org.antlr.runtime.Token;
-import org.python.antlr.AST;
-import org.python.antlr.PythonTree;
-import org.python.antlr.base.slice;
-import org.python.core.ArgParser;
-import org.python.core.PyObject;
-import org.python.core.PyString;
-import org.python.core.PyType;
-import org.python.expose.ExposedGet;
-import org.python.expose.ExposedMethod;
-import org.python.expose.ExposedNew;
-import org.python.expose.ExposedType;
+import org.apache.tajo.org.python.antlr.AST;
+import org.apache.tajo.org.python.antlr.PythonTree;
+import org.apache.tajo.org.python.antlr.base.slice;
+import org.apache.tajo.org.python.core.ArgParser;
+import org.apache.tajo.org.python.core.PyObject;
+import org.apache.tajo.org.python.core.PyString;
+import org.apache.tajo.org.python.core.PyType;
+import org.apache.tajo.org.python.expose.ExposedGet;
+import org.apache.tajo.org.python.expose.ExposedMethod;
+import org.apache.tajo.org.python.expose.ExposedNew;
+import org.apache.tajo.org.python.expose.ExposedType;
 
 @ExposedType(name = "_ast.Ellipsis", base = AST.class)
 public class Ellipsis extends slice {

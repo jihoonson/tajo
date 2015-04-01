@@ -4,7 +4,7 @@
  */
 package org.apache.tajo.org.python.core;
 
-import org.python.expose.*;
+import org.apache.tajo.org.python.expose.*;
 
 /**
  * A builtin python complex number

@@ -1,10 +1,10 @@
 /* Copyright (c) 2007 Jython Developers */
 package org.apache.tajo.org.python.core.io;
 
-import org.python.core.Py;
-import org.python.core.PyArray;
-import org.python.core.PyObject;
-import org.python.core.PyString;
+import org.apache.tajo.org.python.core.Py;
+import org.apache.tajo.org.python.core.PyArray;
+import org.apache.tajo.org.python.core.PyObject;
+import org.apache.tajo.org.python.core.PyString;
 
 import java.io.InputStream;
 import java.io.OutputStream;

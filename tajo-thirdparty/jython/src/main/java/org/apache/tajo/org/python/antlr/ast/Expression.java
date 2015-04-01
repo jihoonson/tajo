@@ -2,13 +2,13 @@
 package org.apache.tajo.org.python.antlr.ast;
 
 import org.antlr.runtime.Token;
-import org.python.antlr.AST;
-import org.python.antlr.PythonTree;
-import org.python.antlr.adapter.AstAdapters;
-import org.python.antlr.base.expr;
-import org.python.antlr.base.mod;
-import org.python.core.*;
-import org.python.expose.*;
+import org.apache.tajo.org.python.antlr.AST;
+import org.apache.tajo.org.python.antlr.PythonTree;
+import org.apache.tajo.org.python.antlr.adapter.AstAdapters;
+import org.apache.tajo.org.python.antlr.base.expr;
+import org.apache.tajo.org.python.antlr.base.mod;
+import org.apache.tajo.org.python.core.*;
+import org.apache.tajo.org.python.expose.*;
 
 @ExposedType(name = "_ast.Expression", base = AST.class)
 public class Expression extends mod {

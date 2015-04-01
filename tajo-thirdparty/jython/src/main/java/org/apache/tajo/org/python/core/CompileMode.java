@@ -1,5 +1,8 @@
 package org.apache.tajo.org.python.core;
 
+import org.apache.tajo.org.python.antlr.BaseParser;
+import org.apache.tajo.org.python.antlr.base.mod;
+
 public enum CompileMode {
     eval {
         @Override

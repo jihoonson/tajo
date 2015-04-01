@@ -4,7 +4,7 @@
  */
 package org.apache.tajo.org.python.core;
 
-import org.python.modules._systemrestart;
+import org.apache.tajo.org.python.modules._systemrestart;
 
 public abstract class PyBaseCode extends PyCode {
 

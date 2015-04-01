@@ -3,7 +3,7 @@
 
 package org.apache.tajo.org.python.core;
 
-import org.python.core.packagecache.PackageManager;
+import org.apache.tajo.org.python.core.packagecache.PackageManager;
 
 import java.util.StringTokenizer;
 

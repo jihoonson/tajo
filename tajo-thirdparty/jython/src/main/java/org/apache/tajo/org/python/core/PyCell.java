@@ -1,8 +1,8 @@
 /* Copyright (c) Jython Developers */
 package org.apache.tajo.org.python.core;
 
-import org.python.expose.ExposedGet;
-import org.python.expose.ExposedType;
+import org.apache.tajo.org.python.expose.ExposedGet;
+import org.apache.tajo.org.python.expose.ExposedType;
 
 /**
  * The Python cell type.

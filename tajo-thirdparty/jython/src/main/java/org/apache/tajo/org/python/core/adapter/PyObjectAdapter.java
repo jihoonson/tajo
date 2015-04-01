@@ -1,6 +1,6 @@
 package org.apache.tajo.org.python.core.adapter;
 
-import org.python.core.PyObject;
+import org.apache.tajo.org.python.core.PyObject;
 
 /**
  * PyObjectAdapters turn Java Objects into PyObjects.

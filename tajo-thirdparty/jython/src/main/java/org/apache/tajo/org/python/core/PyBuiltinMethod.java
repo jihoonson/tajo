@@ -1,6 +1,6 @@
 package org.apache.tajo.org.python.core;
 
-import org.python.expose.ExposeAsSuperclass;
+import org.apache.tajo.org.python.expose.ExposeAsSuperclass;
 
 public abstract class PyBuiltinMethod extends PyBuiltinCallable implements ExposeAsSuperclass,
         Cloneable {

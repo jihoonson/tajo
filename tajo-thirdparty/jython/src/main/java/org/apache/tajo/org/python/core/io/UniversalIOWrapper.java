@@ -1,10 +1,10 @@
 /* Copyright (c) 2007 Jython Developers */
 package org.apache.tajo.org.python.core.io;
 
-import org.python.core.Py;
-import org.python.core.PyObject;
-import org.python.core.PyString;
-import org.python.core.PyTuple;
+import org.apache.tajo.org.python.core.Py;
+import org.apache.tajo.org.python.core.PyObject;
+import org.apache.tajo.org.python.core.PyString;
+import org.apache.tajo.org.python.core.PyTuple;
 
 import java.nio.ByteBuffer;
 import java.util.EnumSet;
@@ -356,5 +356,4 @@ public class UniversalIOWrapper extends TextIOBase {
             this.value = value;
         }
     }
-}
 }

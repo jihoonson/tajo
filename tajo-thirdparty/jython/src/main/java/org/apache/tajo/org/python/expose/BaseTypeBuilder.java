@@ -1,6 +1,6 @@
 package org.apache.tajo.org.python.expose;
 
-import org.python.core.*;
+import org.apache.tajo.org.python.core.*;
 
 public class BaseTypeBuilder implements TypeBuilder {
 

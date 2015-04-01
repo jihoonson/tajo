@@ -6,7 +6,7 @@
 
 package org.apache.tajo.org.python.core;
 
-import org.python.Version;
+import org.apache.tajo.org.python.Version;
 
 import java.io.Serializable;
 import java.util.Set;

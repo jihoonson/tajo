@@ -13,11 +13,11 @@ public class BaseParser {
     protected final String filename;
     protected final String encoding;
     protected ErrorHandler errorHandler = new FailFastHandler();
-    
+
     public BaseParser(CharStream stream, String filename, String encoding) {
         this(stream, filename, encoding, false);
     }
-    
+
     @Deprecated
     public BaseParser(CharStream stream, String filename, String encoding, boolean partial) {
         this.charStream = stream;

@@ -1,9 +1,9 @@
 // Copyright (c) Corporation for National Research Initiatives
 package org.apache.tajo.org.python.core;
 
-import org.python.core.util.RelativeFile;
-import org.python.expose.ExposedGet;
-import org.python.expose.ExposedType;
+import org.apache.tajo.org.python.core.util.RelativeFile;
+import org.apache.tajo.org.python.expose.ExposedGet;
+import org.apache.tajo.org.python.expose.ExposedType;
 
 /**
  * A python traceback object.

@@ -1,15 +1,14 @@
 // Copyright (c) Corporation for National Research Initiatives
 package org.apache.tajo.org.python.core;
 
-import org.jruby.ext.posix.util.Platform;
-import org.python.Version;
-import org.python.core.adapter.ClassicPyObjectAdapter;
-import org.python.core.adapter.ExtensiblePyObjectAdapter;
-import org.python.core.packagecache.PackageManager;
-import org.python.core.packagecache.SysPackageManager;
-import org.python.modules.Setup;
-import org.python.modules.zipimport.zipimporter;
-import org.python.util.Generic;
+import org.apache.tajo.org.python.Version;
+import org.apache.tajo.org.python.core.adapter.ClassicPyObjectAdapter;
+import org.apache.tajo.org.python.core.adapter.ExtensiblePyObjectAdapter;
+import org.apache.tajo.org.python.core.packagecache.PackageManager;
+import org.apache.tajo.org.python.core.packagecache.SysPackageManager;
+import org.apache.tajo.org.python.modules.Setup;
+import org.apache.tajo.org.python.modules.zipimport.zipimporter;
+import org.apache.tajo.org.python.util.Generic;
 
 import java.io.*;
 import java.lang.ref.Reference;
@@ -499,8 +498,7 @@ public class PySystemState extends PyObject implements ClassDictInit {
         File file = new File(path);
         // Python considers r'\Jython25' and '/Jython25' abspaths on Windows, unlike
         // java.io.File
-        if (!file.isAbsolute() && (!Platform.IS_WINDOWS
-                                   || !(path.startsWith("\\") || path.startsWith("/")))) {
+        if (!file.isAbsolute()) {
             if (sys == null) {
                 sys = Py.getSystemState();
             }
@@ -1134,10 +1132,6 @@ public class PySystemState extends PyObject implements ClassDictInit {
                     if (jarIndex > 0) {
                         jarIndex += 4;
                         int start = VFSZIP_PREFIX.length();
-                        if (Platform.IS_WINDOWS) {
-                            // vfszip:/C:/some/path/jython.jar/org/python/core/PySystemState.class
-                            start++;
-                        }
                         jarFileName = urlString.substring(start, jarIndex);
                     }
                 } else if (urlString.startsWith(VFS_PREFIX)) {
@@ -1147,10 +1141,6 @@ public class PySystemState extends PyObject implements ClassDictInit {
                     if (jarIndex > 0) {
                         jarIndex += 4;
                         int start = VFS_PREFIX.length();
-                        if (Platform.IS_WINDOWS) {
-                            // vfs:/C:/some/path/jython.jar/org/python/core/PySystemState.class
-                            start++;
-                        }
                         jarFileName = urlString.substring(start, jarIndex);
                     }
                 }

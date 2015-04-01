@@ -3,7 +3,7 @@
 
 package org.apache.tajo.org.python.core.packagecache;
 
-import org.python.core.*;
+import org.apache.tajo.org.python.core.*;
 
 import java.io.EOFException;
 

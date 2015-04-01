@@ -1,6 +1,6 @@
 package org.apache.tajo.org.python.core;
 
-import org.python.core.adapter.ExtensiblePyObjectAdapter;
+import org.apache.tajo.org.python.core.adapter.ExtensiblePyObjectAdapter;
 
 import java.util.Properties;
 

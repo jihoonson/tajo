@@ -1,6 +1,6 @@
 package org.apache.tajo.org.python.core;
 
-import org.python.expose.ExposedType;
+import org.apache.tajo.org.python.expose.ExposedType;
 
 /**
  * base class for jython strings.

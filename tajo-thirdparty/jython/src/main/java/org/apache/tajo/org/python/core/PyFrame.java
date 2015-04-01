@@ -4,10 +4,10 @@
  */
 package org.apache.tajo.org.python.core;
 
-import org.python.expose.ExposedDelete;
-import org.python.expose.ExposedGet;
-import org.python.expose.ExposedSet;
-import org.python.expose.ExposedType;
+import org.apache.tajo.org.python.expose.ExposedDelete;
+import org.apache.tajo.org.python.expose.ExposedGet;
+import org.apache.tajo.org.python.expose.ExposedSet;
+import org.apache.tajo.org.python.expose.ExposedType;
 
 /**
  * A Python frame object.
