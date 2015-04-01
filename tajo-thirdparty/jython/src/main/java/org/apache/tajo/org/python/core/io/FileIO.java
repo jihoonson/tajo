@@ -3,10 +3,10 @@ package org.apache.tajo.org.python.core.io;
 
 import com.kenai.constantine.platform.Errno;
 import org.jruby.ext.posix.util.Platform;
-import org.python.core.Py;
-import org.python.core.PyString;
-import org.python.core.util.RelativeFile;
-import org.python.modules.posix.PosixModule;
+import org.apache.tajo.org.python.core.Py;
+import org.apache.tajo.org.python.core.PyString;
+import org.apache.tajo.org.python.core.util.RelativeFile;
+import org.apache.tajo.org.python.modules.posix.PosixModule;
 
 import java.io.*;
 import java.nio.ByteBuffer;

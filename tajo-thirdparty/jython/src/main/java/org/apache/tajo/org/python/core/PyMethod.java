@@ -1,7 +1,7 @@
 // Copyright (c) Corporation for National Research Initiatives
 package org.apache.tajo.org.python.core;
 
-import org.python.expose.*;
+import org.apache.tajo.org.python.expose.*;
 
 /**
  * A Python method.

@@ -7,7 +7,7 @@
  */
 package org.apache.tajo.org.python.core;
 
-import org.python.core.util.StringUtil;
+import org.apache.tajo.org.python.core.util.StringUtil;
 
 import java.nio.charset.Charset;
 import java.util.ArrayList;

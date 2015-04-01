@@ -1,7 +1,7 @@
 /* Generated file, do not modify.  See jython/src/templates/gderived.py. */
 package org.apache.tajo.org.python.antlr.op;
 
-import org.python.core.*;
+import org.apache.tajo.org.python.core.*;
 
 import java.io.Serializable;
 

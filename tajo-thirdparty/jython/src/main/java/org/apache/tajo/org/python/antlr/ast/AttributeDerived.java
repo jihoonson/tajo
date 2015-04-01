@@ -1,6 +1,8 @@
 /* Generated file, do not modify.  See jython/src/templates/gderived.py. */
 package org.apache.tajo.org.python.antlr.ast;
 
+import org.apache.tajo.org.python.core.*;
+
 import java.io.Serializable;
 
 public class AttributeDerived extends Attribute implements Slotted {
@@ -26,10 +28,10 @@ public class AttributeDerived extends Attribute implements Slotted {
     }
 
     public void setDict(PyObject newDict) {
-        if (newDict instanceof PyStringMap||newDict instanceof PyDictionary) {
+        if (newDict instanceof PyStringMap ||newDict instanceof PyDictionary) {
             dict=newDict;
         } else {
-            throw Py.TypeError("__dict__ must be set to a Dictionary "+newDict.getClass().getName());
+            throw Py.TypeError("__dict__ must be set to a Dictionary " + newDict.getClass().getName());
         }
     }
 

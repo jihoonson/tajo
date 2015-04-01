@@ -1,6 +1,8 @@
 /* Generated file, do not modify.  See jython/src/templates/gderived.py. */
 package org.apache.tajo.org.python.antlr.ast;
 
+import org.apache.tajo.org.python.core.*;
+
 import java.io.Serializable;
 
 public class BinOpDerived extends BinOp implements Slotted {

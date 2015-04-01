@@ -7,7 +7,7 @@ package org.apache.tajo.org.python.core;
 
 import org.apache.tajo.org.objectweb.asm.AnnotationVisitor;
 import org.apache.tajo.org.objectweb.asm.ClassReader;
-import org.apache.tajo.org.objectweb.asm.commons.EmptyVisitor;
+import org.apache.tajo.org.objectweb.asm.Opcodes;
 
 import java.io.IOException;
 
@@ -20,7 +20,7 @@ import java.io.IOException;
  * cost too much, we will want to implement a special purpose ClassReader that only reads out the
  * APIVersion annotation I think.
  */
-public class AnnotationReader extends EmptyVisitor {
+public class AnnotationReader extends AnnotationVisitor {
 
     private boolean nextVisitIsVersion = false;
     private boolean nextVisitIsMTime = false;
@@ -33,6 +33,7 @@ public class AnnotationReader extends EmptyVisitor {
      * @throws IOException - if the classfile is malformed.
      */
     public AnnotationReader(byte[] data) throws IOException {
+        super(Opcodes.ASM4);
         ClassReader r;
         try {
             r = new ClassReader(data);
