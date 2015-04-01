@@ -1,8 +1,9 @@
 package org.apache.tajo.org.python.expose.generate;
 
-import org.objectweb.asm.*;
-import org.python.expose.MethodType;
-import org.python.util.Generic;
+import org.apache.tajo.org.objectweb.asm.*;
+import org.apache.tajo.org.objectweb.asm.util.CheckMethodAdapter;
+import org.apache.tajo.org.python.expose.MethodType;
+import org.apache.tajo.org.python.util.Generic;
 
 import java.util.List;
 
@@ -11,7 +12,7 @@ import java.util.List;
  * annotation is visited, calls handleResult with the exposer constructed with that annotation. Only
  * one of the handleResult methods will be called, if any.
  */
-public abstract class ExposedMethodFinder extends MethodAdapter implements PyTypes, Opcodes {
+public abstract class ExposedMethodFinder extends CheckMethodAdapter implements PyTypes, Opcodes {
 
     private Exposer newExp;
 

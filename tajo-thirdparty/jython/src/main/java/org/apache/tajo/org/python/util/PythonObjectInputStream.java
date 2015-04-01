@@ -1,7 +1,7 @@
 // Copyright 2000 Finn Bock
 package org.apache.tajo.org.python.util;
 
-import org.python.core.*;
+import org.apache.tajo.org.python.core.*;
 
 import java.io.IOException;
 import java.io.InputStream;

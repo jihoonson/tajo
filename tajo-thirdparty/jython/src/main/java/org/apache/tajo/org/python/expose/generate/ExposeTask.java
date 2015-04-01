@@ -1,10 +1,9 @@
 package org.apache.tajo.org.python.expose.generate;
 
-import org.apache.tools.ant.BuildException;
-import org.objectweb.asm.ClassWriter;
-import org.python.core.Options;
-import org.python.core.Py;
-import org.python.util.GlobMatchingTask;
+import org.apache.tajo.org.objectweb.asm.ClassWriter;
+import org.apache.tajo.org.python.core.Options;
+import org.apache.tajo.org.python.core.Py;
+import org.apache.tajo.org.python.util.GlobMatchingTask;
 
 import java.io.File;
 import java.io.FileInputStream;

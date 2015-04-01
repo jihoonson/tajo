@@ -1,8 +1,8 @@
 package org.apache.tajo.org.python.expose.generate;
 
-import org.objectweb.asm.Label;
-import org.objectweb.asm.Type;
-import org.python.core.PyOverridableNew;
+import org.apache.tajo.org.objectweb.asm.Label;
+import org.apache.tajo.org.objectweb.asm.Type;
+import org.apache.tajo.org.python.core.PyOverridableNew;
 
 public class OverridableNewExposer extends Exposer {
 

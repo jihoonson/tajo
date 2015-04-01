@@ -1,6 +1,6 @@
 package org.apache.tajo.org.python.core;
 
-import org.python.antlr.ParseException;
+import org.apache.tajo.org.python.antlr.ParseException;
 
 public interface Pragma {
     void addTo(PragmaReceiver receiver);

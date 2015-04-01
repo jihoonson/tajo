@@ -6,7 +6,7 @@ package org.apache.tajo.org.python.core;
  * is stored as a PyFunctionTable instance and an integer index.
  */
 
-import org.python.modules._systemrestart;
+import org.apache.tajo.org.python.modules._systemrestart;
 
 public class PyTableCode extends PyBaseCode
 {

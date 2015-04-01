@@ -1,10 +1,10 @@
 package org.apache.tajo.org.python.core;
 
-import org.python.expose.ExposedMethod;
-import org.python.expose.ExposedNew;
-import org.python.expose.ExposedType;
-import org.python.expose.MethodType;
-import org.python.util.Generic;
+import org.apache.tajo.org.python.expose.ExposedMethod;
+import org.apache.tajo.org.python.expose.ExposedNew;
+import org.apache.tajo.org.python.expose.ExposedType;
+import org.apache.tajo.org.python.expose.MethodType;
+import org.apache.tajo.org.python.util.Generic;
 
 import java.util.Iterator;
 import java.util.NoSuchElementException;

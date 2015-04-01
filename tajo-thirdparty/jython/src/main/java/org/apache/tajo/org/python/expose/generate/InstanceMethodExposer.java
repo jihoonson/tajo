@@ -1,11 +1,11 @@
 package org.apache.tajo.org.python.expose.generate;
 
-import org.objectweb.asm.Label;
-import org.objectweb.asm.Type;
-import org.python.core.PyBuiltinMethod;
-import org.python.core.PyBuiltinMethodNarrow;
-import org.python.expose.ExposedMethod;
-import org.python.expose.MethodType;
+import org.apache.tajo.org.objectweb.asm.Label;
+import org.apache.tajo.org.objectweb.asm.Type;
+import org.apache.tajo.org.python.core.PyBuiltinMethod;
+import org.apache.tajo.org.python.core.PyBuiltinMethodNarrow;
+import org.apache.tajo.org.python.expose.ExposedMethod;
+import org.apache.tajo.org.python.expose.MethodType;
 
 /**
  * Generates a class to call a given method with the {@link ExposedMethod} annotation as a method on

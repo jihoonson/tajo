@@ -1,8 +1,8 @@
 package org.apache.tajo.org.python.expose.generate;
 
-import org.objectweb.asm.Opcodes;
-import org.objectweb.asm.Type;
-import org.python.core.PyNewWrapper;
+import org.apache.tajo.org.objectweb.asm.Opcodes;
+import org.apache.tajo.org.objectweb.asm.Type;
+import org.apache.tajo.org.python.core.PyNewWrapper;
 
 public class NewExposer extends Exposer {
 
