@@ -26,7 +26,17 @@ import org.apache.tajo.datum.Datum;
 import org.apache.tajo.datum.DatumFactory;
 import org.apache.tajo.exception.UnsupportedException;
 import org.apache.tajo.storage.Tuple;
-import org.python.core.*;
+import org.python.core.Py;
+import org.python.core.PyObject;
+import org.python.core.PyTuple;
+import org.python.core.PyLong;
+import org.python.core.PyBoolean;
+import org.python.core.PyInteger;
+import org.python.core.PyFloat;
+import org.python.core.PyString;
+import org.python.core.PyNone;
+import org.python.core.PyList;
+import org.python.core.PyDictionary;
 
 public class JythonUtils {
 

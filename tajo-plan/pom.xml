@@ -185,10 +185,14 @@
       <artifactId>mockito-core</artifactId>
       <scope>test</scope>
     </dependency>
+    <!--<dependency>-->
+      <!--<groupId>org.python</groupId>-->
+      <!--<artifactId>jython-standalone</artifactId>-->
+      <!--<version>2.5.3</version>-->
+    <!--</dependency>-->
     <dependency>
-      <groupId>org.python</groupId>
-      <artifactId>jython-standalone</artifactId>
-      <version>2.5.3</version>
+      <groupId>org.apache.tajo</groupId>
+      <artifactId>tajo-thirdparty-jython</artifactId>
     </dependency>
   </dependencies>
 

@@ -22,8 +22,8 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 
@@ -37,9 +37,19 @@ import org.apache.tajo.function.FunctionInvocation;
 import org.apache.tajo.function.FunctionSignature;
 import org.apache.tajo.function.FunctionSupplement;
 import org.apache.tajo.function.PythonInvocationDesc;
+import org.apache.tajo.org.python.core.Py;
+import org.apache.tajo.org.python.core.PyBaseCode;
+import org.apache.tajo.org.python.core.PyException;
+import org.apache.tajo.org.python.core.PyInteger;
+import org.apache.tajo.org.python.core.PyFunction;
+import org.apache.tajo.org.python.core.PyFrame;
+import org.apache.tajo.org.python.core.PyObject;
+import org.apache.tajo.org.python.core.PyString;
+import org.apache.tajo.org.python.core.PyStringMap;
+import org.apache.tajo.org.python.core.PySystemState;
+import org.apache.tajo.org.python.core.PyTuple;
+import org.apache.tajo.org.python.util.PythonInterpreter;
 import org.apache.tajo.util.TUtil;
-import org.python.core.*;
-import org.python.util.PythonInterpreter;
 
 /**
  * Implementation of the script engine for Jython

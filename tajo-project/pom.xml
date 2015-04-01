@@ -820,6 +820,12 @@
         <version>${tajo.version}</version>
         <type>jar</type>
       </dependency>
+      <dependency>
+        <groupId>org.apache.tajo</groupId>
+        <artifactId>tajo-thirdparty-jython</artifactId>
+        <version>${tajo.version}</version>
+        <type>jar</type>
+      </dependency>
 
       <dependency>
         <groupId>org.apache.hadoop</groupId>
