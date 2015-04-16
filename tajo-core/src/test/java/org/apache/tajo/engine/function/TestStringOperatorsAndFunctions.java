@@ -300,12 +300,12 @@ public class TestStringOperatorsAndFunctions extends ExprTestBase {
     testSimpleEval("select digest('tajo', 'md2') as col1 ", new String[]{"bf523bce8241982f6bea9af0f7fd37ff"});
     testSimpleEval("select digest('tajo', 'md5') as col1 ", new String[]{"742721b3a79f71a9491681b8e8a7ce85"});
     testSimpleEval("select digest('tajo', 'sha1') as col1 ", new String[]{"02b0e20540b89f0b735092bbac8093eb2e3804cf"});
-    testSimpleEval("select digest('tajo', 'sha256') as col1 ", 
-      new String[]{"6440083be076869a9f9d0271a4bf298d98c8aa3ecb49df841895fbcddbb04a70"});
-    testSimpleEval("select digest('tajo', 'sha384') as col1 ", 
-      new String[]{"59ff99b0e274eb3d8e10f221b6b949bfc1244d2a1226c5c720062fb03d82272be633e4a0f2babccffbfdff7cc1cb06fb"});
-    testSimpleEval("select digest('tajo', 'sha512') as col1 ", 
-      new String[]{"ee8ba254d331ddfb1bca9aaf0c4b8c58aea5331928cbd20168c87828afb853b0c096af71ec69a23b669217a1dddd2934edaac33b1296fe526b22abd28a15c4b3"});
+    testSimpleEval("select digest('tajo', 'sha256') as col1 ",
+        new String[]{"6440083be076869a9f9d0271a4bf298d98c8aa3ecb49df841895fbcddbb04a70"});
+    testSimpleEval("select digest('tajo', 'sha384') as col1 ",
+        new String[]{"59ff99b0e274eb3d8e10f221b6b949bfc1244d2a1226c5c720062fb03d82272be633e4a0f2babccffbfdff7cc1cb06fb"});
+    testSimpleEval("select digest('tajo', 'sha512') as col1 ",
+        new String[]{"ee8ba254d331ddfb1bca9aaf0c4b8c58aea5331928cbd20168c87828afb853b0c096af71ec69a23b669217a1dddd2934edaac33b1296fe526b22abd28a15c4b3"});
     testSimpleEval("select digest('tajo', 'not') as col1 ", new String[]{""});
   }
 
@@ -503,9 +503,9 @@ public class TestStringOperatorsAndFunctions extends ExprTestBase {
     Schema schema = new Schema();
     schema.addColumn("col1", TEXT);
     testEval(schema, "table1", "abc", "select ascii(col1) from table1",
-            new String[]{"97"});
+        new String[]{"97"});
     testEval(schema, "table1", "12", "select ascii(col1) from table1",
-            new String[]{"49"});
+        new String[]{"49"});
 
   }
 
@@ -612,5 +612,17 @@ public class TestStringOperatorsAndFunctions extends ExprTestBase {
     testSimpleEval("select concat_ws(',', '22', null) ", new String[]{"22"});
     testSimpleEval("select concat_ws(',', '22', '33', '33') ", new String[]{"22,33,33"});
     testSimpleEval("select concat_ws(',', null, '22') ", new String[]{"22"});
+  }
+
+  @Test
+  public void testHasHangul() throws IOException {
+    testSimpleEval("select has_hangul('테스트')", new String[]{"t"});
+    testSimpleEval("select has_hangul('test')", new String[]{"f"});
+    testSimpleEval("select has_hangul('테스트test')", new String[]{"t"});
+    testSimpleEval("select has_hangul('test   테스트')", new String[]{"t"});
+    testSimpleEval("select has_hangul('test\t테스트\ttest')", new String[]{"t"});
+    testSimpleEval("select has_hangul('테스트\n\n\ntest\n\n\n테스트')", new String[]{"t"});
+    testSimpleEval("select has_hangul('test\n\n\n테스트\n\t\n\ntest')", new String[]{"t"});
+    testSimpleEval("select has_hangul('test\n\n\n\t\t\t\t\n\n\f\rhangul')", new String[]{"f"});
   }
 }
