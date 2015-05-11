@@ -836,4 +836,32 @@ public class TestInsertQuery extends QueryTestCaseBase {
       executeString("drop table nation_diff purge;");
     }
   }
+
+	@Test
+	public final void testTableDescOptionCreationOrder() throws Exception {
+		if (!testingCluster.isHiveCatalogStoreRunning()) {
+			String tableName = "test_sequencefile";
+			executeString("create table " + tableName + " (col1 int) using sequencefile");
+
+			CatalogService catalog = testingCluster.getMaster().getCatalog();
+			assertTrue(catalog.existsTable(getCurrentDatabase(), tableName));
+
+			executeString(
+				"insert into " + tableName + " select 1");
+
+			TableDesc desc = catalog.getTableDesc(getCurrentDatabase(), tableName);
+			if (!testingCluster.isHiveCatalogStoreRunning()) {
+				assertEquals(1, desc.getStats().getNumRows().intValue());
+			}
+
+			ResultSet res = executeString("select * from " + tableName);
+			String expected = "col1\n" +
+				"-------------------------------\n" +
+				"1\n";
+
+			assertEquals(expected, resultSetToString(res));
+
+			executeString("DROP TABLE " + tableName + " PURGE");
+		}
+	}
 }
