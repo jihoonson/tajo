@@ -256,7 +256,8 @@ public class QueryTestCaseBase {
 
   private void init() {
     String className = getClass().getSimpleName();
-    currentQueryPath = new Path(queryBasePath, className);
+    NamedTest testName = getClass().getAnnotation(NamedTest.class);
+    currentQueryPath = new Path(queryBasePath, testName == null ? className : testName.value());
     currentResultPath = new Path(resultBasePath, className);
     currentDatasetPath = new Path(datasetBasePath, className);
 
@@ -354,7 +355,7 @@ public class QueryTestCaseBase {
 
   @Target({ElementType.METHOD})
   @Retention(RetentionPolicy.RUNTIME)
-  protected static @interface SimpleTest {
+  protected @interface SimpleTest {
     String[] prepare() default {};
     QuerySpec[] queries() default {};
     String[] cleanup() default {};
@@ -362,7 +363,7 @@ public class QueryTestCaseBase {
 
   @Target({ElementType.METHOD})
   @Retention(RetentionPolicy.RUNTIME)
-  protected static @interface QuerySpec {
+  protected @interface QuerySpec {
     String value();
     boolean override() default false;
     Option option() default @Option;
@@ -370,7 +371,7 @@ public class QueryTestCaseBase {
 
   @Target({ElementType.METHOD})
   @Retention(RetentionPolicy.RUNTIME)
-  protected static @interface Option {
+  protected @interface Option {
     boolean withExplain() default false;
     boolean withExplainGlobal() default false;
     boolean parameterized() default false;

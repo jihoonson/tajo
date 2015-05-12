@@ -18,14 +18,18 @@
 
 package org.apache.tajo.engine.query;
 
-import org.apache.tajo.IntegrationTest;
-import org.apache.tajo.QueryTestCaseBase;
-import org.apache.tajo.TajoConstants;
-import org.apache.tajo.TajoTestingCluster;
-import org.apache.tajo.catalog.Schema;
+import org.apache.hadoop.fs.FileStatus;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
+import org.apache.tajo.*;
+import org.apache.tajo.catalog.*;
 import org.apache.tajo.common.TajoDataTypes.Type;
 import org.apache.tajo.conf.TajoConf.ConfVars;
-import org.apache.tajo.storage.StorageConstants;
+import org.apache.tajo.datum.Datum;
+import org.apache.tajo.datum.Int4Datum;
+import org.apache.tajo.datum.TextDatum;
+import org.apache.tajo.storage.*;
+import org.apache.tajo.util.FileUtil;
 import org.apache.tajo.util.KeyValueSet;
 import org.junit.AfterClass;
 import org.junit.Test;
@@ -34,16 +38,22 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
+import java.io.File;
+import java.io.OutputStream;
 import java.sql.ResultSet;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 
+import static org.apache.tajo.TajoConstants.DEFAULT_DATABASE_NAME;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 
 @Category(IntegrationTest.class)
 @RunWith(Parameterized.class)
+@NamedTest("TestJoinQuery")
 public class TestJoinQuery extends QueryTestCaseBase {
 
   public TestJoinQuery(String joinOption) {
@@ -114,133 +124,133 @@ public class TestJoinQuery extends QueryTestCaseBase {
     @QuerySpec("select * from customer, region"),
     @QuerySpec("select length(r_comment) as len, *, c_custkey*10 from customer, region order by len,r_regionkey,r_name")
   })
-  public final void testCrossJoin() throws Exception {
+  public void testCrossJoin() throws Exception {
     runSimpleTests();
   }
 
   @Test
   @Option(withExplain = true, withExplainGlobal = true, parameterized = true)
   @SimpleTest()
-  public final void testCrossJoinWithThetaJoinConditionInWhere() throws Exception {
+  public void testCrossJoinWithThetaJoinConditionInWhere() throws Exception {
     runSimpleTests();
   }
 
   @Test
   @Option(withExplain = true, withExplainGlobal = true, parameterized = true)
   @SimpleTest()
-  public final void testInnerJoinWithThetaJoinConditionInWhere() throws Exception {
+  public void testInnerJoinWithThetaJoinConditionInWhere() throws Exception {
     runSimpleTests();
   }
 
   @Test
   @Option(withExplain = true, withExplainGlobal = true, parameterized = true)
   @SimpleTest()
-  public final void testLeftOuterJoinWithThetaJoinConditionInWhere() throws Exception {
+  public void testLeftOuterJoinWithThetaJoinConditionInWhere() throws Exception {
     runSimpleTests();
   }
 
   @Test
   @Option(withExplain = true, withExplainGlobal = true, parameterized = true)
   @SimpleTest()
-  public final void testRightOuterJoinWithThetaJoinConditionInWhere() throws Exception {
+  public void testRightOuterJoinWithThetaJoinConditionInWhere() throws Exception {
     runSimpleTests();
   }
 
   @Test
   @Option(withExplain = true, withExplainGlobal = true, parameterized = true)
   @SimpleTest()
-  public final void testWhereClauseJoin1() throws Exception {
+  public void testWhereClauseJoin1() throws Exception {
     runSimpleTests();
   }
 
   @Test
   @Option(withExplain = true, withExplainGlobal = true, parameterized = true)
   @SimpleTest()
-  public final void testWhereClauseJoin2() throws Exception {
+  public void testWhereClauseJoin2() throws Exception {
     runSimpleTests();
   }
 
   @Test
   @Option(withExplain = true, withExplainGlobal = true, parameterized = true)
   @SimpleTest()
-  public final void testWhereClauseJoin3() throws Exception {
+  public void testWhereClauseJoin3() throws Exception {
     runSimpleTests();
   }
 
   @Test
   @Option(withExplain = true, withExplainGlobal = true, parameterized = true)
   @SimpleTest()
-  public final void testWhereClauseJoin4() throws Exception {
+  public void testWhereClauseJoin4() throws Exception {
     runSimpleTests();
   }
 
   @Test
   @Option(withExplain = true, withExplainGlobal = true, parameterized = true)
   @SimpleTest()
-  public final void testWhereClauseJoin5() throws Exception {
+  public void testWhereClauseJoin5() throws Exception {
     runSimpleTests();
   }
 
   @Test
   @Option(withExplain = true, withExplainGlobal = true, parameterized = true)
   @SimpleTest()
-  public final void testWhereClauseJoin6() throws Exception {
+  public void testWhereClauseJoin6() throws Exception {
     runSimpleTests();
   }
 
   @Test
   @Option(withExplain = true, withExplainGlobal = true, parameterized = true)
   @SimpleTest()
-  public final void testTPCHQ2Join() throws Exception {
+  public void testTPCHQ2Join() throws Exception {
     runSimpleTests();
   }
 
   @Test
   @Option(withExplain = true, withExplainGlobal = true, parameterized = true)
   @SimpleTest()
-  public final void testJoinWithMultipleJoinQual1() throws Exception {
+  public void testJoinWithMultipleJoinQual1() throws Exception {
     runSimpleTests();
   }
 
   @Test
   @Option(withExplain = true, withExplainGlobal = true, parameterized = true)
   @SimpleTest()
-  public final void testJoinWithMultipleJoinQual2() throws Exception {
+  public void testJoinWithMultipleJoinQual2() throws Exception {
     runSimpleTests();
   }
 
   @Test
   @Option(withExplain = true, withExplainGlobal = true, parameterized = true)
   @SimpleTest()
-  public final void testJoinWithMultipleJoinQual3() throws Exception {
+  public void testJoinWithMultipleJoinQual3() throws Exception {
     runSimpleTests();
   }
 
   @Test
   @Option(withExplain = true, withExplainGlobal = true, parameterized = true)
   @SimpleTest()
-  public final void testJoinWithMultipleJoinQual4() throws Exception {
+  public void testJoinWithMultipleJoinQual4() throws Exception {
     runSimpleTests();
   }
 
   @Test
   @Option(withExplain = true, withExplainGlobal = true, parameterized = true)
   @SimpleTest()
-  public final void testJoinWithMultipleJoinTypes() throws Exception {
+  public void testJoinWithMultipleJoinTypes() throws Exception {
     runSimpleTests();
   }
 
   @Test
   @Option(withExplain = true, withExplainGlobal = true, parameterized = true)
   @SimpleTest()
-  public final void testLeftOuterJoin1() throws Exception {
+  public void testLeftOuterJoin1() throws Exception {
     runSimpleTests();
   }
 
   @Test
   @Option(withExplain = true, withExplainGlobal = true, parameterized = true)
   @SimpleTest()
-  public final void testLeftOuterJoinWithConstantExpr1() throws Exception {
+  public void testLeftOuterJoinWithConstantExpr1() throws Exception {
     // outer join with constant projections
     //
     // select c_custkey, orders.o_orderkey, 'val' as val from customer
@@ -251,7 +261,7 @@ public class TestJoinQuery extends QueryTestCaseBase {
   @Test
   @Option(withExplain = true, withExplainGlobal = true, parameterized = true)
   @SimpleTest()
-  public final void testLeftOuterJoinWithConstantExpr2() throws Exception {
+  public void testLeftOuterJoinWithConstantExpr2() throws Exception {
     // outer join with constant projections
     //
     // select c_custkey, o.o_orderkey, 'val' as val from customer left outer join
@@ -262,7 +272,7 @@ public class TestJoinQuery extends QueryTestCaseBase {
   @Test
   @Option(withExplain = true, withExplainGlobal = true, parameterized = true)
   @SimpleTest()
-  public final void testLeftOuterJoinWithConstantExpr3() throws Exception {
+  public void testLeftOuterJoinWithConstantExpr3() throws Exception {
     // outer join with constant projections
     //
     // select a.c_custkey, 123::INT8 as const_val, b.min_name from customer a
@@ -274,7 +284,7 @@ public class TestJoinQuery extends QueryTestCaseBase {
   @Test
   @Option(withExplain = true, withExplainGlobal = true, parameterized = true)
   @SimpleTest()
-  public final void testLeftOuterJoinWithConstantExpr4() throws Exception {
+  public void testLeftOuterJoinWithConstantExpr4() throws Exception {
     // outer join with constant projections
     //
     // select
@@ -288,7 +298,7 @@ public class TestJoinQuery extends QueryTestCaseBase {
   @Test
   @Option(withExplain = true, withExplainGlobal = true, parameterized = true)
   @SimpleTest()
-  public final void testLeftOuterJoinWithConstantExpr5() throws Exception {
+  public void testLeftOuterJoinWithConstantExpr5() throws Exception {
     // outer join with constant projections
     //
     // select
@@ -302,14 +312,14 @@ public class TestJoinQuery extends QueryTestCaseBase {
   @Test
   @Option(withExplain = true, withExplainGlobal = true, parameterized = true)
   @SimpleTest()
-  public final void testRightOuterJoin1() throws Exception {
+  public void testRightOuterJoin1() throws Exception {
     runSimpleTests();
   }
 
   @Test
   @Option(withExplain = true, withExplainGlobal = true, parameterized = true)
   @SimpleTest()
-  public final void testFullOuterJoin1() throws Exception {
+  public void testFullOuterJoin1() throws Exception {
     runSimpleTests();
   }
 
@@ -373,14 +383,14 @@ public class TestJoinQuery extends QueryTestCaseBase {
   @Test
   @Option(withExplain = true, withExplainGlobal = true, parameterized = true)
   @SimpleTest()
-  public final void testInnerJoinWithEmptyTable() throws Exception {
+  public void testInnerJoinWithEmptyTable() throws Exception {
     runSimpleTests();
   }
 
   @Test
   @Option(withExplain = true, withExplainGlobal = true, parameterized = true)
   @SimpleTest()
-  public final void testLeftOuterJoinWithEmptyTable1() throws Exception {
+  public void testLeftOuterJoinWithEmptyTable1() throws Exception {
     /*
     select
       c_custkey,
@@ -399,40 +409,40 @@ public class TestJoinQuery extends QueryTestCaseBase {
   @Test
   @Option(withExplain = true, withExplainGlobal = true, parameterized = true)
   @SimpleTest()
-  public final void testLeftOuterJoinWithEmptyTable2() throws Exception {
+  public void testLeftOuterJoinWithEmptyTable2() throws Exception {
     runSimpleTests();
   }
 
   @Test
   @Option(withExplain = true, withExplainGlobal = true, parameterized = true)
   @SimpleTest()
-  public final void testLeftOuterJoinWithEmptyTable3() throws Exception {
+  public void testLeftOuterJoinWithEmptyTable3() throws Exception {
     runSimpleTests();
   }
 
   @Test
   @Option(withExplain = true, withExplainGlobal = true, parameterized = true)
   @SimpleTest()
-  public final void testLeftOuterJoinWithEmptyTable4() throws Exception {
+  public void testLeftOuterJoinWithEmptyTable4() throws Exception {
     runSimpleTests();
   }
 
   @Test
   @Option(withExplain = true, withExplainGlobal = true, parameterized = true)
   @SimpleTest()
-  public final void testLeftOuterJoinWithEmptyTable5() throws Exception {
+  public void testLeftOuterJoinWithEmptyTable5() throws Exception {
     runSimpleTests();
   }
 
   @Test
   @Option(withExplain = true, withExplainGlobal = true, parameterized = true)
   @SimpleTest()
-  public final void testRightOuterJoinWithEmptyTable1() throws Exception {
+  public void testRightOuterJoinWithEmptyTable1() throws Exception {
     runSimpleTests();
   }
 
   @Test
-  public final void testLeftOuterJoinWithEmptySubquery1() throws Exception {
+  public void testLeftOuterJoinWithEmptySubquery1() throws Exception {
     // Empty Null Supplying table
     KeyValueSet tableOptions = new KeyValueSet();
     tableOptions.set(StorageConstants.TEXT_DELIMITER, StorageConstants.DEFAULT_FIELD_DELIMITER);
@@ -474,7 +484,7 @@ public class TestJoinQuery extends QueryTestCaseBase {
   }
 
   @Test
-  public final void testLeftOuterJoinWithEmptySubquery2() throws Exception {
+  public void testLeftOuterJoinWithEmptySubquery2() throws Exception {
     //Empty Preserved Row table
     KeyValueSet tableOptions = new KeyValueSet();
     tableOptions.set(StorageConstants.TEXT_DELIMITER, StorageConstants.DEFAULT_FIELD_DELIMITER);
@@ -514,19 +524,19 @@ public class TestJoinQuery extends QueryTestCaseBase {
   @Test
   @Option(withExplain = true, withExplainGlobal = true, parameterized = true)
   @SimpleTest()
-  public final void testFullOuterJoinWithEmptyTable1() throws Exception {
+  public void testFullOuterJoinWithEmptyTable1() throws Exception {
     runSimpleTests();
   }
 
   @Test
   @Option(withExplain = true, withExplainGlobal = true, parameterized = true)
   @SimpleTest()
-  public final void testCrossJoinWithEmptyTable1() throws Exception {
+  public void testCrossJoinWithEmptyTable1() throws Exception {
     runSimpleTests();
   }
 
   @Test
-  public final void testJoinOnMultipleDatabases() throws Exception {
+  public void testJoinOnMultipleDatabases() throws Exception {
     executeString("CREATE DATABASE JOINS");
     assertDatabaseExists("joins");
     executeString("CREATE TABLE JOINS.part_ as SELECT * FROM part");
@@ -545,7 +555,7 @@ public class TestJoinQuery extends QueryTestCaseBase {
   @Test
   @Option(withExplain = true, withExplainGlobal = true, parameterized = true)
   @SimpleTest()
-  public final void testJoinWithJson() throws Exception {
+  public void testJoinWithJson() throws Exception {
     // select length(r_comment) as len, *, c_custkey*10 from customer, region order by len,r_regionkey,r_name
     ResultSet res = executeJsonQuery();
     assertResultSet(res);
@@ -555,7 +565,7 @@ public class TestJoinQuery extends QueryTestCaseBase {
   @Test
   @Option(withExplain = true, withExplainGlobal = true, parameterized = true)
   @SimpleTest()
-  public final void testJoinWithJson2() throws Exception {
+  public void testJoinWithJson2() throws Exception {
     /*
     select t.n_nationkey, t.n_name, t.n_regionkey, t.n_comment, ps.ps_availqty, s.s_suppkey
     from (
@@ -573,7 +583,7 @@ public class TestJoinQuery extends QueryTestCaseBase {
   }
 
   @Test
-  public final void testJoinOnMultipleDatabasesWithJson() throws Exception {
+  public void testJoinOnMultipleDatabasesWithJson() throws Exception {
     executeString("CREATE DATABASE JOINS");
     assertDatabaseExists("joins");
     executeString("CREATE TABLE JOINS.part_ as SELECT * FROM part");
@@ -592,33 +602,33 @@ public class TestJoinQuery extends QueryTestCaseBase {
   @Test
   @Option(withExplain = true, withExplainGlobal = true, parameterized = true)
   @SimpleTest()
-  public final void testJoinAsterisk() throws Exception {
+  public void testJoinAsterisk() throws Exception {
     runSimpleTests();
   }
 
   @Test
   @Option(withExplain = true, withExplainGlobal = true, parameterized = true)
   @SimpleTest()
-  public final void testLeftOuterJoinWithNull1() throws Exception {
+  public void testLeftOuterJoinWithNull1() throws Exception {
     runSimpleTests();
   }
 
   @Test
   @Option(withExplain = true, withExplainGlobal = true, parameterized = true)
   @SimpleTest()
-  public final void testLeftOuterJoinWithNull2() throws Exception {
+  public void testLeftOuterJoinWithNull2() throws Exception {
     runSimpleTests();
   }
 
   @Test
   @Option(withExplain = true, withExplainGlobal = true, parameterized = true)
   @SimpleTest()
-  public final void testLeftOuterJoinWithNull3() throws Exception {
+  public void testLeftOuterJoinWithNull3() throws Exception {
     runSimpleTests();
   }
 
   @Test
-  public final void testLeftOuterJoinPredicationCaseByCase1() throws Exception {
+  public void testLeftOuterJoinPredicationCaseByCase1() throws Exception {
     createOuterJoinTestTable();
     try {
       ResultSet res = executeString(
@@ -645,7 +655,7 @@ public class TestJoinQuery extends QueryTestCaseBase {
   }
 
   @Test
-  public final void testLeftOuterJoinPredicationCaseByCase2() throws Exception {
+  public void testLeftOuterJoinPredicationCaseByCase2() throws Exception {
     // outer -> outer -> inner
     createOuterJoinTestTable();
     try {
@@ -674,7 +684,7 @@ public class TestJoinQuery extends QueryTestCaseBase {
   }
 
   @Test
-  public final void testLeftOuterJoinPredicationCaseByCase2_1() throws Exception {
+  public void testLeftOuterJoinPredicationCaseByCase2_1() throws Exception {
     // inner(on predication) -> outer(on predication) -> outer -> where
     createOuterJoinTestTable();
     try {
@@ -705,7 +715,7 @@ public class TestJoinQuery extends QueryTestCaseBase {
   }
 
   @Test
-  public final void testLeftOuterJoinPredicationCaseByCase3() throws Exception {
+  public void testLeftOuterJoinPredicationCaseByCase3() throws Exception {
     // https://cwiki.apache.org/confluence/display/Hive/OuterJoinBehavior
     // Case J1: Join Predicate on Preserved Row Table
     createOuterJoinTestTable();
@@ -735,7 +745,7 @@ public class TestJoinQuery extends QueryTestCaseBase {
   }
 
   @Test
-  public final void testLeftOuterJoinPredicationCaseByCase4() throws Exception {
+  public void testLeftOuterJoinPredicationCaseByCase4() throws Exception {
     // https://cwiki.apache.org/confluence/display/Hive/OuterJoinBehavior
     // Case J2: Join Predicate on Null Supplying Table
     createOuterJoinTestTable();
@@ -765,7 +775,7 @@ public class TestJoinQuery extends QueryTestCaseBase {
   }
 
   @Test
-  public final void testLeftOuterJoinPredicationCaseByCase5() throws Exception {
+  public void testLeftOuterJoinPredicationCaseByCase5() throws Exception {
     // https://cwiki.apache.org/confluence/display/Hive/OuterJoinBehavior
     // Case W1: Where Predicate on Preserved Row Table
     createOuterJoinTestTable();
@@ -795,7 +805,7 @@ public class TestJoinQuery extends QueryTestCaseBase {
   }
 
   @Test
-  public final void testLeftOuterJoinPredicationCaseByCase6() throws Exception {
+  public void testLeftOuterJoinPredicationCaseByCase6() throws Exception {
     // https://cwiki.apache.org/confluence/display/Hive/OuterJoinBehavior
     // Case W2: Where Predicate on Null Supplying Table
     createOuterJoinTestTable();
@@ -824,7 +834,7 @@ public class TestJoinQuery extends QueryTestCaseBase {
   }
 
   @Test
-  public final void testLeftOuterWithEmptyTable() throws Exception {
+  public void testLeftOuterWithEmptyTable() throws Exception {
     // https://cwiki.apache.org/confluence/display/Hive/OuterJoinBehavior
     // Case W2: Where Predicate on Null Supplying Table
     createOuterJoinTestTable();
@@ -852,7 +862,7 @@ public class TestJoinQuery extends QueryTestCaseBase {
   }
 
   @Test
-  public final void testRightOuterJoinPredicationCaseByCase1() throws Exception {
+  public void testRightOuterJoinPredicationCaseByCase1() throws Exception {
     createOuterJoinTestTable();
     try {
       ResultSet res = executeString(
@@ -879,7 +889,7 @@ public class TestJoinQuery extends QueryTestCaseBase {
   }
 
   @Test
-  public final void testRightOuterJoinPredicationCaseByCase2() throws Exception {
+  public void testRightOuterJoinPredicationCaseByCase2() throws Exception {
     // inner -> right
     // Notice: Join order should be preserved with origin order.
     // JoinEdge: t1 -> t4, t3 -> t1,t4
@@ -910,7 +920,7 @@ public class TestJoinQuery extends QueryTestCaseBase {
   }
 
   @Test
-  public final void testRightOuterJoinPredicationCaseByCase3() throws Exception {
+  public void testRightOuterJoinPredicationCaseByCase3() throws Exception {
     createOuterJoinTestTable();
     try {
       ResultSet res = executeString(
@@ -937,7 +947,7 @@ public class TestJoinQuery extends QueryTestCaseBase {
   }
 
   @Test
-  public final void testFullOuterJoinPredicationCaseByCase1() throws Exception {
+  public void testFullOuterJoinPredicationCaseByCase1() throws Exception {
     createOuterJoinTestTable();
 
     try {
@@ -1150,7 +1160,7 @@ public class TestJoinQuery extends QueryTestCaseBase {
   @Test
   @Option(withExplain = true, withExplainGlobal = true, parameterized = true)
   @SimpleTest()
-  public final void testJoinFilterOfRowPreservedTable1() throws Exception {
+  public void testJoinFilterOfRowPreservedTable1() throws Exception {
     // this test is for join filter of a row preserved table.
     runSimpleTests();
   }
@@ -1158,14 +1168,539 @@ public class TestJoinQuery extends QueryTestCaseBase {
   @Test
   @Option(withExplain = true, withExplainGlobal = true, parameterized = true)
   @SimpleTest()
-  public final void testJoinWithOrPredicates() throws Exception {
+  public void testJoinWithOrPredicates() throws Exception {
     runSimpleTests();
   }
 
   @Test
   @Option(withExplain = true, withExplainGlobal = true, parameterized = true)
   @SimpleTest()
-  public final void testNaturalJoin() throws Exception {
+  public void testNaturalJoin() throws Exception {
     runSimpleTests();
+  }
+
+  @Test
+  @Option(withExplain = true, withExplainGlobal = true, parameterized = true)
+  @SimpleTest()
+  public void testLeftOuterJoin2() throws Exception {
+    // large, large, small, small
+    runSimpleTests();
+  }
+
+  @Test
+  @Option(withExplain = true, withExplainGlobal = true, parameterized = true)
+  @SimpleTest()
+  public void testLeftOuterJoin3() throws Exception {
+    // large, large, small, large, small, small
+    runSimpleTests();
+  }
+
+  @Test
+  @Option(withExplain = true, withExplainGlobal = true, parameterized = true)
+  @SimpleTest()
+  public void testCrossJoinAndCaseWhen() throws Exception {
+    runSimpleTests();
+  }
+
+  @Test
+  @Option(withExplain = true, withExplainGlobal = true, parameterized = true)
+  @SimpleTest()
+  public void testCrossJoinWithAsterisk1() throws Exception {
+    // select region.*, customer.* from region, customer;
+    runSimpleTests();
+  }
+
+  @Test
+  @Option(withExplain = true, withExplainGlobal = true, parameterized = true)
+  @SimpleTest()
+  public void testCrossJoinWithAsterisk2() throws Exception {
+    // select region.*, customer.* from customer, region;
+    runSimpleTests();
+  }
+
+  @Test
+  @Option(withExplain = true, withExplainGlobal = true, parameterized = true)
+  @SimpleTest()
+  public void testCrossJoinWithAsterisk3() throws Exception {
+    // select * from customer, region
+    runSimpleTests();
+  }
+
+  @Test
+  @Option(withExplain = true, withExplainGlobal = true, parameterized = true)
+  @SimpleTest()
+  public void testCrossJoinWithAsterisk4() throws Exception {
+    // select length(r_regionkey), *, c_custkey*10 from customer, region
+    runSimpleTests();
+  }
+
+  @Test
+  @Option(withExplain = true, withExplainGlobal = true, parameterized = true)
+  @SimpleTest()
+  public void testBroadcastBasicJoin() throws Exception {
+    runSimpleTests();
+  }
+
+  @Test
+  @Option(withExplain = true, withExplainGlobal = true, parameterized = true)
+  @SimpleTest()
+  public void testBroadcastTwoPartJoin() throws Exception {
+    runSimpleTests();
+  }
+
+  @Test
+  @Option(withExplain = true, withExplainGlobal = true, parameterized = true)
+  @SimpleTest()
+  public void testBroadcastSubquery() throws Exception {
+    runSimpleTests();
+  }
+
+  @Test
+  @Option(withExplain = true, withExplainGlobal = true, parameterized = true)
+  @SimpleTest()
+  public void testBroadcastSubquery2() throws Exception {
+    runSimpleTests();
+  }
+
+  @Test
+  public void testBroadcastPartitionTable() throws Exception {
+    // If all tables participate in the BROADCAST JOIN, there is some missing data.
+    executeDDL("customer_partition_ddl.sql", null);
+    ResultSet res = executeFile("insert_into_customer_partition.sql");
+    res.close();
+
+    createMultiFile("nation", 2, new TupleCreator() {
+      public Tuple createTuple(String[] columnDatas) {
+        return new VTuple(new Datum[]{
+            new Int4Datum(Integer.parseInt(columnDatas[0])),
+            new TextDatum(columnDatas[1]),
+            new Int4Datum(Integer.parseInt(columnDatas[2])),
+            new TextDatum(columnDatas[3])
+        });
+      }
+    });
+
+    createMultiFile("orders", 1, new TupleCreator() {
+      public Tuple createTuple(String[] columnDatas) {
+        return new VTuple(new Datum[]{
+            new Int4Datum(Integer.parseInt(columnDatas[0])),
+            new Int4Datum(Integer.parseInt(columnDatas[1])),
+            new TextDatum(columnDatas[2])
+        });
+      }
+    });
+
+    res = executeQuery();
+    assertResultSet(res);
+    res.close();
+
+    executeString("DROP TABLE customer_broad_parts PURGE");
+    executeString("DROP TABLE nation_multifile PURGE");
+    executeString("DROP TABLE orders_multifile PURGE");
+  }
+
+  @Test
+  public void testBroadcastMultiColumnPartitionTable() throws Exception {
+    String tableName = CatalogUtil.normalizeIdentifier("testBroadcastMultiColumnPartitionTable");
+    ResultSet res = testBase.execute(
+        "create table " + tableName + " (col1 int4, col2 float4) partition by column(col3 text, col4 text) ");
+    res.close();
+    TajoTestingCluster cluster = testBase.getTestingCluster();
+    CatalogService catalog = cluster.getMaster().getCatalog();
+    assertTrue(catalog.existsTable(DEFAULT_DATABASE_NAME, tableName));
+
+    res = executeString("insert overwrite into " + tableName
+        + " select o_orderkey, o_totalprice, substr(o_orderdate, 6, 2), substr(o_orderdate, 1, 4) from orders");
+    res.close();
+
+    res = executeString(
+        "select distinct a.col3 from " + tableName + " as a " +
+            "left outer join lineitem_large b " +
+            "on a.col1 = b.l_orderkey order by a.col3"
+    );
+
+    assertResultSet(res);
+    cleanupQuery(res);
+  }
+
+  @Test
+  public void testCasebyCase1() throws Exception {
+    // Left outer join with a small table and a large partition table which not matched any partition path.
+    String tableName = CatalogUtil.normalizeIdentifier("largePartitionedTable");
+    testBase.execute(
+        "create table " + tableName + " (l_partkey int4, l_suppkey int4, l_linenumber int4, \n" +
+            "l_quantity float8, l_extendedprice float8, l_discount float8, l_tax float8, \n" +
+            "l_returnflag text, l_linestatus text, l_shipdate text, l_commitdate text, \n" +
+            "l_receiptdate text, l_shipinstruct text, l_shipmode text, l_comment text) \n" +
+            "partition by column(l_orderkey int4) ").close();
+    TajoTestingCluster cluster = testBase.getTestingCluster();
+    CatalogService catalog = cluster.getMaster().getCatalog();
+    assertTrue(catalog.existsTable(DEFAULT_DATABASE_NAME, tableName));
+
+    executeString("insert overwrite into " + tableName +
+        " select l_partkey, l_suppkey, l_linenumber, \n" +
+        " l_quantity, l_extendedprice, l_discount, l_tax, \n" +
+        " l_returnflag, l_linestatus, l_shipdate, l_commitdate, \n" +
+        " l_receiptdate, l_shipinstruct, l_shipmode, l_comment, l_orderkey from lineitem_large");
+
+    ResultSet res = executeString(
+        "select a.l_orderkey as key1, b.l_orderkey as key2 from lineitem as a " +
+            "left outer join " + tableName + " b " +
+            "on a.l_partkey = b.l_partkey and b.l_orderkey = 1000"
+    );
+
+    String expected = "key1,key2\n" +
+        "-------------------------------\n" +
+        "1,null\n" +
+        "1,null\n" +
+        "2,null\n" +
+        "3,null\n" +
+        "3,null\n";
+
+    try {
+      assertEquals(expected, resultSetToString(res));
+    } finally {
+      cleanupQuery(res);
+    }
+  }
+
+  @Test
+  public void testInnerAndOuterWithEmpty() throws Exception {
+    executeDDL("customer_partition_ddl.sql", null);
+    executeFile("insert_into_customer_partition.sql").close();
+
+    // outer join table is empty
+    ResultSet res = executeString(
+        "select a.l_orderkey, b.o_orderkey, c.c_custkey from lineitem a " +
+            "inner join orders b on a.l_orderkey = b.o_orderkey " +
+            "left outer join customer_broad_parts c on a.l_orderkey = c.c_custkey and c.c_custkey < 0"
+    );
+
+    String expected = "l_orderkey,o_orderkey,c_custkey\n" +
+        "-------------------------------\n" +
+        "1,1,null\n" +
+        "1,1,null\n" +
+        "2,2,null\n" +
+        "3,3,null\n" +
+        "3,3,null\n";
+
+    assertEquals(expected, resultSetToString(res));
+    res.close();
+
+    executeString("DROP TABLE customer_broad_parts PURGE").close();
+  }
+
+  interface TupleCreator {
+    Tuple createTuple(String[] columnDatas);
+  }
+
+  private void createMultiFile(String tableName, int numRowsEachFile, TupleCreator tupleCreator) throws Exception {
+    // make multiple small file
+    String multiTableName = tableName + "_multifile";
+    executeDDL(multiTableName + "_ddl.sql", null);
+
+    TableDesc table = client.getTableDesc(multiTableName);
+    assertNotNull(table);
+
+    TableMeta tableMeta = table.getMeta();
+    Schema schema = table.getLogicalSchema();
+
+    File file = new File("src/test/tpch/" + tableName + ".tbl");
+
+    if (!file.exists()) {
+      file = new File(System.getProperty("user.dir") + "/tajo-core/src/test/tpch/" + tableName + ".tbl");
+    }
+    String[] rows = FileUtil.readTextFile(file).split("\n");
+
+    assertTrue(rows.length > 0);
+
+    int fileIndex = 0;
+
+    Appender appender = null;
+    for (int i = 0; i < rows.length; i++) {
+      if (i % numRowsEachFile == 0) {
+        if (appender != null) {
+          appender.flush();
+          appender.close();
+        }
+        Path dataPath = new Path(table.getPath().toString(), fileIndex + ".csv");
+        fileIndex++;
+        appender = ((FileStorageManager)StorageManager.getFileStorageManager(conf))
+            .getAppender(tableMeta, schema, dataPath);
+        appender.init();
+      }
+      String[] columnDatas = rows[i].split("\\|");
+      Tuple tuple = tupleCreator.createTuple(columnDatas);
+      appender.addTuple(tuple);
+    }
+    appender.flush();
+    appender.close();
+  }
+
+  @Test
+  public void testLeftOuterJoinLeftSideSmallTable() throws Exception {
+    KeyValueSet tableOptions = new KeyValueSet();
+    tableOptions.set(StorageConstants.TEXT_DELIMITER, StorageConstants.DEFAULT_FIELD_DELIMITER);
+    tableOptions.set(StorageConstants.TEXT_NULL, "\\\\N");
+
+    Schema schema = new Schema();
+    schema.addColumn("id", Type.INT4);
+    schema.addColumn("name", Type.TEXT);
+    String[] data = new String[]{ "1000000|a", "1000001|b", "2|c", "3|d", "4|e" };
+    TajoTestingCluster.createTable("table1", schema, tableOptions, data, 1);
+
+    data = new String[10000];
+    for (int i = 0; i < data.length; i++) {
+      data[i] = i + "|" + "this is testLeftOuterJoinLeftSideSmallTabletestLeftOuterJoinLeftSideSmallTable" + i;
+    }
+    TajoTestingCluster.createTable("table_large", schema, tableOptions, data, 2);
+
+    try {
+      ResultSet res = executeString(
+          "select a.id, b.name from table1 a left outer join table_large b on a.id = b.id order by a.id"
+      );
+
+      String expected = "id,name\n" +
+          "-------------------------------\n" +
+          "2,this is testLeftOuterJoinLeftSideSmallTabletestLeftOuterJoinLeftSideSmallTable2\n" +
+          "3,this is testLeftOuterJoinLeftSideSmallTabletestLeftOuterJoinLeftSideSmallTable3\n" +
+          "4,this is testLeftOuterJoinLeftSideSmallTabletestLeftOuterJoinLeftSideSmallTable4\n" +
+          "1000000,null\n" +
+          "1000001,null\n";
+
+      assertEquals(expected, resultSetToString(res));
+
+      cleanupQuery(res);
+    } finally {
+      executeString("DROP TABLE table1 PURGE").close();
+      executeString("DROP TABLE table_large PURGE").close();
+    }
+  }
+
+
+  @Test
+  public void testSelfJoin() throws Exception {
+    String tableName = CatalogUtil.normalizeIdentifier("paritioned_nation");
+    ResultSet res = executeString(
+        "create table " + tableName + " (n_name text,"
+            + "  n_comment text, n_regionkey int8) USING csv "
+            + "WITH ('csvfile.delimiter'='|')"
+            + "PARTITION BY column(n_nationkey int8)");
+    res.close();
+    assertTrue(catalog.existsTable(DEFAULT_DATABASE_NAME, tableName));
+
+    res = executeString(
+        "insert overwrite into " + tableName
+            + " select n_name, n_comment, n_regionkey, n_nationkey from nation");
+    res.close();
+
+    res = executeString(
+        "select a.n_nationkey, a.n_name from nation a join nation b on a.n_nationkey = b.n_nationkey"
+            + " where a.n_nationkey in (1)");
+    String expected = resultSetToString(res);
+    res.close();
+
+    res = executeString(
+        "select a.n_nationkey, a.n_name from " + tableName + " a join "+tableName +
+            " b on a.n_nationkey = b.n_nationkey "
+            + " where a.n_nationkey in (1)");
+    String resultSetData = resultSetToString(res);
+    res.close();
+
+    assertEquals(expected, resultSetData);
+
+  }
+
+  @Test
+  public void testSelfJoin2() throws Exception {
+    /*
+     https://issues.apache.org/jira/browse/TAJO-1102
+     See the following case.
+     CREATE TABLE orders_partition
+       (o_orderkey INT8, o_custkey INT8, o_totalprice FLOAT8, o_orderpriority TEXT,
+          o_clerk TEXT, o_shippriority INT4, o_comment TEXT) USING CSV WITH ('csvfile.delimiter'='|')
+       PARTITION BY COLUMN(o_orderdate TEXT, o_orderstatus TEXT);
+
+     select a.o_orderstatus, count(*) as cnt
+      from orders_partition a
+      inner join orders_partition b
+        on a.o_orderdate = b.o_orderdate
+            and a.o_orderstatus = b.o_orderstatus
+            and a.o_orderkey = b.o_orderkey
+      where a.o_orderdate='1995-02-21'
+        and a.o_orderstatus in ('F')
+      group by a.o_orderstatus;
+
+      Because of the where condition[where a.o_orderdate='1995-02-21 and a.o_orderstatus in ('F')],
+        orders_partition table aliased a is small and broadcast target.
+    */
+    String tableName = CatalogUtil.normalizeIdentifier("partitioned_orders_large");
+    ResultSet res = executeString(
+        "create table " + tableName + " (o_orderkey INT8, o_custkey INT8, o_totalprice FLOAT8, o_orderpriority TEXT,\n" +
+            "o_clerk TEXT, o_shippriority INT4, o_comment TEXT) USING CSV WITH ('csvfile.delimiter'='|')\n" +
+            "PARTITION BY COLUMN(o_orderdate TEXT, o_orderstatus TEXT, o_orderkey_mod INT8)");
+    res.close();
+    assertTrue(catalog.existsTable(DEFAULT_DATABASE_NAME, tableName));
+
+    res = executeString(
+        "insert overwrite into " + tableName +
+            " select o_orderkey, o_custkey, o_totalprice, " +
+            " o_orderpriority, o_clerk, o_shippriority, o_comment, o_orderdate, o_orderstatus, o_orderkey % 10 " +
+            " from orders_large ");
+    res.close();
+
+    res = executeString(
+        "select a.o_orderdate, a.o_orderstatus, a.o_orderkey % 10 as o_orderkey_mod, a.o_totalprice " +
+            "from orders_large a " +
+            "join orders_large b on a.o_orderkey = b.o_orderkey " +
+            "where a.o_orderdate = '1993-10-14' and a.o_orderstatus = 'F' and a.o_orderkey % 10 = 1" +
+            " order by a.o_orderkey"
+    );
+    String expected = resultSetToString(res);
+    res.close();
+
+    res = executeString(
+        "select a.o_orderdate, a.o_orderstatus, a.o_orderkey_mod, a.o_totalprice " +
+            "from " + tableName +
+            " a join "+ tableName + " b on a.o_orderkey = b.o_orderkey " +
+            "where a.o_orderdate = '1993-10-14' and a.o_orderstatus = 'F' and a.o_orderkey_mod = 1 " +
+            " order by a.o_orderkey"
+    );
+    String resultSetData = resultSetToString(res);
+    res.close();
+
+    assertEquals(expected, resultSetData);
+
+  }
+  @Test
+  public void testMultipleBroadcastDataFileWithZeroLength() throws Exception {
+    // According to node type(leaf or non-leaf) Broadcast join is determined differently by Repartitioner.
+    // testMultipleBroadcastDataFileWithZeroLength testcase is for the leaf node
+    createMultiFile("nation", 2, new TupleCreator() {
+      public Tuple createTuple(String[] columnDatas) {
+        return new VTuple(new Datum[]{
+            new Int4Datum(Integer.parseInt(columnDatas[0])),
+            new TextDatum(columnDatas[1]),
+            new Int4Datum(Integer.parseInt(columnDatas[2])),
+            new TextDatum(columnDatas[3])
+        });
+      }
+    });
+    addEmptyDataFile("nation_multifile", false);
+
+    ResultSet res = executeQuery();
+
+    assertResultSet(res);
+    cleanupQuery(res);
+
+    executeString("DROP TABLE nation_multifile PURGE");
+  }
+
+  @Test
+  public void testMultipleBroadcastDataFileWithZeroLength2() throws Exception {
+    // According to node type(leaf or non-leaf) Broadcast join is determined differently by Repartitioner.
+    // testMultipleBroadcastDataFileWithZeroLength2 testcase is for the non-leaf node
+    createMultiFile("nation", 2, new TupleCreator() {
+      public Tuple createTuple(String[] columnDatas) {
+        return new VTuple(new Datum[]{
+            new Int4Datum(Integer.parseInt(columnDatas[0])),
+            new TextDatum(columnDatas[1]),
+            new Int4Datum(Integer.parseInt(columnDatas[2])),
+            new TextDatum(columnDatas[3])
+        });
+      }
+    });
+    addEmptyDataFile("nation_multifile", false);
+
+    ResultSet res = executeQuery();
+
+    assertResultSet(res);
+    cleanupQuery(res);
+
+    executeString("DROP TABLE nation_multifile PURGE");
+  }
+
+  @Test
+  public void testMultiplePartitionedBroadcastDataFileWithZeroLength() throws Exception {
+    String tableName = CatalogUtil.normalizeIdentifier("nation_partitioned");
+    ResultSet res = testBase.execute(
+        "create table " + tableName + " (n_name text) partition by column(n_nationkey int4, n_regionkey int4) ");
+    res.close();
+    TajoTestingCluster cluster = testBase.getTestingCluster();
+    CatalogService catalog = cluster.getMaster().getCatalog();
+    assertTrue(catalog.existsTable(DEFAULT_DATABASE_NAME, tableName));
+
+    res = executeString("insert overwrite into " + tableName
+        + " select n_name, n_nationkey, n_regionkey from nation");
+    res.close();
+
+    addEmptyDataFile("nation_partitioned", true);
+
+    res = executeQuery();
+
+    assertResultSet(res);
+    cleanupQuery(res);
+
+    executeString("DROP TABLE nation_partitioned PURGE");
+  }
+
+  @Test
+  public void testMultiplePartitionedBroadcastDataFileWithZeroLength2() throws Exception {
+    String tableName = CatalogUtil.normalizeIdentifier("nation_partitioned");
+    ResultSet res = testBase.execute(
+        "create table " + tableName + " (n_name text) partition by column(n_nationkey int4, n_regionkey int4) ");
+    res.close();
+    TajoTestingCluster cluster = testBase.getTestingCluster();
+    CatalogService catalog = cluster.getMaster().getCatalog();
+    assertTrue(catalog.existsTable(DEFAULT_DATABASE_NAME, tableName));
+
+    res = executeString("insert overwrite into " + tableName
+        + " select n_name, n_nationkey, n_regionkey from nation");
+    res.close();
+
+    addEmptyDataFile("nation_partitioned", true);
+
+    res = executeQuery();
+
+    assertResultSet(res);
+    cleanupQuery(res);
+
+    executeString("DROP TABLE nation_partitioned PURGE");
+  }
+
+  private void addEmptyDataFile(String tableName, boolean isPartitioned) throws Exception {
+    TableDesc table = client.getTableDesc(tableName);
+
+    Path path = new Path(table.getPath());
+    FileSystem fs = path.getFileSystem(conf);
+    if (isPartitioned) {
+      List<Path> partitionPathList = getPartitionPathList(fs, path);
+      for (Path eachPath: partitionPathList) {
+        Path dataPath = new Path(eachPath, 0 + "_empty.csv");
+        OutputStream out = fs.create(dataPath);
+        out.close();
+      }
+    } else {
+      Path dataPath = new Path(path, 0 + "_empty.csv");
+      OutputStream out = fs.create(dataPath);
+      out.close();
+    }
+  }
+
+  private List<Path> getPartitionPathList(FileSystem fs, Path path) throws Exception {
+    FileStatus[] files = fs.listStatus(path);
+    List<Path> paths = new ArrayList<Path>();
+    if (files != null) {
+      for (FileStatus eachFile: files) {
+        if (eachFile.isFile()) {
+          paths.add(path);
+          return paths;
+        } else {
+          paths.addAll(getPartitionPathList(fs, eachFile.getPath()));
+        }
+      }
+    }
+
+    return paths;
   }
 }
