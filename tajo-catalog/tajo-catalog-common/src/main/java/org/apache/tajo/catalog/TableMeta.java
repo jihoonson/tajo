@@ -140,6 +140,7 @@ public class TableMeta implements ProtoObject<CatalogProtos.TableProto>, GsonObj
 			boolean eq = this.getStoreType().equals(other.getStoreType());
 			eq = eq && this.getOptions().equals(other.getOptions());
 			return eq;
+//      return getProto().equals(other.getProto());
 		}
 		
 		return false;		

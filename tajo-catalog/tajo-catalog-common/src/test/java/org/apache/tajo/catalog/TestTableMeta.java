@@ -22,6 +22,7 @@ import org.apache.tajo.catalog.json.CatalogGsonHelper;
 import org.apache.tajo.catalog.proto.CatalogProtos.StoreType;
 import org.apache.tajo.catalog.proto.CatalogProtos.TableProto;
 import org.apache.tajo.common.TajoDataTypes.Type;
+import org.apache.tajo.rpc.protocolrecords.PrimitiveProtos;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -85,6 +86,26 @@ public class TestTableMeta {
 
     assertTrue(meta.equals(meta2));
     assertNotSame(meta, meta2);
+  }
+
+  @Test
+  public void testEqualsObject2() {
+    TableMeta meta1 = CatalogUtil.newTableMeta(StoreType.CSV);
+    for (int i = 0; i < 10; i++) {
+      meta1.putOption("key"+i, "value"+i);
+    }
+
+    PrimitiveProtos.KeyValueSetProto.Builder optionBuilder = PrimitiveProtos.KeyValueSetProto.newBuilder();
+    for (int i = 1; i <= 10; i++) {
+      PrimitiveProtos.KeyValueProto.Builder keyValueBuilder = PrimitiveProtos.KeyValueProto.newBuilder();
+      keyValueBuilder.setKey("key"+(10-i)).setValue("value"+(10-i));
+      optionBuilder.addKeyval(keyValueBuilder);
+    }
+    TableProto.Builder builder = TableProto.newBuilder();
+    builder.setStoreType(StoreType.CSV);
+    builder.setParams(optionBuilder);
+    TableMeta meta2 = new TableMeta(builder.build());
+    assertEquals(meta1, meta2);
   }
   
   @Test
