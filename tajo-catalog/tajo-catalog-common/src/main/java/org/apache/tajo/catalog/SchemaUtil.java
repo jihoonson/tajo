@@ -18,6 +18,10 @@
 
 package org.apache.tajo.catalog;
 
+import org.apache.tajo.util.TUtil;
+
+import java.util.List;
+
 import static org.apache.tajo.common.TajoDataTypes.DataType;
 import static org.apache.tajo.common.TajoDataTypes.Type;
 
@@ -34,12 +38,12 @@ public class SchemaUtil {
   static int tmpColumnSeq = 0;
   public static Schema merge(Schema left, Schema right) {
     Schema merged = new Schema();
-    for(Column col : left.getColumns()) {
+    for(Column col : left.getRootColumns()) {
       if (!merged.containsByQualifiedName(col.getQualifiedName())) {
         merged.addColumn(col);
       }
     }
-    for(Column col : right.getColumns()) {
+    for(Column col : right.getRootColumns()) {
       if (merged.containsByQualifiedName(col.getQualifiedName())) {
         merged.addColumn("?fake" + (tmpColumnSeq++), col.getDataType());
       } else {
@@ -59,7 +63,7 @@ public class SchemaUtil {
    */
   public static Schema getNaturalJoinColumns(Schema left, Schema right) {
     Schema common = new Schema();
-    for (Column outer : left.getColumns()) {
+    for (Column outer : left.getRootColumns()) {
       if (!common.containsByName(outer.getSimpleName()) && right.containsByName(outer.getSimpleName())) {
         common.addColumn(new Column(outer.getSimpleName(), outer.getDataType()));
       }
@@ -107,5 +111,54 @@ public class SchemaUtil {
       names[i] = schema.getColumn(i).getSimpleName();
     }
     return names;
+  }
+
+  /**
+   * Column visitor interface
+   */
+  public static interface ColumnVisitor {
+    public void visit(int depth, List<String> path, Column column);
+  }
+
+  /**
+   * It allows a column visitor to traverse all columns in a schema in a depth-first order.
+   * @param schema
+   * @param function
+   */
+  public static void visitSchema(Schema schema, ColumnVisitor function) {
+      for(Column col : schema.getRootColumns()) {
+        visitInDepthFirstOrder(0, NestedPathUtil.ROOT_PATH, function, col);
+      }
+  }
+
+  /**
+   * A recursive function to traverse all columns in a schema in a depth-first order.
+   *
+   * @param depth Nested depth. 0 is root column.
+   * @param function Visitor
+   * @param column Current visiting column
+   */
+  private static void visitInDepthFirstOrder(int depth,
+                                             final List<String> path,
+                                             ColumnVisitor function,
+                                             Column column) {
+
+    if (column.getDataType().getType() == Type.RECORD) {
+      for (Column nestedColumn : column.typeDesc.nestedRecordSchema.getRootColumns()) {
+        List<String> newPath = TUtil.newList(path);
+        newPath.add(column.getQualifiedName());
+
+        visitInDepthFirstOrder(depth + 1, newPath, function, nestedColumn);
+      }
+      function.visit(depth, path, column);
+    } else {
+      function.visit(depth, path, column);
+    }
+  }
+
+  public static String toDisplayString(Schema schema) {
+    StringBuilder sb = new StringBuilder();
+    DDLBuilder.buildSchema(sb, schema);
+    return sb.toString();
   }
 }

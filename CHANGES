@@ -1,7 +1,343 @@
 Tajo Change Log 
 
+Release 0.11.0 - unreleased
 
-Release 0.10.0 - unreleased
+  NEW FEATURES
+
+    TAJO-1537: Implement a virtual table for sessions. 
+    (Contributed by Yongjin Choi, Committed by hyunsik)
+
+    TAJO-1562: Python UDAF support. (jihoon)
+
+    TAJO-1344: Python UDF support. (jihoon)
+
+    TAJO-923: Add VAR_SAMP and VAR_POP window functions. 
+    (Contributed by Dongjoon Hyun, Committed by jihoon)
+
+    TAJO-1494: Add SeekableScanner support to DelimitedTextFileScanner.
+    (jinho)
+
+    TAJO-921: Add STDDEV_SAMP and STDDEV_POP window functions. (Keuntae Park)
+
+    TAJO-1135: Implement queryable virtual table for cluster information.
+    (jihun)
+
+    TAJO-1430: Improve SQLAnalyzer by session-based parsing-result caching.
+    (Contributed by Dongjoon Hyun, Committed by jihoon)
+
+  IMPROVEMENT
+
+    TAJO-1577: Add test cases to verify join plans. (jihoon)
+
+    TAJO-1607: Tajo Rest Cache-Id should be bigger than zero. (Contributed by 
+    DaeMyoung Kang, Committed by hyunsik)
+
+    TAJO-1603: Refactor StorageManager. (hyunsik)
+
+    TAJO-1542: Refactoring of HashJoinExecs. (Contributed by Navis, Committed by 
+    hyunsik)
+
+    TAJO-1591: Change StoreType represented as Enum to String type. (hyunsik)
+
+    TAJO-1452: Improve function listing order (Contributed Dongjoon Hyun, 
+    Committed by hyunsik)
+
+    TAJO-1576: Sometimes DefaultTajoCliOutputFormatter.parseErrorMessage() 
+    eliminates an important kind of information. 
+    (Contributed by Jongyoung Park, Committed by jihoon)
+
+    TAJO-1408: Make IntermediateEntryProto more compact. 
+    (Contributed by navis, Committed by hyunsik)
+
+    TAJO-1584: Remove QueryMaster client sharing in TajoMaster and TajoWorker.
+    (jinho)
+
+    TAJO-1563: Improve RPC error handling. (jinho)
+
+    TAJO-1311: Enable Scattered Hash Shuffle for CTAS statement. (jaehwa)
+
+    TAJO-1548: Refactoring condition code for CHAR into CatalogUtil.
+    (Contributed by DaeMyung Kang, Committed by jaehwa)
+
+    TAJO-1570: CatalogUtil newSimpleDataTypeArray should use newSimpleDataType.
+    (Contributed by DaeMyung Kang, Committed by jihoon)
+
+    TAJO-1442: Improve Hive Compatibility. (jaehwa)
+
+    TAJO-1530: Display warn message when the query kill button is clicked in 
+    WEB UI. (Contributed by Dongjoon Hyun, Committed by hyoungjun)
+  
+    TAJO-1509: Use dedicated thread to release resource allocated to container.
+    (Contributed by navis, Committed by hyoungjun)
+
+    TAJO-1454: Comparing two date or two timestamp need not normalizing
+    (Contributed by navis, Committed by hyoungjun)
+
+    TAJO-1385: Remove locking on RMContext. (Contributed by navis, 
+    Committed by jihoon)
+
+    TAJO-1499: Check the bind status when EvalNode::eval() is called. (jihoon)
+
+    TAJO-1400: Add TajoStatement::setMaxRows method support.
+    (Contributed by YeonSu Han, Committed by jihoon)
+
+    TAJO-1421: Add 'ALTER TABLE SET PROPERTY' statement.
+    (Contributed by Yongjin Choi. Committed by jaehwa)
+
+    TAJO-1501: Too many log message of HashShuffleAppenderManager.
+    (Contributed by Jongyoung Park. Committed by jaehwa)
+
+    TAJO-1428: Support min, max builtin functions for DATE, TIME, TIMESTAMP.
+    (Contributed by Dongjoon Hyun, Committed by Keuntae Park)
+
+    TAJO-1436: Add Bind method to EvalNode. (Contributed by navis,
+    Committed by jihoon)
+
+    TAJO-1495: Clean up CatalogStore. (jaehwa)
+   
+    TAJO-1460: Apply TAJO-1407 to ExternalSortExec. (Contributed by navis, 
+    Committed by hyoungjun)
+
+    TAJO-1350: Refactor FilterPushDownRule::visitJoin() into well-defined, 
+    small methods. (jihoon)
+
+    TAJO-1426: Support "explain global" to get physical plan. (Contributed by
+    navis, Committed by jihoon)
+
+    TAJO-1407: Minor performance improvement of MemSortExec. (Contributed by
+    navis, Committed by jihoon)
+
+    TAJO-1403: Improve 'Simple Query' with only partition columns and constant 
+    values. (Contributed by Dongjoon Hyun, Committed by jihoon)
+
+    TAJO-1418: Comment on TAJO_PULLSERVER_STANDALONE in tajo-env.sh 
+    is not consistent. (Contributed by navis, Committed by hyunsik)
+
+    TAJO-1381: Support multi-bytes delimiter for Text file.
+    (Contributed by navis, Committed by jinho)
+
+    TAJO-1391: RpcConnectionPool should check reference counter of connection 
+    before close. (Contributed by navis, Committed by jihun)
+
+    TAJO-1383: Improve broadcast table cache. (jinho)
+
+    TAJO-1374: Support multi-bytes delimiter for CSV file.
+    (Contributed by navis, Committed by jinho)
+
+    TAJO-1395: Remove deprecated sql files for Oracle and PostgreSQL. (jihun)
+
+    TAJO-1394: Support reconnect on tsql. 
+    (Contributed by navis, Committed by hyunsik)
+
+    TAJO-527: Upgrade to Netty 4. (jihun)
+
+    TAJO-1369: Some stack trace information is missed in error/fail logging. 
+    (Contributed by navis, Committed by hyunsik)
+
+  BUG FIXES
+
+    TAJO-1619: JDBC program is stuck after closing. (jihoon)
+
+    TAJO-1620: random() in an SQL should generate RANDOM numbers.
+    (Contributed by Jongyoung Park, Committed by jihoon)
+
+    TAJO-1558: HBASE_LIB/hbase-server-*.jar should be included in the CLASSPATH.
+    (Contributed by Jongyoung Park, Committed by jaehwa)
+
+    TAJO-1605: Fix master build failure on jdk 1.6. (jinho)
+
+    TAJO-1485: Datum 'Char' returned only 1byte.
+    (Contributed by DaeMyung Kang, Committed by jihoon)
+
+    TAJO-1586: TajoMaster HA startup failure on Yarn. (jaehwa)
+
+    TAJO-1598: TableMeta should change equals mechanism.
+    (Contributed by DaeMyung Kang, Committed by jihoon)
+
+    TAJO-1593: Add missing stop condition to Taskrunner. (jinho)
+
+    TAJO-1556: "insert into select" with reordered column list does not work.
+    (Contributed by Yongjin Choi, Committed by jihoon)
+
+    TAJO-1534: DelimitedTextFile return null instead of a NullDatum. (jinho)
+
+    TAJO-1574: Fix NPE on natural join.
+    (Contributed by Dongjoon Hyun, Committed by jihoon)
+
+    TAJO-1581: Does not update last state of query stage in non-hash shuffle.
+    (jinho)
+
+    TAJO-1580: Error line number is incorrect.
+    (Contributed by Jongyoung Park. Committed by jaehwa)
+
+    TAJO-1419: Tsql session command doesn't work. (Contributed by DaeMyung Kang,
+    Committed by jihoon)
+
+    TAJO-1481: Numeric conversion of Inet4 type should be considered as unsigned.
+    (Contributed by navis, Committed by jihoon)
+
+    TAJO-1522: NPE making stage history before task scheduler is initialized.
+    (Contributed by navis, Committed by jinho)
+
+    TAJO-1560: HashShuffle report should be ignored when a succeed tasks are not
+    included. (jinho)
+
+    TAJO-1569: BlockingRpcClient can make other request fail. (jinho)
+
+    TAJO-1564: TestFetcher fails occasionally. (jinho)
+
+    TAJO-1497: RPC client does not share a connection. (jinho)
+
+    TAJO-1467: Parenthesis at the start of SQL query is ignored. 
+    (Keuntae Park)
+
+    TAJO-1541: Connection timeout in netty client is not working.
+    (Contributed by navis, Committed by jihun)
+
+    TAJO-1500: FinishedTaskCleanThread is not interrupted when worker stops.
+    (Contributed by navis, Committed by jihoon)
+
+    TAJO-1469: allocateQueryMaster can leak resources if it times-out (3sec, 
+    hardcoded) (Contributed by navis, Committed by hyoungjun)
+
+    TAJO-1538: TajoWorkerResourceManager.allocatedResourceMap is increasing 
+    forever. (Contributed by navis. Committed by jinho)
+
+    TAJO-1510: Change a function name from getFileCunks to getFileChunks.
+    (Contributed by Soonwoong Lee, Committed by jaehwa)
+
+    TAJO-1360: VALUES_ field in OPTIONS table of catalog store should be longer.
+    (Contributed by DaeMyung Kang, Committed by jihun)
+
+    TAJO-1479: NPE during startup CatalogStore. (jaehwa)
+
+    TAJO-1437: Resolve findbug warnings on Tajo JDBC Module. 
+    (Contributed by Dongjoon Hyun, Committed by jihoon)
+
+    TAJO-1438: Resolve findbug warnings on Tajo Client Module. 
+    (Contributed by Dongjoon Hyun, Committed by jihoon)
+
+    TAJO-1440: Some tests fail in parallel test environment in TestKillQuery.
+    (Contributed by Jongyoung Park. Committed by jinho)
+
+    TAJO-1147: Simple query doesn't work in Web UI.
+    (Contributed by Jongyoung Park. Committed by jaehwa)
+
+    TAJO-1434: Fix supporting version of Hadoop. 
+    (Contributed by Dongjoon Hyun, Committed by jinho)
+
+    TAJO-1449: TestSelectQuery.testExplainSelect() fails. (jihoon)
+
+    TAJO-1396: Unexpected IllegalMonitorStateException can be thrown 
+    in QueryInProgress. (Contributed by navis. Committed by jinho)
+
+    TAJO-1414: Two RemoteException in rpc module. 
+    (Contributed by navis. Committed by jihun)
+
+    TAJO-1368: Exceptions during processing nested union queries.
+    (jihun)
+
+    TAJO-1405: Fix some illegal way of usages on connection pool. 
+    (Contributed by navis, Committed by Keuntae Park)
+
+    TAJO-1384: Duplicated output file path problem. (jihoon)
+
+    TAJO-1386: CURRENT_DATE generates parsing errors sometimes.
+    (Contributed by navis, Committed by hyunsik)
+
+    TAJO-1387: Correct error message for EXISTS clause.
+    (Contributed by Dongjoon Hyun, Committed by hyunsik)
+
+    TAJO-1378: Incorrect version(0.8.0) info in tajo-doc. 
+    (Contributed by Dongjoon Hyun, Committed by jihoon)
+
+    TAJO-1370: TUtils.checkEquals() is not consistent with description 
+    in javadoc. (Contributed by navis, Committed by hyunsik)
+
+    TAJO-1362: Resolve findbug warnings on Tajo Core Module. (jihun)
+
+    TAJO-1366: The timestamp type conversion occasionally leads to wrong 
+    results. (jihoon)
+
+    TAJO-1365: Suppress release audit warnings on Jekins builds. (jihun)
+
+    TAJO-1357: Resolve findbugs warnings on Tajo Catalog Modules. (jihun)
+
+    TAJO-1351: Resolve findbug warnings on Tajo Common Module. (jihun)
+  
+  TASKS
+
+    TAJO-1583: Remove ServerCallable in RPC client. (jinho)
+
+    TAJO-1587: Upgrade java version to 1.7 for Travis CI. (jihoon)
+
+    TAJO-1559: Fix data model description (tinyint, smallint).
+    (Contributed by Dongjoon Hyun, Committed by jihoon)
+
+    TAJO-1575: HBASE_HOME guidance is duplicated in tajo-env.sh.
+    (Contributed by Jongyoung Park, Committed by jihoon)
+
+    TAJO-1568: Apply UnpooledByteBufAllocator when a tajo.test.enabled
+    is set to enable. (jinho)
+
+    TAJO-1567: Update old license in some pom.xml files.
+    (Contributed by Dongjoon Hyun, Committed by jinho)
+
+    TAJO-1526: Investigate the frequent failures of Travis CI. (jihoon)
+
+    TAJO-1462: Replace CSV examples into TEXT examples in docs. 
+    (Contributed by Dongjoon Hyun, Committed by jihoon)
+
+    TAJO-1424: Investigate the problem of too many "Try to connect" messeges 
+    during Travic CI build. (Contributed by navis, Committed by jihoon)
+
+    TAJO-1482: Cleanup the legacy cluster mode. (jinho)
+
+    TAJO-1439: Some method name is written wrongly. 
+    (Contributed by Jongyoung Park. Committed by jihoon)
+
+    TAJO-1398: Fix 'Getting Started' link error from 0.9.0 into 0.10.0. 
+    (Contributed by Dongjoon Hyun, Committed by jihoon)
+
+    TAJO-1380: Update JDBC documentation for new JDBC driver.
+    (Contributed by Dongjoon Hyun, Committed by hyunsik)
+
+    TAJO-1335: Bump up 0.10.0-SNAPSHOT to 0.11.0-SNAPSHOT in master branch. 
+    (hyunsik)
+
+    TAJO-1314: Documentation for the support of the swift. (jihoon)
+
+
+  SUB TASKS
+
+    TAJO-1599: Implement NodeResourceManager and Status updater. (jinho)
+
+    TAJO-1613: Rename StorageManager to Tablespace. (hyunsik)
+
+    TAJO-1359: Add nested field projector and language extension to project 
+    nested record. (hyunsik)
+
+    TAJO-1529: Implement json_extract_path_text(string, string) function.
+    (jinho)
+
+    TAJO-1338: Defines RESTful API for Clients. (jihun)
+
+    TAJO-1284: Add alter partition method to CatalogStore. (jaehwa)
+
+    TAJO-1392: Resolve findbug warnings on Tajo Plan Module. (jihun)
+
+    TAJO-1393: Resolve findbug warnings on Tajo Cli Module.
+    (Contributed by Dongjoon Hyun, Committed by hyunsik)
+
+    TAJO-1337: Implements common modules to handle RESTful API. (jihun)
+
+    TAJO-1329: Improve Schema class to support nested struct support.
+    (hyunsik)
+
+    TAJO-1353: Nested record support in CREATE TABLE statement. (hyunsik)
+
+
+Release 0.10.0 - Released
 
   NEW FEATURES
 
@@ -184,6 +520,11 @@ Release 0.10.0 - unreleased
 
 
   BUG FIXES
+
+    TAJO-1356: Race conditions in QueryInProgress. (jinho)
+
+    TAJO-1277: GreedyHeuristicJoinOrderAlgorithm sometimes wrongly assumes 
+    associativity of joins. (Keuntae Park via jihoon)
 
     TAJO-1336: Fix task failure of stopped task. (jinho)
 

@@ -36,7 +36,6 @@ import org.apache.tajo.algebra.Expr;
 import org.apache.tajo.algebra.JsonHelper;
 import org.apache.tajo.catalog.CatalogService;
 import org.apache.tajo.catalog.TableDesc;
-import org.apache.tajo.catalog.proto.CatalogProtos.StoreType;
 import org.apache.tajo.conf.TajoConf;
 import org.apache.tajo.engine.planner.global.MasterPlan;
 import org.apache.tajo.engine.query.QueryContext;
@@ -56,9 +55,10 @@ import org.apache.tajo.plan.rewrite.LogicalPlanRewriteRule;
 import org.apache.tajo.plan.util.PlannerUtil;
 import org.apache.tajo.plan.verifier.VerifyException;
 import org.apache.tajo.session.Session;
-import org.apache.tajo.storage.StorageManager;
+import org.apache.tajo.storage.Tablespace;
 import org.apache.tajo.storage.StorageProperty;
 import org.apache.tajo.storage.StorageUtil;
+import org.apache.tajo.storage.TableSpaceManager;
 import org.apache.tajo.util.metrics.TajoMetrics;
 import org.apache.tajo.util.metrics.reporter.MetricsConsoleReporter;
 import org.apache.tajo.worker.AbstractResourceAllocator;
@@ -116,7 +116,8 @@ public class QueryMasterTask extends CompositeService {
       new ArrayList<TajoWorkerProtocol.TaskFatalErrorReport>();
 
   public QueryMasterTask(QueryMaster.QueryMasterContext queryMasterContext,
-                         QueryId queryId, Session session, QueryContext queryContext, String jsonExpr) {
+                         QueryId queryId, Session session, QueryContext queryContext,
+                         String jsonExpr, AsyncDispatcher dispatcher) {
 
     super(QueryMasterTask.class.getName());
     this.queryMasterContext = queryMasterContext;
@@ -125,10 +126,20 @@ public class QueryMasterTask extends CompositeService {
     this.queryContext = queryContext;
     this.jsonExpr = jsonExpr;
     this.querySubmitTime = System.currentTimeMillis();
+    this.dispatcher = dispatcher;
+  }
+
+  public QueryMasterTask(QueryMaster.QueryMasterContext queryMasterContext,
+                         QueryId queryId, Session session, QueryContext queryContext,
+                         String jsonExpr) {
+    this(queryMasterContext, queryId, session, queryContext, jsonExpr, new AsyncDispatcher());
   }
 
   @Override
   public void init(Configuration conf) {
+    if (!(conf instanceof TajoConf)) {
+      throw new IllegalArgumentException("conf should be a TajoConf type.");
+    }
     systemConf = (TajoConf)conf;
 
     try {
@@ -141,8 +152,6 @@ public class QueryMasterTask extends CompositeService {
         throw new UnimplementedException(resourceManagerClassName + " is not supported yet");
       }
       addService(resourceAllocator);
-
-      dispatcher = new AsyncDispatcher();
       addService(dispatcher);
 
       dispatcher.register(StageEventType.class, new StageEventDispatcher());
@@ -299,7 +308,7 @@ public class QueryMasterTask extends CompositeService {
   }
 
   public synchronized void startQuery() {
-    StorageManager sm = null;
+    Tablespace sm = null;
     LogicalPlan plan = null;
     try {
       if (query != null) {
@@ -313,9 +322,9 @@ public class QueryMasterTask extends CompositeService {
       jsonExpr = null; // remove the possible OOM
       plan = planner.createPlan(queryContext, expr);
 
-      StoreType storeType = PlannerUtil.getStoreType(plan);
+      String storeType = PlannerUtil.getStoreType(plan);
       if (storeType != null) {
-        sm = StorageManager.getStorageManager(systemConf, storeType);
+        sm = TableSpaceManager.getStorageManager(systemConf, storeType);
         StorageProperty storageProperty = sm.getStorageProperty();
         if (storageProperty.isSortedInsert()) {
           String tableName = PlannerUtil.getStoreTableName(plan);
@@ -377,8 +386,7 @@ public class QueryMasterTask extends CompositeService {
   }
 
   private void initStagingDir() throws IOException {
-    Path stagingDir = null;
-    FileSystem defaultFS = TajoConf.getWarehouseDir(systemConf).getFileSystem(systemConf);
+    Path stagingDir;
 
     try {
 
@@ -388,14 +396,7 @@ public class QueryMasterTask extends CompositeService {
       LOG.info("The staging dir '" + stagingDir + "' is created.");
       queryContext.setStagingDir(stagingDir);
     } catch (IOException ioe) {
-      if (stagingDir != null && defaultFS.exists(stagingDir)) {
-        try {
-          defaultFS.delete(stagingDir, true);
-          LOG.info("The staging directory '" + stagingDir + "' is deleted");
-        } catch (Exception e) {
-          LOG.warn(e.getMessage());
-        }
-      }
+      LOG.warn("Creating staging dir has been failed.", ioe);
 
       throw ioe;
     }

@@ -54,7 +54,8 @@ public class SubQueryEval extends ValueSetEval {
   }
 
   @Override
-  public Datum eval(Schema schema, Tuple tuple) {
+  public Datum eval(Tuple tuple) {
+    super.eval(tuple);
     return NullDatum.get();
   }
 

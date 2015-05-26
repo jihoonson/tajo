@@ -40,7 +40,6 @@ import java.util.*;
 public class DistinctGroupbyThirdAggregationExec extends UnaryPhysicalExec {
   private static Log LOG = LogFactory.getLog(DistinctGroupbyThirdAggregationExec.class);
   private DistinctGroupbyNode plan;
-  private PhysicalExec child;
 
   private boolean finished = false;
 
@@ -56,12 +55,11 @@ public class DistinctGroupbyThirdAggregationExec extends UnaryPhysicalExec {
       throws IOException {
     super(context, plan.getInSchema(), plan.getOutSchema(), sortExec);
     this.plan = plan;
-    this.child = sortExec;
   }
 
   @Override
   public void init() throws IOException {
-    this.child.init();
+    super.init();
 
     numGroupingColumns = plan.getGroupingColumns().length;
     resultTupleLength = numGroupingColumns;
@@ -112,14 +110,14 @@ public class DistinctGroupbyThirdAggregationExec extends UnaryPhysicalExec {
     }
 
     int index = 0;
-    for (Column eachOutputColumn: outSchema.getColumns()) {
+    for (Column eachOutputColumn: outSchema.getRootColumns()) {
       // If column is avg aggregation function, outschema's column type is float
       // but groupbyResultTupleIndex's column type is protobuf
 
       int matchedIndex = -1;
-      for (Column eachIndexColumn: groupbyResultTupleIndex.keySet()) {
-        if (eachIndexColumn.getQualifiedName().equals(eachOutputColumn.getQualifiedName())) {
-          matchedIndex = groupbyResultTupleIndex.get(eachIndexColumn);
+      for (Map.Entry<Column, Integer> entry: groupbyResultTupleIndex.entrySet()) {
+        if (entry.getKey().getQualifiedName().equals(eachOutputColumn.getQualifiedName())) {
+          matchedIndex = entry.getValue();
           break;
         }
       }
@@ -254,6 +252,7 @@ public class DistinctGroupbyThirdAggregationExec extends UnaryPhysicalExec {
       aggrFunctions = groupbyNode.getAggFunctions();
       if (aggrFunctions != null) {
         for (AggregationFunctionCallEval eachFunction: aggrFunctions) {
+          eachFunction.bind(context.getEvalContext(), inSchema);
           eachFunction.setFinalPhase();
         }
       }
@@ -269,7 +268,7 @@ public class DistinctGroupbyThirdAggregationExec extends UnaryPhysicalExec {
 
     public void merge(Tuple tuple) {
       for (int i = 0; i < aggrFunctions.length; i++) {
-        aggrFunctions[i].merge(functionContexts[i], inSchema, tuple);
+        aggrFunctions[i].merge(functionContexts[i], tuple);
       }
 
       if (seq == 0 && nonDistinctAggr != null) {

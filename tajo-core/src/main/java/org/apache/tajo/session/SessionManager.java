@@ -25,6 +25,8 @@ import org.apache.hadoop.service.CompositeService;
 import org.apache.hadoop.yarn.event.Dispatcher;
 import org.apache.hadoop.yarn.event.EventHandler;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -131,7 +133,7 @@ public class SessionManager extends CompositeService implements EventHandler<Ses
       assertSessionExistence(event.getSessionId());
       touch(event.getSessionId());
     } catch (InvalidSessionException e) {
-      LOG.error(e);
+      LOG.error(e, e);
     }
 
     if (event.getType() == SessionEventType.EXPIRE) {

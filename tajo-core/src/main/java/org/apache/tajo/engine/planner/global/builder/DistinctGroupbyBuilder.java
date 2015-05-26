@@ -81,13 +81,13 @@ public class DistinctGroupbyBuilder {
         // If there is not grouping column, we can't find column alias.
         // Thus we should find the alias at Groupbynode output schema.
         if (groupbyNode.getGroupingColumns().length == 0
-            && aggFunctions.length == groupbyNode.getOutSchema().getColumns().size()) {
+            && aggFunctions.length == groupbyNode.getOutSchema().getRootColumns().size()) {
           aggFunctions[i].setAlias(groupbyNode.getOutSchema().getColumn(i).getQualifiedName());
         }
       }
 
       if (groupbyNode.getGroupingColumns().length == 0
-          && aggFunctions.length == groupbyNode.getOutSchema().getColumns().size()) {
+          && aggFunctions.length == groupbyNode.getOutSchema().getRootColumns().size()) {
         groupbyNode.setAggFunctions(aggFunctions);
       }
 
@@ -185,8 +185,6 @@ public class DistinctGroupbyBuilder {
   private DistinctGroupbyNode buildMultiLevelBaseDistinctGroupByNode(GlobalPlanContext context,
                                                                      ExecutionBlock latestExecBlock,
                                                                      GroupbyNode groupbyNode) {
-    LogicalPlan plan = context.getPlan().getLogicalPlan();
-
     /*
      Making DistinctGroupbyNode from GroupByNode
      select col1, count(distinct col2), count(distinct col3), sum(col4) from ... group by col1
@@ -249,8 +247,7 @@ public class DistinctGroupbyBuilder {
     }
 
     //Add child groupby node for each Distinct clause
-    for (String eachKey: distinctNodeBuildInfos.keySet()) {
-      DistinctGroupbyNodeBuildInfo buildInfo = distinctNodeBuildInfos.get(eachKey);
+    for (DistinctGroupbyNodeBuildInfo buildInfo: distinctNodeBuildInfos.values()) {
       GroupbyNode eachGroupbyNode = buildInfo.getGroupbyNode();
       List<AggregationFunctionCallEval> groupbyAggFunctions = buildInfo.getAggFunctions();
       String [] firstPhaseEvalNames = new String[groupbyAggFunctions.size()];
@@ -421,8 +418,7 @@ public class DistinctGroupbyBuilder {
     }
 
     //Add child groupby node for each Distinct clause
-    for (String eachKey: distinctNodeBuildInfos.keySet()) {
-      DistinctGroupbyNodeBuildInfo buildInfo = distinctNodeBuildInfos.get(eachKey);
+    for (DistinctGroupbyNodeBuildInfo buildInfo: distinctNodeBuildInfos.values()) {
       GroupbyNode eachGroupbyNode = buildInfo.getGroupbyNode();
       List<AggregationFunctionCallEval> groupbyAggFunctions = buildInfo.getAggFunctions();
       Target[] targets = new Target[eachGroupbyNode.getGroupingColumns().length + groupbyAggFunctions.size()];
@@ -676,7 +672,7 @@ public class DistinctGroupbyBuilder {
     int index = 0;
     for(GroupbyNode eachNode: secondStageDistinctNode.getSubPlans()) {
       eachNode.setInSchema(firstStageDistinctNode.getOutSchema());
-      for (Column column: eachNode.getOutSchema().getColumns()) {
+      for (Column column: eachNode.getOutSchema().getRootColumns()) {
         if (secondStageInSchema.getColumn(column) == null) {
           secondStageInSchema.addColumn(column);
         }

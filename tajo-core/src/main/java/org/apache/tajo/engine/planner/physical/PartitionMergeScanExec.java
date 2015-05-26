@@ -34,7 +34,7 @@ import java.util.List;
 /**
  * A Scanner that reads multiple partitions
  */
-public class PartitionMergeScanExec extends PhysicalExec {
+public class PartitionMergeScanExec extends ScanExec {
   private final ScanNode plan;
   private SeqScanExec currentScanner = null;
 
@@ -56,14 +56,24 @@ public class PartitionMergeScanExec extends PhysicalExec {
     inputStats = new TableStats();
   }
 
+  @Override
   public void init() throws IOException {
     for (CatalogProtos.FragmentProto fragment : fragments) {
       SeqScanExec scanExec = new SeqScanExec(context, (ScanNode) PlannerUtil.clone(null, plan),
-          new CatalogProtos.FragmentProto[] {fragment});
+          new CatalogProtos.FragmentProto[]{fragment});
       scanners.add(scanExec);
     }
     progress = 0.0f;
-    rescan();
+    initScanExecutors();
+    super.init();
+  }
+
+  private void initScanExecutors() throws IOException {
+    if (scanners.size() > 0) {
+      iterator = scanners.iterator();
+      currentScanner = iterator.next();
+      currentScanner.init();
+    }
   }
 
   @Override
@@ -76,10 +86,13 @@ public class PartitionMergeScanExec extends PhysicalExec {
         return tuple;
       }
 
+      // since read tuple is null, close the current scanner.
+      if (currentScanner != null) {
+        currentScanner.close();
+        currentScanner = null;
+      }
+
       if (iterator.hasNext()) {
-        if (currentScanner != null) {
-          currentScanner.close();
-        }
         currentScanner = iterator.next();
         currentScanner.init();
       } else {
@@ -91,11 +104,10 @@ public class PartitionMergeScanExec extends PhysicalExec {
 
   @Override
   public void rescan() throws IOException {
-    if (scanners.size() > 0) {
-      iterator = scanners.iterator();
-      currentScanner = iterator.next();
-      currentScanner.init();
+    for (SeqScanExec scanner : scanners) {
+      scanner.close();
     }
+    initScanExecutors();
   }
 
   @Override
@@ -108,12 +120,24 @@ public class PartitionMergeScanExec extends PhysicalExec {
         inputStats.merge(scannerTableStsts);
       }
     }
+    scanners.clear();
     iterator = null;
     progress = 1.0f;
   }
 
+  @Override
   public String getTableName() {
     return plan.getTableName();
+  }
+
+  @Override
+  public String getCanonicalName() {
+    return plan.getCanonicalName();
+  }
+
+  @Override
+  public CatalogProtos.FragmentProto[] getFragments() {
+    return fragments;
   }
 
   @Override

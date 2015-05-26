@@ -33,7 +33,9 @@ import org.apache.tajo.util.KeyValueSet;
 import java.io.IOException;
 import java.net.URI;
 import java.sql.*;
-import java.util.*;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -276,10 +278,10 @@ public class JdbcConnection implements Connection {
         return false;
       }
     } catch (ServiceException e) {
-      LOG.error("TajoMaster is not available.");
+      LOG.error("TajoMaster is not available.", e);
       return false;
     } catch (IOException e) {
-      LOG.error("JDBC connection is not valid.");
+      LOG.error("JDBC connection is not valid.", e);
       return false;
     }
   }

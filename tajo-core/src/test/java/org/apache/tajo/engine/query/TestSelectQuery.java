@@ -19,8 +19,13 @@
 package org.apache.tajo.engine.query;
 
 import com.google.common.collect.Lists;
-import org.apache.tajo.*;
+import org.apache.tajo.IntegrationTest;
+import org.apache.tajo.QueryId;
+import org.apache.tajo.QueryTestCaseBase;
+import org.apache.tajo.SessionVars;
+import org.apache.tajo.TajoConstants;
 import org.apache.tajo.TajoProtos.QueryState;
+import org.apache.tajo.TajoTestingCluster;
 import org.apache.tajo.catalog.CatalogService;
 import org.apache.tajo.catalog.Schema;
 import org.apache.tajo.catalog.TableDesc;
@@ -99,9 +104,25 @@ public class TestSelectQuery extends QueryTestCaseBase {
   @Test
   public final void testExplainSelect() throws Exception {
     // explain select l_orderkey, l_partkey from lineitem;
-    ResultSet res = executeQuery();
-    assertResultSet(res);
-    cleanupQuery(res);
+    testingCluster.getConfiguration().set(ConfVars.$TEST_PLAN_SHAPE_FIX_ENABLED.varname, "true");
+    try {
+      ResultSet res = executeQuery();
+      assertResultSet(res);
+      cleanupQuery(res);
+    } finally {
+      testingCluster.getConfiguration().set(ConfVars.$TEST_PLAN_SHAPE_FIX_ENABLED.varname, "false");
+    }
+  }
+
+  @Test
+  @SimpleTest(queries = {
+      @QuerySpec("explain global select l_orderkey, l_partkey from lineitem"),
+      @QuerySpec("explain global select n1.n_nationkey, n1.n_name, n2.n_name from nation n1 join nation n2 " +
+          "on n1.n_name = upper(n2.n_name) order by n1.n_nationkey"),
+      @QuerySpec("explain global select l_linenumber, count(*), count(distinct l_orderkey), sum(distinct l_orderkey) from lineitem " +
+          "group by l_linenumber having sum(distinct l_orderkey) = 6")})
+  public final void testExplainSelectPhysical() throws Exception {
+    runSimpleTests();
   }
 
   @Test
@@ -352,7 +373,7 @@ public class TestSelectQuery extends QueryTestCaseBase {
     CatalogService catalog = cluster.getMaster().getCatalog();
     assertTrue(catalog.existsTable(DEFAULT_DATABASE_NAME, "orderkeys"));
     TableDesc orderKeys = catalog.getTableDesc(DEFAULT_DATABASE_NAME, "orderkeys");
-    if (!cluster.isHCatalogStoreRunning()) {
+    if (!cluster.isHiveCatalogStoreRunning()) {
       assertEquals(5, orderKeys.getStats().getNumRows().intValue());
     }
   }
@@ -374,7 +395,7 @@ public class TestSelectQuery extends QueryTestCaseBase {
 
   @Test
   public final void testDatabaseRef() throws Exception {
-    if (!testingCluster.isHCatalogStoreRunning()) {
+    if (!testingCluster.isHiveCatalogStoreRunning()) {
       executeString("CREATE DATABASE \"TestSelectQuery\"").close();
       executeString("CREATE TABLE \"TestSelectQuery\".\"LineItem\" AS SELECT * FROM default.lineitem" ).close();
 
@@ -476,12 +497,13 @@ public class TestSelectQuery extends QueryTestCaseBase {
     schema.addColumn("id", Type.INT4);
     schema.addColumn("name", Type.TEXT);
     String[] data = new String[]{ "1|table11-1", "2|table11-2", "3|table11-3", "4|table11-4", "5|table11-5" };
-    TajoTestingCluster.createTable("table11", schema, tableOptions, data, 2);
+    TajoTestingCluster.createTable("testNowInMultipleTasks".toLowerCase(), schema, tableOptions, data, 2);
 
     try {
       testingCluster.setAllTajoDaemonConfValue(ConfVars.$TEST_MIN_TASK_NUM.varname, "2");
 
-      ResultSet res = executeString("select concat(substr(to_char(now(),'yyyymmddhh24miss'), 1, 14), 'aaa'), sleep(1) from table11");
+      ResultSet res = executeString("select concat(substr(to_char(now(),'yyyymmddhh24miss'), 1, 14), 'aaa'), sleep(1) " +
+          "from testNowInMultipleTasks");
 
       String nowValue = null;
       int numRecords = 0;
@@ -497,7 +519,8 @@ public class TestSelectQuery extends QueryTestCaseBase {
 
       res.close();
 
-      res = executeString("select concat(substr(to_char(current_timestamp,'yyyymmddhh24miss'), 1, 14), 'aaa'), sleep(1) from table11");
+      res = executeString("select concat(substr(to_char(current_timestamp,'yyyymmddhh24miss'), 1, 14), 'aaa'), sleep(1) " +
+          "from testNowInMultipleTasks");
 
       nowValue = null;
       numRecords = 0;
@@ -513,7 +536,7 @@ public class TestSelectQuery extends QueryTestCaseBase {
     } finally {
       testingCluster.setAllTajoDaemonConfValue(ConfVars.$TEST_MIN_TASK_NUM.varname,
           ConfVars.$TEST_MIN_TASK_NUM.defaultVal);
-      executeString("DROP TABLE table11 PURGE");
+      executeString("DROP TABLE testNowInMultipleTasks PURGE");
     }
   }
 
@@ -634,5 +657,95 @@ public class TestSelectQuery extends QueryTestCaseBase {
       // restore the config
       testingCluster.getConfiguration().setSystemTimezone(TimeZone.getTimeZone("GMT"));
     }
+  }
+  
+  @Test
+  public void testMultiBytesDelimiter1() throws Exception {
+    executeDDL("multibytes_delimiter_table1_ddl.sql", "multibytes_delimiter1");
+    try {
+      ResultSet res = executeQuery();
+      assertResultSet(res);
+      cleanupQuery(res);
+    } finally {
+      executeString("DROP TABLE table1");
+    }
+  }
+  
+  @Test
+  public void testMultiBytesDelimiter2() throws Exception {
+    executeDDL("multibytes_delimiter_table2_ddl.sql", "multibytes_delimiter2");
+    try {
+      ResultSet res = executeQuery();
+      assertResultSet(res);
+      cleanupQuery(res);
+    } finally {
+      executeString("DROP TABLE table2");
+    }
+  }
+
+  @Test
+  public void testMultiBytesDelimiter3() throws Exception {
+    executeDDL("multibytes_delimiter_table3_ddl.sql", "multibytes_delimiter1");
+    try {
+      ResultSet res = executeQuery();
+      assertResultSet(res);
+      cleanupQuery(res);
+    } finally {
+      executeString("DROP TABLE table1");
+    }
+  }
+
+  @Test
+  public void testMultiBytesDelimiter4() throws Exception {
+    executeDDL("multibytes_delimiter_table4_ddl.sql", "multibytes_delimiter2");
+    try {
+      ResultSet res = executeQuery();
+      assertResultSet(res);
+      cleanupQuery(res);
+    } finally {
+      executeString("DROP TABLE table2");
+    }
+  }
+
+  @Test
+  public void testSelectPythonFuncs() throws Exception {
+    ResultSet res = executeQuery();
+    assertResultSet(res);
+    cleanupQuery(res);
+  }
+
+  @Test
+  public void testSelectWithPredicateOnPythonFunc() throws Exception {
+    ResultSet res = executeQuery();
+    assertResultSet(res);
+    cleanupQuery(res);
+  }
+
+  @Test
+  public void testNestedPythonFunction() throws Exception {
+    ResultSet res = executeQuery();
+    assertResultSet(res);
+    cleanupQuery(res);
+  }
+
+  @Test
+  public void testSelectWithParentheses1() throws Exception {
+    ResultSet res = executeQuery();
+    assertResultSet(res);
+    cleanupQuery(res);
+  }
+
+  @Test
+  public void testSelectWithParentheses2() throws Exception {
+    ResultSet res = executeQuery();
+    assertResultSet(res);
+    cleanupQuery(res);
+  }
+
+  @Test
+  public void testSelectOnSessionTable() throws Exception {
+    ResultSet res = executeQuery();
+    assertResultSet(res);
+    cleanupQuery(res);
   }
 }

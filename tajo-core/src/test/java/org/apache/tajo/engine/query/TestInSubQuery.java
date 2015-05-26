@@ -43,4 +43,39 @@ public class TestInSubQuery extends QueryTestCaseBase {
     assertResultSet(res);
     cleanupQuery(res);
   }
+
+  @Test
+  public final void testInSubQueryWithOtherConditions() throws Exception {
+    ResultSet res = executeString("select n_name from nation where n_regionkey in (select r_regionkey from region) and n_nationkey > 1;");
+    assertResultSet(res);
+    cleanupQuery(res);
+  }
+
+  @Test
+  public final void testMultipleInSubQuery() throws Exception {
+    ResultSet res = executeString("select n_name from nation where n_regionkey in (select r_regionkey from region) and n_nationkey in (select s_nationkey from supplier);");
+    assertResultSet(res);
+    cleanupQuery(res);
+  }
+
+  @Test
+  public final void testInSubQueryWithJoin() throws Exception {
+    ResultSet res = executeString("select n_name from nation, supplier where n_regionkey in (select r_regionkey from region) and n_nationkey = s_nationkey;");
+    assertResultSet(res);
+    cleanupQuery(res);
+  }
+
+  @Test
+  public final void testInSubQueryWithTableSubQuery() throws Exception {
+    ResultSet res = executeString("select n_name from (select * from nation) as T where n_regionkey in (select r_regionkey from region);");
+    assertResultSet(res);
+    cleanupQuery(res);
+  }
+
+  @Test
+  public final void testNotInSubQuery() throws Exception {
+    ResultSet res = executeString("select n_name from nation where n_nationkey not in (select r_regionkey from region);");
+    assertResultSet(res);
+    cleanupQuery(res);
+  }
 }

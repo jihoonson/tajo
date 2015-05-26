@@ -44,7 +44,7 @@ public class Worker implements EventHandler<WorkerEvent>, Comparable<Worker> {
   private long lastHeartbeatTime;
 
   /** Resource capability */
-  private WorkerResource resource;
+  private final WorkerResource resource;
 
   /** Worker connection information */
   private WorkerConnectionInfo connectionInfo;
@@ -161,13 +161,42 @@ public class Worker implements EventHandler<WorkerEvent>, Comparable<Worker> {
     return connectionInfo.compareTo(o.connectionInfo);
   }
 
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) return true;
+    if (o == null || getClass() != o.getClass()) return false;
+
+    Worker worker = (Worker) o;
+
+    if (lastHeartbeatTime != worker.lastHeartbeatTime) return false;
+    if (connectionInfo != null ? !connectionInfo.equals(worker.connectionInfo) : worker.connectionInfo != null)
+      return false;
+    if (readLock != null ? !readLock.equals(worker.readLock) : worker.readLock != null) return false;
+    if (resource != null ? !resource.equals(worker.resource) : worker.resource != null) return false;
+    if (rmContext != null ? !rmContext.equals(worker.rmContext) : worker.rmContext != null) return false;
+    if (stateMachine != null ? !stateMachine.equals(worker.stateMachine) : worker.stateMachine != null) return false;
+    if (writeLock != null ? !writeLock.equals(worker.writeLock) : worker.writeLock != null) return false;
+
+    return true;
+  }
+
+  @Override
+  public int hashCode() {
+    int result = readLock != null ? readLock.hashCode() : 0;
+    result = 31 * result + (writeLock != null ? writeLock.hashCode() : 0);
+    result = 31 * result + (rmContext != null ? rmContext.hashCode() : 0);
+    result = 31 * result + (int) (lastHeartbeatTime ^ (lastHeartbeatTime >>> 32));
+    result = 31 * result + (resource != null ? resource.hashCode() : 0);
+    result = 31 * result + (connectionInfo != null ? connectionInfo.hashCode() : 0);
+    result = 31 * result + (stateMachine != null ? stateMachine.hashCode() : 0);
+    return result;
+  }
+
   public static class AddNodeTransition implements SingleArcTransition<Worker, WorkerEvent> {
     @Override
     public void transition(Worker worker, WorkerEvent workerEvent) {
 
-      if(worker.getResource().isQueryMasterMode()) {
-        worker.rmContext.getQueryMasterWorker().add(worker.getWorkerId());
-      }
+      worker.rmContext.getQueryMasterWorker().add(worker.getWorkerId());
       LOG.info("Worker with " + worker.getResource() + " is joined to Tajo cluster");
     }
   }
@@ -177,18 +206,27 @@ public class Worker implements EventHandler<WorkerEvent>, Comparable<Worker> {
 
     @Override
     public WorkerState transition(Worker worker, WorkerEvent event) {
-      WorkerStatusEvent statusEvent = (WorkerStatusEvent) event;
-
-      // TODO - the synchronization scope using rmContext is too coarsen.
-      synchronized (worker.rmContext) {
-        worker.setLastHeartbeatTime(System.currentTimeMillis());
-        worker.getResource().setNumRunningTasks(statusEvent.getRunningTaskNum());
-        worker.getResource().setMaxHeap(statusEvent.maxHeap());
-        worker.getResource().setFreeHeap(statusEvent.getFreeHeap());
-        worker.getResource().setTotalHeap(statusEvent.getTotalHeap());
+      if (!(event instanceof WorkerStatusEvent)) {
+        throw new IllegalArgumentException("event should be a WorkerStatusEvent type.");
       }
+      WorkerStatusEvent statusEvent = (WorkerStatusEvent) event;
+      worker.updateStatus(statusEvent);
 
       return WorkerState.RUNNING;
+    }
+  }
+
+  private void updateStatus(WorkerStatusEvent statusEvent) {
+    this.writeLock.lock();
+
+    try {
+      lastHeartbeatTime = System.currentTimeMillis();
+      resource.setNumRunningTasks(statusEvent.getRunningTaskNum());
+      resource.setMaxHeap(statusEvent.maxHeap());
+      resource.setFreeHeap(statusEvent.getFreeHeap());
+      resource.setTotalHeap(statusEvent.getTotalHeap());
+    } finally {
+      this.writeLock.unlock();
     }
   }
 
@@ -212,6 +250,9 @@ public class Worker implements EventHandler<WorkerEvent>, Comparable<Worker> {
 
     @Override
     public void transition(Worker worker, WorkerEvent workerEvent) {
+      if (!(workerEvent instanceof WorkerReconnectEvent)) {
+        throw new IllegalArgumentException("workerEvent should be a WorkerReconnectEvent type.");
+      }
       WorkerReconnectEvent castedEvent = (WorkerReconnectEvent) workerEvent;
 
       Worker newWorker = castedEvent.getWorker();

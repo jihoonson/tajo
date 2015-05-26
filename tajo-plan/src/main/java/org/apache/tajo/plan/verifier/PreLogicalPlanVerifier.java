@@ -83,7 +83,6 @@ public class PreLogicalPlanVerifier extends BaseAlgebraVisitor<PreLogicalPlanVer
     super.visitProjection(context, stack, expr);
 
     Set<String> names = TUtil.newHashSet();
-    Expr [] distinctValues = null;
 
     for (NamedExpr namedExpr : expr.getNamedExprs()) {
 
@@ -93,22 +92,6 @@ public class PreLogicalPlanVerifier extends BaseAlgebraVisitor<PreLogicalPlanVer
               namedExpr.getAlias()));
         } else {
           names.add(namedExpr.getAlias());
-        }
-      }
-
-      Set<GeneralSetFunctionExpr> exprs = ExprFinder.finds(namedExpr.getExpr(), OpType.GeneralSetFunction);
-
-      // Currently, avg functions with distinct aggregation are not supported.
-      // This code does not allow users to use avg functions with distinct aggregation.
-      if (distinctValues != null) {
-        for (GeneralSetFunctionExpr setFunction : exprs) {
-          if (setFunction.getSignature().equalsIgnoreCase("avg")) {
-            if (setFunction.isDistinct()) {
-              throw new PlanningException("avg(distinct) function is not supported yet.");
-            } else {
-              throw new PlanningException("avg() function with distinct aggregation functions is not supported yet.");
-            }
-          }
         }
       }
     }
@@ -198,8 +181,7 @@ public class PreLogicalPlanVerifier extends BaseAlgebraVisitor<PreLogicalPlanVer
   private boolean assertSupportedStoreType(VerificationState state, String name) {
     Preconditions.checkNotNull(name);
 
-    CatalogProtos.StoreType storeType = CatalogUtil.getStoreType(name);
-    if (storeType == null || storeType == CatalogProtos.StoreType.RAW) {
+    if (name.equalsIgnoreCase("RAW")) {
       state.addVerification(String.format("Store format %s is not supported.", name));
       return false;
     }
@@ -319,8 +301,8 @@ public class PreLogicalPlanVerifier extends BaseAlgebraVisitor<PreLogicalPlanVer
               return null;
             }
             if (table.hasPartition()) {
-              int columnSize = table.getSchema().getColumns().size();
-              columnSize += table.getPartitionMethod().getExpressionSchema().getColumns().size();
+              int columnSize = table.getSchema().getRootColumns().size();
+              columnSize += table.getPartitionMethod().getExpressionSchema().getRootColumns().size();
               if (projectColumnNum < columnSize) {
                 context.state.addVerification("INSERT has smaller expressions than target columns");
               } else if (projectColumnNum > columnSize) {

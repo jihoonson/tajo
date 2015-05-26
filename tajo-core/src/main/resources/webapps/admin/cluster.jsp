@@ -31,9 +31,15 @@
 <%@ page import="org.apache.tajo.webapp.StaticHttpServer" %>
 <%@ page import="java.util.*" %>
 <%@ page import="org.apache.tajo.service.ServiceTracker" %>
+<%@ page import="java.net.InetSocketAddress" %>
 
 <%
   TajoMaster master = (TajoMaster) StaticHttpServer.getInstance().getAttribute("tajo.info.server.object");
+
+  String[] masterName = master.getMasterName().split(":");
+  InetSocketAddress socketAddress = new InetSocketAddress(masterName[0], Integer.parseInt(masterName[1]));
+  String masterLabel = socketAddress.getAddress().getHostName()+ ":" + socketAddress.getPort();
+
   Map<Integer, Worker> workers = master.getContext().getResourceManager().getWorkers();
   List<Integer> wokerKeys = new ArrayList<Integer>(workers.keySet());
   Collections.sort(wokerKeys);
@@ -48,26 +54,17 @@
   Set<Worker> deadQueryMasters = new TreeSet<Worker>();
 
   for(Worker eachWorker: workers.values()) {
-    if(eachWorker.getResource().isQueryMasterMode()) {
-      liveQueryMasters.add(eachWorker);
-      runningQueryMasterTasks += eachWorker.getResource().getNumQueryMasterTasks();
-    }
-
-    if(eachWorker.getResource().isTaskRunnerMode()) {
-      liveWorkers.add(eachWorker);
-    }
+    liveQueryMasters.add(eachWorker);
+    liveWorkers.add(eachWorker);
+    runningQueryMasterTasks += eachWorker.getResource().getNumQueryMasterTasks();
   }
 
   for (Worker inactiveWorker : master.getContext().getResourceManager().getInactiveWorkers().values()) {
     WorkerState state = inactiveWorker.getState();
 
     if (state == WorkerState.LOST) {
-      if (inactiveWorker.getResource().isQueryMasterMode()) {
-        deadQueryMasters.add(inactiveWorker);
-      }
-      if (inactiveWorker.getResource().isTaskRunnerMode()) {
-        deadWorkers.add(inactiveWorker);
-      }
+      deadQueryMasters.add(inactiveWorker);
+      deadWorkers.add(inactiveWorker);
     } else if (state == WorkerState.DECOMMISSIONED) {
       decommissionWorkers.add(inactiveWorker);
     }
@@ -81,7 +78,7 @@
 
   String activeLabel = "";
   if (haService != null) {
-    if (haService.isActiveStatus()) {
+    if (haService.isActiveMaster()) {
       activeLabel = "<font color='#1e90ff'>(active)</font>";
     } else {
       activeLabel = "<font color='#1e90ff'>(backup)</font>";
@@ -114,7 +111,7 @@
 <body>
 <%@ include file="header.jsp"%>
 <div class='contents'>
-  <h2>Tajo Master: <%=master.getMasterName()%> <%=activeLabel%></h2>
+  <h2>Tajo Master: <%=masterLabel%> <%=activeLabel%></h2>
   <div>Live:<%=numLiveMasters%>, Dead: <%=deadMasterHtml%>, Total: <%=masters.size()%></div>
 <%
   if (masters != null) {

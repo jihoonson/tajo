@@ -31,7 +31,7 @@ public class DDLBuilder {
 
     sb.append("--\n")
       .append("-- Name: ").append(CatalogUtil.denormalizeIdentifier(desc.getName())).append("; Type: TABLE;")
-      .append(" Storage: ").append(CatalogUtil.getStoreTypeString(desc.getMeta().getStoreType()));
+      .append(" Storage: ").append(desc.getMeta().getStoreType());
     sb.append("\n-- Path: ").append(desc.getPath());
     sb.append("\n--\n");
     sb.append("CREATE EXTERNAL TABLE ").append(CatalogUtil.denormalizeIdentifier(desc.getName()));
@@ -54,7 +54,7 @@ public class DDLBuilder {
 
     sb.append("--\n")
         .append("-- Name: ").append(CatalogUtil.denormalizeIdentifier(desc.getName())).append("; Type: TABLE;")
-        .append(" Storage: ").append(CatalogUtil.getStoreTypeString(desc.getMeta().getStoreType()));
+        .append(" Storage: ").append(desc.getMeta().getStoreType());
     sb.append("\n--\n");
     sb.append("CREATE TABLE ").append(CatalogUtil.denormalizeIdentifier(desc.getName()));
     buildSchema(sb, desc.getSchema());
@@ -69,7 +69,7 @@ public class DDLBuilder {
     return sb.toString();
   }
 
-  private static void buildSchema(StringBuilder sb, Schema schema) {
+  public static void buildSchema(StringBuilder sb, Schema schema) {
     boolean first = true;
 
     sb.append(" (");
@@ -81,17 +81,14 @@ public class DDLBuilder {
       }
 
       sb.append(CatalogUtil.denormalizeIdentifier(column.getSimpleName())).append(" ");
-      TajoDataTypes.DataType dataType = column.getDataType();
-      sb.append(dataType.getType().name());
-      if (column.getDataType().hasLength() && column.getDataType().getLength() > 0) {
-        sb.append(" (").append(column.getDataType().getLength()).append(")");
-      }
+      TypeDesc typeDesc = column.getTypeDesc();
+      sb.append(typeDesc);
     }
     sb.append(")");
   }
 
   private static void buildUsingClause(StringBuilder sb, TableMeta meta) {
-    sb.append(" USING " + CatalogUtil.getStoreTypeString(meta.getStoreType()));
+    sb.append(" USING " + meta.getStoreType());
   }
 
   private static void buildWithClause(StringBuilder sb, TableMeta meta) {

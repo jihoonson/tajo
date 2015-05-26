@@ -18,30 +18,16 @@
 
 package org.apache.tajo.master.exec;
 
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Stack;
-
+import com.google.common.collect.Lists;
+import com.google.protobuf.ByteString;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.tajo.QueryId;
+import org.apache.tajo.SessionVars;
 import org.apache.tajo.TaskAttemptId;
 import org.apache.tajo.TaskId;
-import org.apache.tajo.catalog.CatalogUtil;
-import org.apache.tajo.catalog.Column;
-import org.apache.tajo.catalog.Schema;
-import org.apache.tajo.catalog.TableDesc;
-import org.apache.tajo.catalog.TableMeta;
-import org.apache.tajo.catalog.proto.CatalogProtos.ColumnProto;
-import org.apache.tajo.catalog.proto.CatalogProtos.DatabaseProto;
-import org.apache.tajo.catalog.proto.CatalogProtos.IndexProto;
-import org.apache.tajo.catalog.proto.CatalogProtos.StoreType;
-import org.apache.tajo.catalog.proto.CatalogProtos.TableDescriptorProto;
-import org.apache.tajo.catalog.proto.CatalogProtos.TableOptionProto;
-import org.apache.tajo.catalog.proto.CatalogProtos.TablePartitionProto;
-import org.apache.tajo.catalog.proto.CatalogProtos.TableStatsProto;
-import org.apache.tajo.catalog.proto.CatalogProtos.TablespaceProto;
+import org.apache.tajo.catalog.*;
+import org.apache.tajo.catalog.proto.CatalogProtos.*;
 import org.apache.tajo.catalog.statistics.TableStats;
 import org.apache.tajo.common.TajoDataTypes.DataType;
 import org.apache.tajo.conf.TajoConf;
@@ -56,21 +42,27 @@ import org.apache.tajo.engine.planner.global.MasterPlan;
 import org.apache.tajo.engine.planner.physical.PhysicalExec;
 import org.apache.tajo.engine.query.QueryContext;
 import org.apache.tajo.master.TajoMaster.MasterContext;
+import org.apache.tajo.master.rm.Worker;
+import org.apache.tajo.master.rm.WorkerResource;
+import org.apache.tajo.plan.InvalidQueryException;
 import org.apache.tajo.plan.LogicalPlan;
 import org.apache.tajo.plan.PlanningException;
 import org.apache.tajo.plan.expr.EvalNode;
 import org.apache.tajo.plan.logical.IndexScanNode;
 import org.apache.tajo.plan.logical.LogicalNode;
 import org.apache.tajo.plan.logical.ScanNode;
+import org.apache.tajo.session.InvalidSessionException;
+import org.apache.tajo.session.Session;
 import org.apache.tajo.storage.RowStoreUtil;
+import org.apache.tajo.storage.RowStoreUtil.RowStoreEncoder;
 import org.apache.tajo.storage.Tuple;
 import org.apache.tajo.storage.VTuple;
-import org.apache.tajo.storage.RowStoreUtil.RowStoreEncoder;
 import org.apache.tajo.util.KeyValueSet;
 import org.apache.tajo.util.TUtil;
 import org.apache.tajo.worker.TaskAttemptContext;
 
-import com.google.protobuf.ByteString;
+import java.io.IOException;
+import java.util.*;
 
 public class NonForwardQueryResultSystemScanner implements NonForwardQueryResultScanner {
   
@@ -120,7 +112,11 @@ public class NonForwardQueryResultSystemScanner implements NonForwardQueryResult
         break;
       }
     }
-    
+
+    if (leafBlock == null) {
+      throw new InvalidQueryException("Global planner could not find any leaf block.");
+    }
+
     taskContext = new TaskAttemptContext(queryContext, null,
         new TaskAttemptId(new TaskId(leafBlock.getId(), 0), 0),
         null, null);
@@ -128,7 +124,7 @@ public class NonForwardQueryResultSystemScanner implements NonForwardQueryResult
       .createPlan(taskContext, leafBlock.getPlan());
     
     tableDesc = new TableDesc("table_"+System.currentTimeMillis(), physicalExec.getSchema(), 
-        new TableMeta(StoreType.SYSTEM, new KeyValueSet()), null);
+        new TableMeta("SYSTEM", new KeyValueSet()), null);
     outSchema = physicalExec.getSchema();
     encoder = RowStoreUtil.createEncoder(getLogicalSchema());
     
@@ -152,7 +148,7 @@ public class NonForwardQueryResultSystemScanner implements NonForwardQueryResult
   private List<Tuple> getTablespaces(Schema outSchema) {
     List<TablespaceProto> tablespaces = masterContext.getCatalog().getAllTablespaces();
     List<Tuple> tuples = new ArrayList<Tuple>(tablespaces.size());
-    List<Column> columns = outSchema.getColumns();
+    List<Column> columns = outSchema.getRootColumns();
     Tuple aTuple;
     
     for (TablespaceProto tablespace: tablespaces) {
@@ -187,7 +183,7 @@ public class NonForwardQueryResultSystemScanner implements NonForwardQueryResult
   private List<Tuple> getDatabases(Schema outSchema) {
     List<DatabaseProto> databases = masterContext.getCatalog().getAllDatabases();
     List<Tuple> tuples = new ArrayList<Tuple>(databases.size());
-    List<Column> columns = outSchema.getColumns();
+    List<Column> columns = outSchema.getRootColumns();
     Tuple aTuple;
     
     for (DatabaseProto database: databases) {
@@ -217,7 +213,7 @@ public class NonForwardQueryResultSystemScanner implements NonForwardQueryResult
   private List<Tuple> getTables(Schema outSchema) {
     List<TableDescriptorProto> tables = masterContext.getCatalog().getAllTables();
     List<Tuple> tuples = new ArrayList<Tuple>(tables.size());
-    List<Column> columns = outSchema.getColumns();
+    List<Column> columns = outSchema.getRootColumns();
     Tuple aTuple;
     
     for (TableDescriptorProto table: tables) {
@@ -253,7 +249,7 @@ public class NonForwardQueryResultSystemScanner implements NonForwardQueryResult
   private List<Tuple> getColumns(Schema outSchema) {
     List<ColumnProto> columnsList = masterContext.getCatalog().getAllColumns();
     List<Tuple> tuples = new ArrayList<Tuple>(columnsList.size());
-    List<Column> columns = outSchema.getColumns();
+    List<Column> columns = outSchema.getRootColumns();
     Tuple aTuple;
     int columnId = 1, prevtid = -1, tid = 0;
     
@@ -301,7 +297,7 @@ public class NonForwardQueryResultSystemScanner implements NonForwardQueryResult
   private List<Tuple> getIndexes(Schema outSchema) {
     List<IndexProto> indexList = masterContext.getCatalog().getAllIndexes();
     List<Tuple> tuples = new ArrayList<Tuple>(indexList.size());
-    List<Column> columns = outSchema.getColumns();
+    List<Column> columns = outSchema.getRootColumns();
     Tuple aTuple;
     
     for (IndexProto index: indexList) {
@@ -340,7 +336,7 @@ public class NonForwardQueryResultSystemScanner implements NonForwardQueryResult
   private List<Tuple> getAllTableOptions(Schema outSchema) {
     List<TableOptionProto> optionList = masterContext.getCatalog().getAllTableOptions();
     List<Tuple> tuples = new ArrayList<Tuple>(optionList.size());
-    List<Column> columns = outSchema.getColumns();
+    List<Column> columns = outSchema.getRootColumns();
     Tuple aTuple;
     
     for (TableOptionProto option: optionList) {
@@ -367,7 +363,7 @@ public class NonForwardQueryResultSystemScanner implements NonForwardQueryResult
   private List<Tuple> getAllTableStats(Schema outSchema) {
     List<TableStatsProto> statList = masterContext.getCatalog().getAllTableStats();
     List<Tuple> tuples = new ArrayList<Tuple>(statList.size());
-    List<Column> columns = outSchema.getColumns();
+    List<Column> columns = outSchema.getRootColumns();
     Tuple aTuple;
     
     for (TableStatsProto stat: statList) {
@@ -394,7 +390,7 @@ public class NonForwardQueryResultSystemScanner implements NonForwardQueryResult
   private List<Tuple> getAllPartitions(Schema outSchema) {
     List<TablePartitionProto> partitionList = masterContext.getCatalog().getAllPartitions();
     List<Tuple> tuples = new ArrayList<Tuple>(partitionList.size());
-    List<Column> columns = outSchema.getColumns();
+    List<Column> columns = outSchema.getRootColumns();
     Tuple aTuple;
     
     for (TablePartitionProto partition: partitionList) {
@@ -403,8 +399,8 @@ public class NonForwardQueryResultSystemScanner implements NonForwardQueryResult
       for (int fieldId = 0; fieldId < columns.size(); fieldId++) {
         Column column = columns.get(fieldId);
         
-        if ("pid".equalsIgnoreCase(column.getSimpleName())) {
-          aTuple.put(fieldId, DatumFactory.createInt4(partition.getPid()));
+        if ("partition_id".equalsIgnoreCase(column.getSimpleName())) {
+          aTuple.put(fieldId, DatumFactory.createInt4(partition.getPartitionId()));
         } else if ("tid".equalsIgnoreCase(column.getSimpleName())) {
           aTuple.put(fieldId, DatumFactory.createInt4(partition.getTid()));
         } else if ("partition_name".equalsIgnoreCase(column.getSimpleName())) {
@@ -413,8 +409,6 @@ public class NonForwardQueryResultSystemScanner implements NonForwardQueryResult
           } else {
             aTuple.put(fieldId, DatumFactory.createNullDatum());
           }
-        } else if ("ordinal_position".equalsIgnoreCase(column.getSimpleName())) {
-          aTuple.put(fieldId, DatumFactory.createInt4(partition.getOrdinalPosition()));
         } else if ("path".equalsIgnoreCase(column.getSimpleName())) {
           aTuple.put(fieldId, DatumFactory.createText(partition.getPath()));
         }
@@ -424,6 +418,151 @@ public class NonForwardQueryResultSystemScanner implements NonForwardQueryResult
     }
     
     return tuples;
+  }
+  
+  private Tuple getQueryMasterTuple(Schema outSchema, Worker aWorker) {
+    List<Column> columns = outSchema.getRootColumns();
+    Tuple aTuple = new VTuple(outSchema.size());
+    WorkerResource aResource = aWorker.getResource();
+    
+    for (int fieldId = 0; fieldId < columns.size(); fieldId++) {
+      Column column = columns.get(fieldId);
+      
+      if ("host".equalsIgnoreCase(column.getSimpleName())) {
+        if (aWorker.getConnectionInfo() != null && aWorker.getConnectionInfo().getHost() != null) {
+          aTuple.put(fieldId, DatumFactory.createText(aWorker.getConnectionInfo().getHost()));
+        } else {
+          aTuple.put(fieldId, DatumFactory.createNullDatum());
+        }
+      } else if ("port".equalsIgnoreCase(column.getSimpleName())) {
+        if (aWorker.getConnectionInfo() != null) {
+          aTuple.put(fieldId, DatumFactory.createInt4(aWorker.getConnectionInfo().getQueryMasterPort()));
+        } else {
+          aTuple.put(fieldId, DatumFactory.createNullDatum());
+        }
+      } else if ("type".equalsIgnoreCase(column.getSimpleName())) {
+        aTuple.put(fieldId, DatumFactory.createText("QueryMaster"));
+      } else if ("status".equalsIgnoreCase(column.getSimpleName())) {
+        aTuple.put(fieldId, DatumFactory.createText(aWorker.getState().toString()));
+      } else if ("RUNNING".equalsIgnoreCase(aWorker.getState().toString())) {
+        if ("running_tasks".equalsIgnoreCase(column.getSimpleName())) {
+          aTuple.put(fieldId, DatumFactory.createInt4(aResource.getNumQueryMasterTasks()));
+        } else if ("free_heap".equalsIgnoreCase(column.getSimpleName())) {
+          aTuple.put(fieldId, DatumFactory.createInt8(aResource.getFreeHeap()));
+        } else if ("max_heap".equalsIgnoreCase(column.getSimpleName())) {
+          aTuple.put(fieldId, DatumFactory.createInt8(aResource.getMaxHeap()));
+        } else if ("last_heartbeat_ts".equalsIgnoreCase(column.getSimpleName())) {
+          if (aWorker.getLastHeartbeatTime() > 0) {
+            aTuple.put(fieldId, DatumFactory.createTimestmpDatumWithJavaMillis(aWorker.getLastHeartbeatTime()));
+          } else {
+            aTuple.put(fieldId, DatumFactory.createNullDatum());
+          }
+        }
+      } else {
+        aTuple.put(fieldId, DatumFactory.createNullDatum());
+      }
+    }
+    
+    return aTuple;
+  }
+  
+  private Tuple getWorkerTuple(Schema outSchema, Worker aWorker) {
+    List<Column> columns = outSchema.getRootColumns();
+    Tuple aTuple = new VTuple(outSchema.size());
+    WorkerResource aResource = aWorker.getResource();
+    
+    for (int fieldId = 0; fieldId < columns.size(); fieldId++) {
+      Column column = columns.get(fieldId);
+      
+      if ("host".equalsIgnoreCase(column.getSimpleName())) {
+        if (aWorker.getConnectionInfo() != null && aWorker.getConnectionInfo().getHost() != null) {
+          aTuple.put(fieldId, DatumFactory.createText(aWorker.getConnectionInfo().getHost()));
+        } else {
+          aTuple.put(fieldId, DatumFactory.createNullDatum());
+        }
+      } else if ("port".equalsIgnoreCase(column.getSimpleName())) {
+        if (aWorker.getConnectionInfo() != null) {
+          aTuple.put(fieldId, DatumFactory.createInt4(aWorker.getConnectionInfo().getPeerRpcPort()));
+        } else {
+          aTuple.put(fieldId, DatumFactory.createNullDatum());
+        }
+      } else if ("type".equalsIgnoreCase(column.getSimpleName())) {
+        aTuple.put(fieldId, DatumFactory.createText("Worker"));
+      } else if ("status".equalsIgnoreCase(column.getSimpleName())) {
+        aTuple.put(fieldId, DatumFactory.createText(aWorker.getState().toString()));
+      } else if ("RUNNING".equalsIgnoreCase(aWorker.getState().toString())) {
+        if ("total_cpu".equalsIgnoreCase(column.getSimpleName())) {
+          aTuple.put(fieldId, DatumFactory.createInt4(aResource.getCpuCoreSlots()));
+        } else if ("used_mem".equalsIgnoreCase(column.getSimpleName())) {
+          aTuple.put(fieldId, DatumFactory.createInt8(aResource.getUsedMemoryMB()*1048576l));
+        } else if ("total_mem".equalsIgnoreCase(column.getSimpleName())) {
+          aTuple.put(fieldId, DatumFactory.createInt8(aResource.getMemoryMB()*1048576l));
+        } else if ("free_heap".equalsIgnoreCase(column.getSimpleName())) {
+          aTuple.put(fieldId, DatumFactory.createInt8(aResource.getFreeHeap()));
+        } else if ("max_heap".equalsIgnoreCase(column.getSimpleName())) {
+          aTuple.put(fieldId, DatumFactory.createInt8(aResource.getMaxHeap()));
+        } else if ("used_diskslots".equalsIgnoreCase(column.getSimpleName())) {
+          aTuple.put(fieldId, DatumFactory.createFloat4(aResource.getUsedDiskSlots()));
+        } else if ("total_diskslots".equalsIgnoreCase(column.getSimpleName())) {
+          aTuple.put(fieldId, DatumFactory.createFloat4(aResource.getDiskSlots()));
+        } else if ("running_tasks".equalsIgnoreCase(column.getSimpleName())) {
+          aTuple.put(fieldId, DatumFactory.createInt4(aResource.getNumRunningTasks()));
+        } else if ("last_heartbeat_ts".equalsIgnoreCase(column.getSimpleName())) {
+          if (aWorker.getLastHeartbeatTime() > 0) {
+            aTuple.put(fieldId, DatumFactory.createTimestmpDatumWithJavaMillis(aWorker.getLastHeartbeatTime()));
+          } else {
+            aTuple.put(fieldId, DatumFactory.createNullDatum());
+          }
+        }
+      }
+      else {
+        aTuple.put(fieldId, DatumFactory.createNullDatum());
+      }
+    }
+    
+    return aTuple;
+  }
+  
+  private List<Tuple> getClusterInfo(Schema outSchema) {
+    Map<Integer, Worker> workerMap = masterContext.getResourceManager().getWorkers();
+    List<Tuple> tuples;
+    List<Worker> queryMasterList = new ArrayList<Worker>();
+    List<Worker> workerList = new ArrayList<Worker>();
+    
+    for (Worker aWorker: workerMap.values()) {
+      queryMasterList.add(aWorker);
+      workerList.add(aWorker);
+    }
+    
+    tuples = new ArrayList<Tuple>(queryMasterList.size() + workerList.size());
+    for (Worker queryMaster: queryMasterList) {
+      tuples.add(getQueryMasterTuple(outSchema, queryMaster));
+    }
+    
+    for (Worker worker: workerList) {
+      tuples.add(getWorkerTuple(outSchema, worker));
+    }
+    
+    return tuples;
+  }
+
+  private List<Tuple> getSessionInfo(Schema outSchema) {
+    List<Tuple> outputs = Lists.newArrayList();
+    Tuple eachVariable;
+
+    try {
+      for (Map.Entry<String, String> var: masterContext.getSessionManager().getAllVariables(sessionId).entrySet()) {
+        eachVariable = new VTuple(outSchema.size());
+        eachVariable.put(0, DatumFactory.createText(var.getKey()));
+        eachVariable.put(1, DatumFactory.createText(var.getValue()));
+
+        outputs.add(eachVariable);
+      }
+    } catch (InvalidSessionException e) {
+      LOG.error(e);
+    }
+
+    return outputs;
   }
   
   private List<Tuple> fetchSystemTable(TableDesc tableDesc, Schema inSchema) {
@@ -446,6 +585,10 @@ public class NonForwardQueryResultSystemScanner implements NonForwardQueryResult
       tuples = getAllTableStats(inSchema);
     } else if ("partitions".equalsIgnoreCase(tableName)) {
       tuples = getAllPartitions(inSchema);
+    } else if ("cluster".equalsIgnoreCase(tableName)) {
+      tuples = getClusterInfo(inSchema);
+    } else if ("session".equalsIgnoreCase(tableName)) {
+      tuples = getSessionInfo(inSchema);
     }
     
     return tuples;    
@@ -502,6 +645,11 @@ public class NonForwardQueryResultSystemScanner implements NonForwardQueryResult
   public Schema getLogicalSchema() {
     return outSchema;
   }
+
+  @Override
+  public int getCurrentRowNumber() {
+    return currentRow;
+  }
   
   class SimplePhysicalPlannerImpl extends PhysicalPlannerImpl {
 
@@ -534,7 +682,12 @@ public class NonForwardQueryResultSystemScanner implements NonForwardQueryResult
     public SystemPhysicalExec(TaskAttemptContext context, ScanNode scanNode) {
       super(context, scanNode.getInSchema(), scanNode.getOutSchema());
       this.scanNode = scanNode;
-      this.qual = this.scanNode.getQual();
+
+      if (this.scanNode.hasQual()) {
+        this.qual = this.scanNode.getQual();
+        this.qual.bind(null, inSchema);
+      }
+
       cachedData = TUtil.newList();
       currentRow = 0;
       isClosed = false;
@@ -544,7 +697,7 @@ public class NonForwardQueryResultSystemScanner implements NonForwardQueryResult
 
     @Override
     public Tuple next() throws IOException {
-      Tuple aTuple = null;
+      Tuple aTuple;
       Tuple outTuple = new VTuple(outColumnNum);
       
       if (isClosed) {
@@ -566,7 +719,7 @@ public class NonForwardQueryResultSystemScanner implements NonForwardQueryResult
       } else {
         while (currentRow < cachedData.size()) {
           aTuple = cachedData.get(currentRow++);
-          if (qual.eval(inSchema, aTuple).isTrue()) {
+          if (qual.eval(aTuple).isTrue()) {
             projector.eval(aTuple, outTuple);
             return outTuple;
           }

@@ -24,6 +24,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.tajo.plan.LogicalPlanner;
 import org.apache.tajo.plan.annotator.Prioritized;
+import org.apache.tajo.plan.expr.EvalContext;
 import org.apache.tajo.plan.expr.EvalNode;
 import org.apache.tajo.util.ClassUtil;
 
@@ -50,7 +51,7 @@ public class EvalTreeOptimizer {
       try {
         rule = (EvalTreeOptimizationRule)eachRule.newInstance();
       } catch (Exception e) {
-        LOG.warn(eachRule + " cannot instantiate EvalTreeOptimizerRule class because of " + e.getMessage());
+        LOG.warn(eachRule + " cannot instantiate EvalTreeOptimizerRule class because of " + e.getMessage(), e);
         continue;
       }
       rules.add(rule);

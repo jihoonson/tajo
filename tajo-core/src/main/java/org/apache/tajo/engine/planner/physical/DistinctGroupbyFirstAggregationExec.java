@@ -84,17 +84,15 @@ import java.util.Map.Entry;
  *
  */
 
-public class DistinctGroupbyFirstAggregationExec extends PhysicalExec {
+public class DistinctGroupbyFirstAggregationExec extends UnaryPhysicalExec {
   private static Log LOG = LogFactory.getLog(DistinctGroupbyFirstAggregationExec.class);
 
   private DistinctGroupbyNode plan;
   private boolean finished = false;
   private boolean preparedData = false;
-  private PhysicalExec child;
 
   private long totalNumRows;
   private int fetchedRows;
-  private float progress;
 
   private int[] groupingKeyIndexes;
   private NonDistinctHashAggregator nonDistinctHashAggregator;
@@ -104,15 +102,13 @@ public class DistinctGroupbyFirstAggregationExec extends PhysicalExec {
 
   public DistinctGroupbyFirstAggregationExec(TaskAttemptContext context, DistinctGroupbyNode plan, PhysicalExec subOp)
       throws IOException {
-    super(context, plan.getInSchema(), plan.getOutSchema());
-    this.child = subOp;
+    super(context, plan.getInSchema(), plan.getOutSchema(), subOp);
     this.plan = plan;
   }
 
   @Override
   public void init() throws IOException {
     super.init();
-    child.init();
 
     // finding grouping column index
     Column[] groupingColumns = plan.getGroupingColumns();
@@ -233,7 +229,6 @@ public class DistinctGroupbyFirstAggregationExec extends PhysicalExec {
   }
 
   class NonDistinctHashAggregator {
-    private GroupbyNode groupbyNode;
     private int aggFunctionsNum;
     private final AggregationFunctionCallEval aggFunctions[];
 
@@ -243,19 +238,20 @@ public class DistinctGroupbyFirstAggregationExec extends PhysicalExec {
 
     private Tuple dummyTuple;
     private NonDistinctHashAggregator(GroupbyNode groupbyNode) throws IOException {
-      this.groupbyNode = groupbyNode;
 
       nonDistinctAggrDatas = new HashMap<Tuple, FunctionContext[]>();
 
       if (groupbyNode.hasAggFunctions()) {
         aggFunctions = groupbyNode.getAggFunctions();
         aggFunctionsNum = aggFunctions.length;
-        for (AggregationFunctionCallEval eachFunction: aggFunctions) {
-          eachFunction.setFirstPhase();
-        }
       } else {
         aggFunctions = new AggregationFunctionCallEval[0];
         aggFunctionsNum = 0;
+      }
+
+      for (AggregationFunctionCallEval eachFunction: aggFunctions) {
+        eachFunction.bind(context.getEvalContext(), inSchema);
+        eachFunction.setFirstPhase();
       }
 
       dummyTuple = new VTuple(aggFunctionsNum);
@@ -269,13 +265,13 @@ public class DistinctGroupbyFirstAggregationExec extends PhysicalExec {
       FunctionContext[] contexts = nonDistinctAggrDatas.get(groupingKeyTuple);
       if (contexts != null) {
         for (int i = 0; i < aggFunctions.length; i++) {
-          aggFunctions[i].merge(contexts[i], inSchema, tuple);
+          aggFunctions[i].merge(contexts[i], tuple);
         }
       } else { // if the key occurs firstly
         contexts = new FunctionContext[aggFunctionsNum];
         for (int i = 0; i < aggFunctionsNum; i++) {
           contexts[i] = aggFunctions[i].newContext();
-          aggFunctions[i].merge(contexts[i], inSchema, tuple);
+          aggFunctions[i].merge(contexts[i], tuple);
         }
         nonDistinctAggrDatas.put(groupingKeyTuple, contexts);
       }
@@ -305,7 +301,6 @@ public class DistinctGroupbyFirstAggregationExec extends PhysicalExec {
   }
 
   class DistinctHashAggregator {
-    private GroupbyNode groupbyNode;
 
     // GroupingKey -> DistinctKey
     private Map<Tuple, Set<Tuple>> distinctAggrDatas;
@@ -321,7 +316,6 @@ public class DistinctGroupbyFirstAggregationExec extends PhysicalExec {
     private boolean aggregatorFinished = false;
 
     public DistinctHashAggregator(GroupbyNode groupbyNode) throws IOException {
-      this.groupbyNode = groupbyNode;
 
       Set<Integer> groupingKeyIndexSet = new HashSet<Integer>();
       for (Integer eachIndex: groupingKeyIndexes) {

@@ -39,7 +39,7 @@ sql
   ;
 
 explain_clause
-  : EXPLAIN
+  : EXPLAIN (GLOBAL)?
   ;
 
 statement
@@ -295,6 +295,7 @@ nonreserved_keywords
   | QUARTER
   | RANGE
   | RANK
+  | RECORD
   | REGEXP
   | RENAME
   | RESET
@@ -430,10 +431,7 @@ predefined_type
   | bit_type
   | binary_type
   | network_type
-  ;
-
-network_type
-  : INET4
+  | record_type
   ;
 
 character_string_type
@@ -523,6 +521,14 @@ binary_type
   : BINARY type_length?
   | BINARY VARYING type_length?
   | VARBINARY type_length?
+  ;
+
+network_type
+  : INET4
+  ;
+
+record_type
+  : RECORD table_elements
   ;
 
 /*
@@ -764,6 +770,7 @@ sign
 
 numeric_value_function
   : extract_expression
+  | datetime_value_function
   ;
 
 extract_expression
@@ -1300,7 +1307,7 @@ set_qualifier
   ;
 
 column_reference
-  : ((db_name = identifier DOT)? (tb_name=identifier DOT))? name=identifier
+  : identifier (DOT identifier)*
   ;
 
 as_clause
@@ -1597,6 +1604,7 @@ alter_table_statement
   | ALTER TABLE table_name ADD COLUMN field_element
   | ALTER TABLE table_name (if_not_exists)? ADD PARTITION LEFT_PAREN partition_column_value_list RIGHT_PAREN (LOCATION path=Character_String_Literal)?
   | ALTER TABLE table_name (if_exists)? DROP PARTITION LEFT_PAREN partition_column_value_list RIGHT_PAREN
+  | ALTER TABLE table_name SET PROPERTY property_list
   ;
 
 partition_column_value_list
@@ -1605,4 +1613,12 @@ partition_column_value_list
 
 partition_column_value
   : identifier EQUAL row_value_predicand
+  ;
+
+property_list
+  : property (COMMA property)*
+  ;
+
+property
+  : key=Character_String_Literal EQUAL value=Character_String_Literal
   ;

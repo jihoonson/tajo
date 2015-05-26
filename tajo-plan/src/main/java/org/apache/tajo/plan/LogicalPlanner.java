@@ -52,6 +52,7 @@ import org.apache.tajo.catalog.SchemaUtil;
 import org.apache.tajo.plan.verifier.VerifyException;
 import org.apache.tajo.util.KeyValueSet;
 import org.apache.tajo.util.Pair;
+import org.apache.tajo.util.StringUtils;
 import org.apache.tajo.util.TUtil;
 
 import java.util.*;
@@ -115,6 +116,10 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
       return queryBlock;
     }
 
+    public OverridableConf getQueryContext() {
+      return queryContext;
+    }
+
     public String toString() {
       return "block=" + queryBlock.getName() + ", relNum=" + queryBlock.getRelations().size() + ", "+
           queryBlock.namedExprsMgr.toString();
@@ -132,7 +137,8 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
   }
 
   @VisibleForTesting
-  public LogicalPlan createPlan(OverridableConf queryContext, Expr expr, boolean debug) throws PlanningException {
+  public LogicalPlan createPlan(OverridableConf queryContext, Expr expr, boolean debug)
+      throws PlanningException {
 
     LogicalPlan plan = new LogicalPlan(this);
 
@@ -200,7 +206,7 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
   }
 
   public LogicalNode visitExplain(PlanContext ctx, Stack<Expr> stack, Explain expr) throws PlanningException {
-    ctx.plan.setExplain();
+    ctx.plan.setExplain(expr.isGlobal());
     return visit(ctx, stack, expr.getChild());
   }
 
@@ -521,10 +527,21 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
 
     } else if (projectable instanceof RelationNode) {
       RelationNode relationNode = (RelationNode) projectable;
+      prohibitNestedRecordProjection((Projectable) relationNode);
       verifyIfTargetsCanBeEvaluated(relationNode.getLogicalSchema(), (Projectable) relationNode);
 
     } else {
+      prohibitNestedRecordProjection(projectable);
       verifyIfTargetsCanBeEvaluated(projectable.getInSchema(), projectable);
+    }
+  }
+
+  public static void prohibitNestedRecordProjection(Projectable projectable)
+      throws PlanningException {
+    for (Target t : projectable.getTargets()) {
+      if (t.getEvalTree().getValueType().getType() == TajoDataTypes.Type.RECORD) {
+        throw new PlanningException("Projecting RECORD fields is not supported yet: " + t);
+      }
     }
   }
 
@@ -643,7 +660,7 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
           if (block.namedExprsMgr.isEvaluated(sortKeyRefNames[i])) {
             column = block.namedExprsMgr.getTarget(sortKeyRefNames[i]).getNamedColumn();
           } else {
-            throw new IllegalStateException("Unexpected State: " + TUtil.arrayToString(sortSpecs));
+            throw new IllegalStateException("Unexpected State: " + StringUtils.join(sortSpecs));
           }
           annotatedSortSpecs[i] = new SortSpec(column, sortSpecs[i].isAscending(), sortSpecs[i].isNullFirst());
         }
@@ -809,7 +826,8 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
     limitNode.setInSchema(child.getOutSchema());
     limitNode.setOutSchema(child.getOutSchema());
 
-    limitNode.setFetchFirst(firstFetNum.eval(null, null).asInt8());
+    firstFetNum.bind(null, null);
+    limitNode.setFetchFirst(firstFetNum.eval(null).asInt8());
 
     return limitNode;
   }
@@ -859,7 +877,7 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
       } else if (block.namedExprsMgr.isEvaluated(refName)) {
         column = block.namedExprsMgr.getTarget(refName).getNamedColumn();
       } else {
-        throw new IllegalStateException("Unexpected State: " + TUtil.arrayToString(sortSpecs));
+        throw new IllegalStateException("Unexpected State: " + StringUtils.join(sortSpecs));
       }
       annotatedSortSpecs.add(new SortSpec(column, sortSpecs[i].isAscending(), sortSpecs[i].isNullFirst()));
     }
@@ -1149,7 +1167,10 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
       joinCondition = context.evalOptimizer.optimize(context, evalNode);
     }
 
-    List<String> newlyEvaluatedExprs = getNewlyEvaluatedExprsForJoin(context, joinNode, stack);
+    // If the query involves a subquery, the stack can be empty.
+    // In this case, this join is the top most one within a query block.
+    boolean isTopMostJoin = stack.isEmpty() ? true : stack.peek().getType() != OpType.Join;
+    List<String> newlyEvaluatedExprs = getNewlyEvaluatedExprsForJoin(context, joinNode, isTopMostJoin);
     List<Target> targets = TUtil.newList(PlannerUtil.schemaToTargets(merged));
 
     for (String newAddedExpr : newlyEvaluatedExprs) {
@@ -1168,7 +1189,7 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
     return joinNode;
   }
 
-  private List<String> getNewlyEvaluatedExprsForJoin(PlanContext context, JoinNode joinNode, Stack<Expr> stack) {
+  private List<String> getNewlyEvaluatedExprsForJoin(PlanContext context, JoinNode joinNode, boolean isTopMostJoin) {
     QueryBlock block = context.queryBlock;
 
     EvalNode evalNode;
@@ -1177,7 +1198,8 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
       NamedExpr namedExpr = it.next();
       try {
         evalNode = exprAnnotator.createEvalNode(context, namedExpr.getExpr(), NameResolvingMode.LEGACY);
-        if (LogicalPlanner.checkIfBeEvaluatedAtJoin(block, evalNode, joinNode, stack.peek().getType() != OpType.Join)) {
+        // the predicates specified in the on clause are already processed in visitJoin()
+        if (LogicalPlanner.checkIfBeEvaluatedAtJoin(context.queryBlock, evalNode, joinNode, isTopMostJoin)) {
           block.namedExprsMgr.markAsEvaluated(namedExpr.getAlias(), evalNode);
           newlyEvaluatedExprs.add(namedExpr.getAlias());
         }
@@ -1192,13 +1214,13 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
     Schema joinSchema = new Schema();
     Schema commons = SchemaUtil.getNaturalJoinColumns(left.getOutSchema(), right.getOutSchema());
     joinSchema.addColumns(commons);
-    for (Column c : left.getOutSchema().getColumns()) {
+    for (Column c : left.getOutSchema().getRootColumns()) {
       if (!joinSchema.contains(c.getQualifiedName())) {
         joinSchema.addColumn(c);
       }
     }
 
-    for (Column c : right.getOutSchema().getColumns()) {
+    for (Column c : right.getOutSchema().getRootColumns()) {
       if (!joinSchema.contains(c.getQualifiedName())) {
         joinSchema.addColumn(c);
       }
@@ -1216,7 +1238,7 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
     Column leftJoinKey;
     Column rightJoinKey;
 
-    for (Column common : commons.getColumns()) {
+    for (Column common : commons.getRootColumns()) {
       leftJoinKey = leftSchema.getColumn(common.getQualifiedName());
       rightJoinKey = rightSchema.getColumn(common.getQualifiedName());
       equiQual = new BinaryEval(EvalType.EQUAL,
@@ -1331,7 +1353,15 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
   private static LinkedHashSet<Target> createFieldTargetsFromRelation(QueryBlock block, RelationNode relationNode,
                                                       Set<String> newlyEvaluatedRefNames) {
     LinkedHashSet<Target> targets = Sets.newLinkedHashSet();
-    for (Column column : relationNode.getLogicalSchema().getColumns()) {
+    for (Column column : relationNode.getLogicalSchema().getAllColumns()) {
+
+      // TODO - Currently, EvalNode has DataType as a return type. So, RECORD cannot be used for any target.
+      // The following line is a kind of hack, preventing RECORD to be used for target in the logical planning phase.
+      // This problem should be resolved after TAJO-1402.
+      if (column.getTypeDesc().getDataType().getType() == TajoDataTypes.Type.RECORD) {
+        continue;
+      }
+
       String aliasName = block.namedExprsMgr.checkAndGetIfAliasedColumn(column.getQualifiedName());
       if (aliasName != null) {
         targets.add(new Target(new FieldEval(column), aliasName));
@@ -1344,7 +1374,7 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
   }
 
   private void updatePhysicalInfo(TableDesc desc) {
-    if (desc.getPath() != null && desc.getMeta().getStoreType() != StoreType.SYSTEM) {
+    if (desc.getPath() != null && desc.getMeta().getStoreType() != "SYSTEM") {
       try {
         Path path = new Path(desc.getPath());
         FileSystem fs = path.getFileSystem(new Configuration());
@@ -1357,7 +1387,7 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
           }
         }
       } catch (Throwable t) {
-        LOG.warn(t);
+        LOG.warn(t, t);
       }
     }
   }
@@ -1585,7 +1615,7 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
     // we use only a sequence of preceding columns of target table's schema
     // as target columns.
     //
-    // For example, consider a target table and an 'insert into' query are give as follows:
+    // For example, consider a target table and an 'insert into' query are given as follows:
     //
     // CREATE TABLE TB1                  (col1 int,  col2 int, col3 long);
     //                                      ||          ||
@@ -1647,11 +1677,12 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
       // Modifying projected columns by adding NULL constants
       // It is because that table appender does not support target columns to be written.
       List<Target> targets = TUtil.newList();
-      for (int i = 0, j = 0; i < tableSchema.size(); i++) {
+      for (int i = 0; i < tableSchema.size(); i++) {
         Column column = tableSchema.getColumn(i);
 
-        if(targetColumns.contains(column) && j < projectionNode.getTargets().length) {
-          targets.add(projectionNode.getTargets()[j++]);
+        int idxInProjectionNode = targetColumns.getIndex(column);
+        if (idxInProjectionNode >= 0 && idxInProjectionNode < projectionNode.getTargets().length) {
+          targets.add(projectionNode.getTargets()[idxInProjectionNode]);
         } else {
           targets.add(new Target(new ConstEval(NullDatum.get()), column.getSimpleName()));
         }
@@ -1726,7 +1757,7 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
     insertNode.setTargetLocation(new Path(expr.getLocation()));
 
     if (expr.hasStorageType()) {
-      insertNode.setStorageType(CatalogUtil.getStoreType(expr.getStorageType()));
+      insertNode.setStorageType(expr.getStorageType());
     }
     if (expr.hasParams()) {
       KeyValueSet options = new KeyValueSet();
@@ -1800,9 +1831,9 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
       return handleCreateTableLike(context, expr, createTableNode);
 
     if (expr.hasStorageType()) { // If storage type (using clause) is specified
-      createTableNode.setStorageType(CatalogUtil.getStoreType(expr.getStorageType()));
+      createTableNode.setStorageType(expr.getStorageType());
     } else { // otherwise, default type
-      createTableNode.setStorageType(CatalogProtos.StoreType.CSV);
+      createTableNode.setStorageType("CSV");
     }
 
 
@@ -1931,7 +1962,7 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
    * @param elements to be transformed
    * @return schema transformed from table definition elements
    */
-  private Schema convertTableElementsSchema(ColumnDefinition[] elements) {
+  private static Schema convertTableElementsSchema(ColumnDefinition[] elements) {
     Schema schema = new Schema();
 
     for (ColumnDefinition columnDefinition: elements) {
@@ -1941,19 +1972,33 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
     return schema;
   }
 
-  private Column convertColumn(ColumnDefinition columnDefinition) {
+  private static Column convertColumn(ColumnDefinition columnDefinition) {
     return new Column(columnDefinition.getColumnName(), convertDataType(columnDefinition));
   }
 
-  public static TajoDataTypes.DataType convertDataType(DataTypeExpr dataType) {
+  public static TypeDesc convertDataType(DataTypeExpr dataType) {
     TajoDataTypes.Type type = TajoDataTypes.Type.valueOf(dataType.getTypeName());
 
     TajoDataTypes.DataType.Builder builder = TajoDataTypes.DataType.newBuilder();
     builder.setType(type);
+
     if (dataType.hasLengthOrPrecision()) {
       builder.setLength(dataType.getLengthOrPrecision());
+    } else {
+      if (type == TajoDataTypes.Type.CHAR) {
+        builder.setLength(1);
+      }
     }
-    return builder.build();
+
+    TypeDesc typeDesc;
+    if (type == TajoDataTypes.Type.RECORD) {
+      Schema nestedRecordSchema = convertTableElementsSchema(dataType.getNestedRecordTypes());
+      typeDesc = new TypeDesc(nestedRecordSchema);
+    } else {
+      typeDesc = new TypeDesc(builder.build());
+    }
+
+    return typeDesc;
   }
 
 
@@ -1985,6 +2030,7 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
     alterTableNode.setNewTableName(alterTable.getNewTableName());
     alterTableNode.setColumnName(alterTable.getColumnName());
     alterTableNode.setNewColumnName(alterTable.getNewColumnName());
+    alterTableNode.setProperties(new KeyValueSet(alterTable.getParams()));
 
     if (null != alterTable.getAddNewColumn()) {
       alterTableNode.setAddNewColumn(convertColumn(alterTable.getAddNewColumn()));
@@ -2033,6 +2079,52 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
     return true;
   }
 
+  public static boolean isEvaluatableJoinQual(QueryBlock block, EvalNode evalNode, JoinNode node,
+                                              boolean isOnPredicate, boolean isTopMostJoin) {
+
+    if (checkIfBeEvaluatedAtJoin(block, evalNode, node, isTopMostJoin)) {
+
+      if (isNonEquiThetaJoinQual(block, node, evalNode)) {
+        return false;
+      }
+
+      if (PlannerUtil.isOuterJoin(node.getJoinType())) {
+        /*
+         * For outer joins, only predicates which are specified at the on clause can be evaluated during processing join.
+         * Other predicates from the where clause must be evaluated after the join.
+         * The below code will be modified after improving join operators to keep join filters by themselves (TAJO-1310).
+         */
+        if (!isOnPredicate) {
+          return false;
+        }
+      } else {
+        /*
+         * Only join predicates should be evaluated at join if the join type is inner or cross. (TAJO-1445)
+         */
+        if (!EvalTreeUtil.isJoinQual(block, node.getLeftChild().getOutSchema(), node.getRightChild().getOutSchema(),
+            evalNode, false)) {
+          return false;
+        }
+      }
+
+      return true;
+    }
+
+    return false;
+  }
+
+  public static boolean isNonEquiThetaJoinQual(final LogicalPlan.QueryBlock block,
+                                               final JoinNode joinNode,
+                                               final EvalNode evalNode) {
+    if (EvalTreeUtil.isJoinQual(block, joinNode.getLeftChild().getOutSchema(),
+        joinNode.getRightChild().getOutSchema(), evalNode, true) &&
+        evalNode.getType() != EvalType.EQUAL) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+
   public static boolean checkIfBeEvaluatedAtJoin(QueryBlock block, EvalNode evalNode, JoinNode node,
                                                  boolean isTopMostJoin) {
     Set<Column> columnRefs = EvalTreeUtil.findUniqueColumns(evalNode);
@@ -2063,10 +2155,6 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
     }
 
     return true;
-  }
-
-  public static boolean isOuterJoin(JoinType joinType) {
-    return joinType == JoinType.LEFT_OUTER || joinType == JoinType.RIGHT_OUTER || joinType==JoinType.FULL_OUTER;
   }
 
   public static boolean containsOuterJoin(QueryBlock block) {
