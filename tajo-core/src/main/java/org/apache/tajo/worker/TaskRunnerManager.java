@@ -18,7 +18,6 @@
 
 package org.apache.tajo.worker;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -29,14 +28,10 @@ import org.apache.hadoop.yarn.event.EventHandler;
 import org.apache.tajo.ExecutionBlockId;
 import org.apache.tajo.TaskAttemptId;
 import org.apache.tajo.conf.TajoConf;
-import org.apache.tajo.engine.utils.TupleCache;
 import org.apache.tajo.worker.event.TaskRunnerEvent;
 import org.apache.tajo.worker.event.TaskRunnerStartEvent;
 import org.apache.tajo.worker.event.TaskRunnerStopEvent;
-import org.jboss.netty.util.HashedWheelTimer;
-import org.jboss.netty.util.Timer;
 
-import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -52,7 +47,6 @@ public class TaskRunnerManager extends CompositeService implements EventHandler<
   private AtomicBoolean stop = new AtomicBoolean(false);
   private FinishedTaskCleanThread finishedTaskCleanThread;
   private Dispatcher dispatcher;
-  private HashedWheelTimer rpcTimer;
 
   public TaskRunnerManager(TajoWorker.WorkerContext workerContext, Dispatcher dispatcher) {
     super(TaskRunnerManager.class.getName());
@@ -67,7 +61,9 @@ public class TaskRunnerManager extends CompositeService implements EventHandler<
 
   @Override
   public void init(Configuration conf) {
-    Preconditions.checkArgument(conf instanceof TajoConf);
+    if (!(conf instanceof TajoConf)) {
+      throw new IllegalArgumentException("Configuration must be a TajoConf instance");
+    }
     tajoConf = (TajoConf)conf;
     dispatcher.register(TaskRunnerEvent.EventType.class, this);
     super.init(tajoConf);
@@ -77,7 +73,6 @@ public class TaskRunnerManager extends CompositeService implements EventHandler<
   public void start() {
     finishedTaskCleanThread = new FinishedTaskCleanThread();
     finishedTaskCleanThread.start();
-    rpcTimer = new HashedWheelTimer();
     super.start();
   }
 
@@ -99,26 +94,16 @@ public class TaskRunnerManager extends CompositeService implements EventHandler<
     }
 
     if(finishedTaskCleanThread != null) {
-      finishedTaskCleanThread.interrupted();
-    }
-
-    if(rpcTimer != null){
-      rpcTimer.stop();
+      finishedTaskCleanThread.interrupt();
     }
 
     super.stop();
-    if(workerContext.isYarnContainerMode()) {
-      workerContext.stopWorker(true);
-    }
   }
 
   public void stopTaskRunner(String id) {
     LOG.info("Stop Task:" + id);
     TaskRunner taskRunner = taskRunnerMap.remove(id);
     taskRunner.stop();
-    if(workerContext.isYarnContainerMode()) {
-      stop();
-    }
   }
 
   public Collection<TaskRunner> getTaskRunners() {
@@ -169,8 +154,14 @@ public class TaskRunnerManager extends CompositeService implements EventHandler<
 
       if(context == null){
         try {
-          context = new ExecutionBlockContext(getTajoConf(), getWorkerContext(), this, startEvent.getQueryContext(),
-              startEvent.getPlan(), startEvent.getExecutionBlockId(), startEvent.getQueryMaster());
+          context = new ExecutionBlockContext(getTajoConf(),
+              getWorkerContext(),
+              this,
+              startEvent.getQueryContext(),
+              startEvent.getPlan(),
+              startEvent.getExecutionBlockId(),
+              startEvent.getQueryMaster(),
+              startEvent.getShuffleType());
           context.init();
         } catch (Throwable e) {
           LOG.fatal(e.getMessage(), e);
@@ -191,11 +182,10 @@ public class TaskRunnerManager extends CompositeService implements EventHandler<
       ExecutionBlockContext executionBlockContext =  executionBlockContextMap.remove(event.getExecutionBlockId());
       if(executionBlockContext != null){
         try {
-          TupleCache.getInstance().removeBroadcastCache(event.getExecutionBlockId());
-          executionBlockContext.reportExecutionBlock(event.getExecutionBlockId());
-          workerContext.getHashShuffleAppenderManager().close(event.getExecutionBlockId());
+          executionBlockContext.getSharedResource().releaseBroadcastCache(event.getExecutionBlockId());
+          executionBlockContext.sendShuffleReport();
           workerContext.getTaskHistoryWriter().flushTaskHistories();
-        } catch (IOException e) {
+        } catch (Exception e) {
           LOG.fatal(e.getMessage(), e);
           throw new RuntimeException(e);
         } finally {
@@ -214,10 +204,6 @@ public class TaskRunnerManager extends CompositeService implements EventHandler<
     return tajoConf;
   }
 
-  public Timer getRPCTimer(){
-    return rpcTimer;
-  }
-
   class FinishedTaskCleanThread extends Thread {
     //TODO if history size is large, the historyMap should remove immediately
     public void run() {
@@ -230,7 +216,7 @@ public class TaskRunnerManager extends CompositeService implements EventHandler<
           break;
         }
         try {
-          long expireTime = System.currentTimeMillis() - expireIntervalTime * 60 * 1000;
+          long expireTime = System.currentTimeMillis() - expireIntervalTime * 60 * 1000l;
           cleanExpiredFinishedQueryMasterTask(expireTime);
         } catch (Exception e) {
           LOG.error(e.getMessage(), e);

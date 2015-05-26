@@ -21,6 +21,7 @@ package org.apache.tajo.plan.expr;
 import org.apache.tajo.catalog.Column;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Stack;
@@ -149,7 +150,7 @@ public class AlgebraicUtil {
       }
 
       if (lhs.getType() == EvalType.CONST && rhs.getType() == EvalType.CONST) {
-        return new ConstEval(binaryEval.eval(null, null));
+        return new ConstEval(binaryEval.bind(null, null).eval(null));
       }
 
       return binaryEval;
@@ -162,7 +163,7 @@ public class AlgebraicUtil {
       stack.pop();
 
       if (child.getType() == EvalType.CONST) {
-        return new ConstEval(unaryEval.eval(null, null));
+        return new ConstEval(unaryEval.bind(null, null).eval(null));
       }
 
       return unaryEval;
@@ -184,7 +185,7 @@ public class AlgebraicUtil {
       }
 
       if (constantOfAllDescendents && evalNode.getType() == EvalType.FUNCTION) {
-        return new ConstEval(evalNode.eval(null, null));
+        return new ConstEval(evalNode.bind(null, null).eval(null));
       } else {
         return evalNode;
       }
@@ -327,6 +328,10 @@ public class AlgebraicUtil {
         (expr.getType() == EvalType.LIKE && !((LikePredicateEval)expr).isLeadingWildCard());
   }
 
+  public static EvalNode createSingletonExprFromCNF(Collection<EvalNode> cnfExprs) {
+    return createSingletonExprFromCNF(cnfExprs.toArray(new EvalNode[cnfExprs.size()]));
+  }
+
   /**
    * Convert a list of conjunctive normal forms into a singleton expression.
    *
@@ -342,6 +347,11 @@ public class AlgebraicUtil {
   }
 
   private static EvalNode createSingletonExprFromCNFRecursive(EvalNode[] evalNode, int idx) {
+    if (idx >= evalNode.length) {
+      throw new ArrayIndexOutOfBoundsException("index " + idx + " is exceeded the maximum length ("+
+          evalNode.length+") of EvalNode");
+    }
+
     if (idx == evalNode.length - 2) {
       return new BinaryEval(EvalType.AND, evalNode[idx], evalNode[idx + 1]);
     } else {

@@ -431,6 +431,8 @@ public class LogicalNodeSerializer extends BasicLogicalPlanVisitor<LogicalNodeSe
     if (scan.hasQual()) {
       scanBuilder.setQual(EvalNodeSerializer.serialize(scan.getQual()));
     }
+
+    scanBuilder.setBroadcast(scan.isBroadcastTable());
     return scanBuilder;
   }
 
@@ -564,6 +566,10 @@ public class LogicalNodeSerializer extends BasicLogicalPlanVisitor<LogicalNodeSe
       alterTableBuilder.setRenameColumn(RenameColumn.newBuilder()
           .setOldName(node.getColumnName())
           .setNewName(node.getNewColumnName()));
+      break;
+    case SET_PROPERTY:
+      alterTableBuilder.setSetType(PlanProto.AlterTableNode.Type.SET_PROPERTY);
+      alterTableBuilder.setProperties(node.getProperties().getProto());
       break;
     default:
       throw new UnimplementedException("Unknown SET type in ALTER TABLE: " + node.getAlterTableOpType().name());

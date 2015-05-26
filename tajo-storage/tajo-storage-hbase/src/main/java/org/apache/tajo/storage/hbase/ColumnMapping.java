@@ -77,7 +77,7 @@ public class ColumnMapping {
 
     String[] columnMappingTokens = columnMapping.split(",");
 
-    if (columnMappingTokens.length != schema.getColumns().size()) {
+    if (columnMappingTokens.length != schema.getRootColumns().size()) {
       throw new IOException("The number of mapped HBase columns is great than the number of Tajo table columns");
     }
 
@@ -85,7 +85,7 @@ public class ColumnMapping {
     for (String eachToken: columnMappingTokens) {
       mappingColumns[index] = new byte[2][];
 
-      byte[][] mappingTokens = BytesUtils.splitPreserveAllTokens(eachToken.trim().getBytes(), ':');
+      byte[][] mappingTokens = BytesUtils.splitTrivial(eachToken.trim().getBytes(), (byte)':');
 
       if (mappingTokens.length == 3) {
         if (mappingTokens[0].length == 0) {
@@ -230,6 +230,10 @@ public class ColumnMapping {
     return numRowKeys;
   }
 
+  public int getNumColumns() {
+    return schema.size();
+  }
+  
   public boolean[] getIsColumnValues() {
     return isColumnValues;
   }

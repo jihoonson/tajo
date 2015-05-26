@@ -21,7 +21,7 @@ package org.apache.tajo.worker;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-
+import io.netty.handler.codec.http.QueryStringDecoder;
 import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -30,34 +30,32 @@ import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.tajo.TaskAttemptId;
 import org.apache.tajo.TajoProtos;
 import org.apache.tajo.TajoProtos.TaskAttemptState;
+import org.apache.tajo.TaskAttemptId;
 import org.apache.tajo.catalog.Schema;
 import org.apache.tajo.catalog.TableDesc;
 import org.apache.tajo.catalog.TableMeta;
 import org.apache.tajo.catalog.proto.CatalogProtos;
 import org.apache.tajo.catalog.statistics.TableStats;
 import org.apache.tajo.conf.TajoConf;
-import org.apache.tajo.master.cluster.WorkerConnectionInfo;
-import org.apache.tajo.plan.serder.LogicalNodeDeserializer;
-import org.apache.tajo.plan.util.PlannerUtil;
 import org.apache.tajo.engine.planner.physical.PhysicalExec;
 import org.apache.tajo.engine.query.QueryContext;
 import org.apache.tajo.engine.query.TaskRequest;
 import org.apache.tajo.ipc.QueryMasterProtocol;
 import org.apache.tajo.ipc.TajoWorkerProtocol.*;
 import org.apache.tajo.ipc.TajoWorkerProtocol.EnforceProperty.EnforceType;
+import org.apache.tajo.master.cluster.WorkerConnectionInfo;
+import org.apache.tajo.plan.function.python.TajoScriptEngine;
 import org.apache.tajo.plan.logical.*;
+import org.apache.tajo.plan.serder.LogicalNodeDeserializer;
+import org.apache.tajo.plan.util.PlannerUtil;
 import org.apache.tajo.pullserver.TajoPullServerService;
 import org.apache.tajo.pullserver.retriever.FileChunk;
 import org.apache.tajo.rpc.NullCallback;
 import org.apache.tajo.storage.*;
 import org.apache.tajo.storage.fragment.FileFragment;
 import org.apache.tajo.util.NetUtils;
-import org.jboss.netty.channel.socket.ClientSocketChannelFactory;
-import org.jboss.netty.handler.codec.http.QueryStringDecoder;
-import org.jboss.netty.util.Timer;
 
 import java.io.File;
 import java.io.IOException;
@@ -135,7 +133,7 @@ public class Task {
   }
 
   public void initPlan() throws IOException {
-    plan = LogicalNodeDeserializer.deserialize(queryContext, request.getPlan());
+    plan = LogicalNodeDeserializer.deserialize(queryContext, context.getEvalContext(), request.getPlan());
     LogicalNode [] scanNode = PlannerUtil.findAllNodes(plan, NodeType.SCAN);
     if (scanNode != null) {
       for (LogicalNode node : scanNode) {
@@ -163,7 +161,7 @@ public class Task {
         this.sortComp = new BaseTupleComparator(finalSchema, sortNode.getSortKeys());
       }
     } else {
-      Path outFilePath = ((FileStorageManager)StorageManager.getFileStorageManager(systemConf))
+      Path outFilePath = ((FileTablespace) TableSpaceManager.getFileStorageManager(systemConf))
           .getAppenderFilePath(taskId, queryContext.getStagingDir());
       LOG.info("Output File Path: " + outFilePath);
       context.setOutputPath(outFilePath);
@@ -173,7 +171,7 @@ public class Task {
     LOG.info("==================================");
     LOG.info("* Stage " + request.getId() + " is initialized");
     LOG.info("* InterQuery: " + interQuery
-        + (interQuery ? ", Use " + this.shuffleType + " shuffle":"") +
+        + (interQuery ? ", Use " + this.shuffleType + " shuffle" : "") +
         ", Fragments (num: " + request.getFragments().size() + ")" +
         ", Fetches (total:" + request.getFetches().size() + ") :");
 
@@ -190,8 +188,21 @@ public class Task {
     LOG.info("==================================");
   }
 
+  private void startScriptExecutors() throws IOException {
+    for (TajoScriptEngine executor : context.getEvalContext().getAllScriptEngines()) {
+      executor.start(systemConf);
+    }
+  }
+
+  private void stopScriptExecutors() {
+    for (TajoScriptEngine executor : context.getEvalContext().getAllScriptEngines()) {
+      executor.shutdown();
+    }
+  }
+
   public void init() throws IOException {
     initPlan();
+    startScriptExecutors();
 
     if (context.getState() == TaskAttemptState.TA_PENDING) {
       // initialize a task temporal dir
@@ -257,11 +268,13 @@ public class Task {
   }
 
   public void kill() {
+    stopScriptExecutors();
     context.setState(TaskAttemptState.TA_KILLED);
     context.stop();
   }
 
   public void abort() {
+    stopScriptExecutors();
     context.stop();
   }
 
@@ -410,6 +423,7 @@ public class Task {
     } catch (Throwable e) {
       error = e ;
       LOG.error(e.getMessage(), e);
+      stopScriptExecutors();
       context.stop();
     } finally {
       if (executor != null) {
@@ -417,18 +431,19 @@ public class Task {
           executor.close();
           reloadInputStats();
         } catch (IOException e) {
-          LOG.error(e);
+          LOG.error(e, e);
         }
         this.executor = null;
       }
 
       executionBlockContext.completedTasksNum.incrementAndGet();
       context.getHashShuffleAppenderManager().finalizeTask(taskId);
-      QueryMasterProtocol.QueryMasterProtocolService.Interface queryMasterStub = executionBlockContext.getQueryMasterStub();
+
+      QueryMasterProtocol.QueryMasterProtocolService.Interface queryMasterStub = executionBlockContext.getStub();
       if (context.isStopped()) {
         context.setExecutorProgress(0.0f);
 
-        if(context.getState() == TaskAttemptState.TA_KILLED) {
+        if (context.getState() == TaskAttemptState.TA_KILLED) {
           queryMasterStub.statusUpdate(null, getReport(), NullCallback.get());
           executionBlockContext.killedTasksNum.incrementAndGet();
         } else {
@@ -484,6 +499,7 @@ public class Task {
     }
 
     executionBlockContext.getWorkerContext().getTaskHistoryWriter().appendHistory(taskHistory);
+    stopScriptExecutors();
   }
 
   public TaskHistory createTaskHistory() {
@@ -627,6 +643,7 @@ public class Task {
           if (retryNum == maxRetryNum) {
             LOG.error("ERROR: the maximum retry (" + retryNum + ") on the fetch exceeded (" + fetcher.getURI() + ")");
           }
+          stopScriptExecutors();
           context.stop(); // retry task
           ctx.getFetchLatch().countDown();
         }
@@ -664,8 +681,6 @@ public class Task {
                                         List<FetchImpl> fetches) throws IOException {
 
     if (fetches.size() > 0) {
-      ClientSocketChannelFactory channelFactory = executionBlockContext.getShuffleChannelFactory();
-      Timer timer = executionBlockContext.getRPCTimer();
       Path inputDir = executionBlockContext.getLocalDirAllocator().
           getLocalPathToRead(getTaskAttemptDir(ctx.getTaskId()).toString(), systemConf);
 
@@ -716,7 +731,7 @@ public class Task {
           // If we decide that intermediate data should be really fetched from a remote host, storeChunk
           // represents a complete file. Otherwise, storeChunk may represent a complete file or only a part of it
           storeChunk.setEbId(f.getName());
-          Fetcher fetcher = new Fetcher(systemConf, uri, storeChunk, channelFactory, timer);
+          Fetcher fetcher = new Fetcher(systemConf, uri, storeChunk);
           LOG.info("Create a new Fetcher with storeChunk:" + storeChunk.toString());
           runnerList.add(fetcher);
           i++;
@@ -732,7 +747,7 @@ public class Task {
   private FileChunk getLocalStoredFileChunk(URI fetchURI, TajoConf conf) throws IOException {
     // Parse the URI
     LOG.info("getLocalStoredFileChunk starts");
-    final Map<String, List<String>> params = new QueryStringDecoder(fetchURI.toString()).getParameters();
+    final Map<String, List<String>> params = new QueryStringDecoder(fetchURI.toString()).parameters();
     final List<String> types = params.get("type");
     final List<String> qids = params.get("qid");
     final List<String> taskIdList = params.get("ta");
@@ -786,7 +801,7 @@ public class Task {
       boolean last = params.get("final") != null;
 
       try {
-        chunk = TajoPullServerService.getFileCunks(path, startKey, endKey, last);
+        chunk = TajoPullServerService.getFileChunks(path, startKey, endKey, last);
             } catch (Throwable t) {
         LOG.error("getFileChunks() throws exception");
         return null;

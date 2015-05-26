@@ -159,10 +159,10 @@ public class TestSortQuery extends QueryTestCaseBase {
 
   @Test
   public final void testSortWithDate() throws Exception {
-    // skip this test if catalog uses HCatalogStore.
-    // It is because HCatalogStore does not support Time data type.
+    // skip this test if catalog uses HiveCatalogStore.
+    // It is because HiveCatalogStore does not support Time data type.
 
-    if (!testingCluster.isHCatalogStoreRunning()) {
+    if (!testingCluster.isHiveCatalogStoreRunning()) {
       // create external table table1 (col1 timestamp, col2 date, col3 time) ...
       executeDDL("create_table_with_date_ddl.sql", "table1");
 
@@ -243,10 +243,10 @@ public class TestSortQuery extends QueryTestCaseBase {
     schema.addColumn("id", Type.INT4);
     schema.addColumn("name", Type.TEXT);
     String[] data = new String[]{ "1|111", "2|\\N", "3|333" };
-    TajoTestingCluster.createTable("table11", schema, tableOptions, data, 1);
+    TajoTestingCluster.createTable("testSortOnNullColumn2".toLowerCase(), schema, tableOptions, data, 1);
 
     try {
-      ResultSet res = executeString("select * from table11 order by name asc");
+      ResultSet res = executeString("select * from testSortOnNullColumn2 order by name asc");
       String ascExpected = "id,name\n" +
           "-------------------------------\n" +
           "1,111\n" +
@@ -256,7 +256,7 @@ public class TestSortQuery extends QueryTestCaseBase {
       assertEquals(ascExpected, resultSetToString(res));
       res.close();
 
-      res = executeString("select * from table11 order by name desc");
+      res = executeString("select * from testSortOnNullColumn2 order by name desc");
       String descExpected = "id,name\n" +
           "-------------------------------\n" +
           "2,null\n" +
@@ -266,7 +266,7 @@ public class TestSortQuery extends QueryTestCaseBase {
       assertEquals(descExpected, resultSetToString(res));
       res.close();
     } finally {
-      executeString("DROP TABLE table11 PURGE");
+      executeString("DROP TABLE testSortOnNullColumn2 PURGE");
     }
   }
 
@@ -280,10 +280,10 @@ public class TestSortQuery extends QueryTestCaseBase {
     schema.addColumn("id", Type.INT4);
     schema.addColumn("name", Type.TEXT);
     String[] data = new String[]{ "1|111", "2|\\N", "3|333" };
-    TajoTestingCluster.createTable("table11", schema, tableOptions, data, 1);
+    TajoTestingCluster.createTable("testSortOnNullColumn3".toLowerCase(), schema, tableOptions, data, 1);
 
     try {
-      ResultSet res = executeString("select * from table11 order by name null first");
+      ResultSet res = executeString("select * from testSortOnNullColumn3 order by name null first");
       String ascExpected = "id,name\n" +
           "-------------------------------\n" +
           "2,null\n" +
@@ -294,7 +294,7 @@ public class TestSortQuery extends QueryTestCaseBase {
       res.close();
 
     } finally {
-      executeString("DROP TABLE table11 PURGE");
+      executeString("DROP TABLE testSortOnNullColumn3 PURGE");
     }
   }
 

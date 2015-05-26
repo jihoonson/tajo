@@ -23,14 +23,16 @@ import org.apache.commons.cli.*;
 import org.apache.commons.lang.StringUtils;
 import org.apache.tajo.QueryId;
 import org.apache.tajo.TajoProtos;
-import org.apache.tajo.client.*;
+import org.apache.tajo.client.QueryStatus;
+import org.apache.tajo.client.TajoClient;
+import org.apache.tajo.client.TajoClientImpl;
+import org.apache.tajo.client.TajoClientUtil;
 import org.apache.tajo.conf.TajoConf;
 import org.apache.tajo.ipc.ClientProtos.BriefQueryInfo;
 import org.apache.tajo.ipc.ClientProtos.WorkerResourceInfo;
 import org.apache.tajo.service.ServiceTracker;
 import org.apache.tajo.service.ServiceTrackerFactory;
 import org.apache.tajo.util.NetUtils;
-import org.apache.tajo.ha.HAServiceUtil;
 import org.apache.tajo.util.TajoIdUtils;
 
 import java.io.IOException;
@@ -71,8 +73,8 @@ public class TajoAdmin {
 
   private TajoConf tajoConf;
   private TajoClient tajoClient;
-  private ServiceTracker serviceTracker;
   private Writer writer;
+  private ServiceTracker serviceTracker;
 
   public TajoAdmin(TajoConf tajoConf, Writer writer) {
     this(tajoConf, writer, null);
@@ -82,6 +84,7 @@ public class TajoAdmin {
     this.tajoConf = tajoConf;
     this.writer = writer;
     this.tajoClient = tajoClient;
+    serviceTracker = ServiceTrackerFactory.get(this.tajoConf);
   }
 
   private void printUsage() {
@@ -231,24 +234,15 @@ public class TajoAdmin {
     List<WorkerResourceInfo> deadQueryMasters = new ArrayList<WorkerResourceInfo>();
 
     for (WorkerResourceInfo eachWorker : workerList) {
-      if(eachWorker.getQueryMasterMode() == true) {
-        if(eachWorker.getWorkerStatus().equals(WorkerStatus.RUNNING.toString())) {
-          liveQueryMasters.add(eachWorker);
-          runningQueryMasterTasks += eachWorker.getNumQueryMasterTasks();
-        }
-        if(eachWorker.getWorkerStatus().equals(WorkerStatus.LOST.toString())) {
-          deadQueryMasters.add(eachWorker);
-        }
-      }
-
-      if(eachWorker.getTaskRunnerMode() == true) {
-        if(eachWorker.getWorkerStatus().equals(WorkerStatus.RUNNING.toString())) {
-          liveWorkers.add(eachWorker);
-        } else if(eachWorker.getWorkerStatus().equals(WorkerStatus.LOST.toString())) {
-          deadWorkers.add(eachWorker);
-        } else if(eachWorker.getWorkerStatus().equals(WorkerStatus.DECOMMISSIONED.toString())) {
-          decommissionWorkers.add(eachWorker);
-        }
+      if(eachWorker.getWorkerStatus().equals(WorkerStatus.RUNNING.toString())) {
+        liveQueryMasters.add(eachWorker);
+        liveWorkers.add(eachWorker);
+        runningQueryMasterTasks += eachWorker.getNumQueryMasterTasks();
+      } else if(eachWorker.getWorkerStatus().equals(WorkerStatus.LOST.toString())) {
+        deadQueryMasters.add(eachWorker);
+        deadWorkers.add(eachWorker);
+      } else if(eachWorker.getWorkerStatus().equals(WorkerStatus.DECOMMISSIONED.toString())) {
+        decommissionWorkers.add(eachWorker);
       }
     }
 
@@ -427,7 +421,7 @@ public class TajoAdmin {
 
     if (tajoConf.getBoolVar(TajoConf.ConfVars.TAJO_MASTER_HA_ENABLE)) {
 
-      List<String> list = HAServiceUtil.getMasters(tajoConf);
+      List<String> list = serviceTracker.getMasters(tajoConf);
       int i = 0;
       for (String master : list) {
         if (i > 0) {

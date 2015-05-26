@@ -38,10 +38,7 @@ import org.apache.tajo.engine.function.builtin.SumInt;
 import org.apache.tajo.engine.json.CoreGsonHelper;
 import org.apache.tajo.engine.parser.SQLAnalyzer;
 import org.apache.tajo.engine.query.QueryContext;
-import org.apache.tajo.plan.LogicalOptimizer;
-import org.apache.tajo.plan.LogicalPlan;
-import org.apache.tajo.plan.LogicalPlanner;
-import org.apache.tajo.plan.PlanningException;
+import org.apache.tajo.plan.*;
 import org.apache.tajo.plan.expr.*;
 import org.apache.tajo.plan.logical.*;
 import org.apache.tajo.plan.rewrite.InSubQueryRewriteRule;
@@ -97,19 +94,19 @@ public class TestLogicalPlanner {
     schema3.addColumn("deptname", Type.TEXT);
     schema3.addColumn("score", Type.INT4);
 
-    TableMeta meta = CatalogUtil.newTableMeta(StoreType.CSV);
+    TableMeta meta = CatalogUtil.newTableMeta("CSV");
     TableDesc people = new TableDesc(
         CatalogUtil.buildFQName(TajoConstants.DEFAULT_DATABASE_NAME, "employee"), schema, meta,
         CommonTestingUtil.getTestDir().toUri());
     catalog.createTable(people);
 
     TableDesc student = new TableDesc(
-        CatalogUtil.buildFQName(DEFAULT_DATABASE_NAME, "dept"), schema2, StoreType.CSV, new KeyValueSet(),
+        CatalogUtil.buildFQName(DEFAULT_DATABASE_NAME, "dept"), schema2, "CSV", new KeyValueSet(),
         CommonTestingUtil.getTestDir().toUri());
     catalog.createTable(student);
 
     TableDesc score = new TableDesc(
-        CatalogUtil.buildFQName(DEFAULT_DATABASE_NAME, "score"), schema3, StoreType.CSV, new KeyValueSet(),
+        CatalogUtil.buildFQName(DEFAULT_DATABASE_NAME, "score"), schema3, "CSV", new KeyValueSet(),
         CommonTestingUtil.getTestDir().toUri());
     catalog.createTable(score);
 
@@ -126,7 +123,7 @@ public class TestLogicalPlanner {
     tpch.loadSchemas();
     tpch.loadOutSchema();
     for (String table : tpchTables) {
-      TableMeta m = CatalogUtil.newTableMeta(StoreType.CSV);
+      TableMeta m = CatalogUtil.newTableMeta("CSV");
       TableDesc d = CatalogUtil.newTableDesc(
           CatalogUtil.buildFQName(DEFAULT_DATABASE_NAME, table), tpch.getSchema(table), m,
           CommonTestingUtil.getTestDir());
@@ -876,7 +873,7 @@ public class TestLogicalPlanner {
     assertEquals(NodeType.EXPRS, root.getChild().getType());
     Schema out = root.getOutSchema();
 
-    Iterator<Column> it = out.getColumns().iterator();
+    Iterator<Column> it = out.getRootColumns().iterator();
     Column col = it.next();
     assertEquals("res1", col.getSimpleName());
     col = it.next();
@@ -925,7 +922,7 @@ public class TestLogicalPlanner {
     testJsonSerDerObject(root);
 
     Schema finalSchema = root.getOutSchema();
-    Iterator<Column> it = finalSchema.getColumns().iterator();
+    Iterator<Column> it = finalSchema.getRootColumns().iterator();
     Column col = it.next();
     assertEquals("deptname", col.getSimpleName());
     col = it.next();
@@ -936,7 +933,7 @@ public class TestLogicalPlanner {
     root = (LogicalRootNode) plan;
 
     finalSchema = root.getOutSchema();
-    it = finalSchema.getColumns().iterator();
+    it = finalSchema.getRootColumns().iterator();
     col = it.next();
     assertEquals("id", col.getSimpleName());
     col = it.next();
@@ -953,7 +950,7 @@ public class TestLogicalPlanner {
     testJsonSerDerObject(root);
 
     Schema finalSchema = root.getOutSchema();
-    Iterator<Column> it = finalSchema.getColumns().iterator();
+    Iterator<Column> it = finalSchema.getRootColumns().iterator();
     Column col = it.next();
     assertEquals("id", col.getSimpleName());
     col = it.next();
@@ -984,7 +981,7 @@ public class TestLogicalPlanner {
     assertEquals(Type.INT8, def.getColumn(2).getDataType().getType());
     assertEquals("score", def.getColumn(3).getSimpleName());
     assertEquals(Type.FLOAT4, def.getColumn(3).getDataType().getType());
-    assertEquals(StoreType.CSV, createTable.getStorageType());
+    assertTrue("CSV".equalsIgnoreCase(createTable.getStorageType()));
     assertEquals("/tmp/data", createTable.getPath().toString());
     assertTrue(createTable.hasOptions());
     assertEquals("|", createTable.getOptions().get("csv.delimiter"));
@@ -1111,7 +1108,7 @@ public class TestLogicalPlanner {
   // Table descriptions
   //
   // employee (name text, empid int4, deptname text)
-  // dept (deptname text, nameger text)
+  // dept (deptname text, manager text)
   // score (deptname text, score inet4)
 
   static final String [] insertStatements = {
@@ -1120,7 +1117,8 @@ public class TestLogicalPlanner {
       "insert into employee (name, deptname) select * from dept",           // 2
       "insert into location '/tmp/data' select name, empid from employee",  // 3
       "insert overwrite into employee (name, deptname) select * from dept", // 4
-      "insert overwrite into LOCATION '/tmp/data' select * from dept"       // 5
+      "insert overwrite into LOCATION '/tmp/data' select * from dept",      // 5
+      "insert into employee (deptname, name) select deptname, manager from dept"  // 6
   };
 
   @Test
@@ -1201,6 +1199,24 @@ public class TestLogicalPlanner {
     InsertNode insertNode = getInsertNode(plan);
     assertTrue(insertNode.isOverwrite());
     assertTrue(insertNode.hasPath());
+  }
+
+  @Test
+  public final void testInsertInto6() throws PlanningException {
+    QueryContext qc = new QueryContext(util.getConfiguration(), session);
+
+    Expr expr = sqlAnalyzer.parse(insertStatements[6]);
+    LogicalPlan plan = planner.createPlan(qc, expr);
+    assertEquals(1, plan.getQueryBlocks().size());
+    InsertNode insertNode = getInsertNode(plan);
+
+    ProjectionNode subquery = insertNode.getChild();
+    Target[] targets = subquery.getTargets();
+    // targets MUST be manager, NULL as empid, deptname
+    assertEquals(targets[0].getNamedColumn().getQualifiedName(), "default.dept.manager");
+    assertEquals(targets[1].getAlias(), "empid");
+    assertEquals(targets[1].getEvalTree().getType(), EvalType.CONST);
+    assertEquals(targets[2].getNamedColumn().getQualifiedName(), "default.dept.deptname");
   }
 
   private static InsertNode getInsertNode(LogicalPlan plan) {

@@ -21,11 +21,13 @@ package org.apache.tajo.storage.text;
 import io.netty.buffer.ByteBuf;
 import org.apache.commons.lang.StringEscapeUtils;
 import org.apache.commons.lang.StringUtils;
+import org.apache.tajo.catalog.Column;
 import org.apache.tajo.catalog.Schema;
 import org.apache.tajo.catalog.TableMeta;
 import org.apache.tajo.datum.NullDatum;
 import org.apache.tajo.storage.BufferPool;
 import org.apache.tajo.storage.StorageConstants;
+import org.apache.tajo.util.Bytes;
 
 /**
  * Pluggable Text Line SerDe class
@@ -35,7 +37,7 @@ public abstract class TextLineSerDe {
   public TextLineSerDe() {
   }
 
-  public abstract TextLineDeserializer createDeserializer(Schema schema, TableMeta meta, int [] targetColumnIndexes);
+  public abstract TextLineDeserializer createDeserializer(Schema schema, TableMeta meta, Column [] projected);
 
   public abstract TextLineSerializer createSerializer(Schema schema, TableMeta meta);
 
@@ -56,7 +58,7 @@ public abstract class TextLineSerDe {
     if (StringUtils.isEmpty(nullCharacters)) {
       nullChars = NullDatum.get().asTextBytes();
     } else {
-      nullChars = nullCharacters.getBytes();
+      nullChars = nullCharacters.getBytes(Bytes.UTF8_CHARSET);
     }
 
     return nullChars;

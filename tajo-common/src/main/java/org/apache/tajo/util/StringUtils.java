@@ -186,7 +186,11 @@ public class StringUtils {
   public static String unicodeEscapedDelimiter(String value) {
     try {
       String delimiter = StringEscapeUtils.unescapeJava(value);
-      return unicodeEscapedDelimiter(delimiter.charAt(0));
+      StringBuilder builder = new StringBuilder();
+      for (char achar : delimiter.toCharArray()) {
+        builder.append(unicodeEscapedDelimiter(achar));
+      }
+      return builder.toString();
     } catch (Throwable e) {
     }
     return value;
@@ -366,5 +370,75 @@ public class StringUtils {
     }
     
     return resultArray;
+  }
+
+  /**
+   * Concatenate all objects' string with a delimiter string
+   *
+   * @param objects Iterable objects
+   * @param delimiter Delimiter string
+   * @return A joined string
+   */
+  public static String join(Iterable objects, String delimiter) {
+    boolean first = true;
+    StringBuilder sb = new StringBuilder();
+    for(Object object : objects) {
+      if (first) {
+        first = false;
+      } else {
+        sb.append(delimiter);
+      }
+
+      sb.append(object.toString());
+    }
+
+    return sb.toString();
+  }
+
+  /**
+   * Concatenate all objects' string with the delimiter ", "
+   *
+   * @param objects Iterable objects
+   * @return A joined string
+   */
+  public static String join(Object[] objects) {
+    return join(objects, ", ", 0, objects.length);
+  }
+
+  /**
+   * Concatenate all objects' string with a delimiter string
+   *
+   * @param objects object array
+   * @param delimiter Delimiter string
+   * @param startIndex the begin index to join
+   * @return A joined string
+   */
+  public static String join(Object[] objects, String delimiter, int startIndex) {
+    return join(objects, delimiter, startIndex, objects.length);
+  }
+
+  /**
+   * Concatenate all objects' string with a delimiter string
+   *
+   * @param objects object array
+   * @param delimiter Delimiter string
+   * @param startIndex the begin index to join
+   * @param length the number of columns to be joined
+   * @return A joined string
+   */
+  public static String join(Object[] objects, String delimiter, int startIndex, int length) {
+    boolean first = true;
+    StringBuilder sb = new StringBuilder();
+    for(int i = startIndex; i + startIndex < length; i++) {
+      if (first) {
+        first = false;
+      } else {
+        sb.append(delimiter);
+      }
+
+      sb.append(objects[i].toString());
+    }
+
+    return sb.toString();
   }
 }

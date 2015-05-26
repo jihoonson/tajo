@@ -84,6 +84,9 @@ public class HistoryWriter extends AbstractService {
 
   @Override
   public void serviceInit(Configuration conf) throws Exception {
+    if (!(conf instanceof TajoConf)) {
+      throw new IllegalArgumentException("conf should be a TajoConf type.");
+    }
     tajoConf = (TajoConf)conf;
     historyParentPath = tajoConf.getQueryHistoryDir(tajoConf);
     taskHistoryParentPath = tajoConf.getTaskHistoryDir(tajoConf);
@@ -129,7 +132,7 @@ public class HistoryWriter extends AbstractService {
   }
 
   /* asynchronously flush to history file */
-  public synchronized WriterFuture<WriterHolder> appendAndFlush(History history) {
+  public WriterFuture<WriterHolder> appendAndFlush(History history) {
     WriterFuture<WriterHolder> future = new WriterFuture<WriterHolder>(history) {
       public void done(WriterHolder holder) {
         try {
@@ -160,7 +163,7 @@ public class HistoryWriter extends AbstractService {
   }
 
   /* Flushing the buffer */
-  public synchronized void flushTaskHistories() {
+  public void flushTaskHistories() {
     if (historyQueue.size() > 0) {
       synchronized (writerThread) {
         writerThread.needTaskFlush.set(true);
@@ -241,20 +244,16 @@ public class HistoryWriter extends AbstractService {
           cal.add(Calendar.HOUR_OF_DAY, -2);
           String closeTargetTime = df.format(cal.getTime());
           List<String> closingTargets = new ArrayList<String>();
-          synchronized (taskWriters) {
-            for (String eachWriterTime : taskWriters.keySet()) {
-              if (eachWriterTime.compareTo(closeTargetTime) <= 0) {
-                closingTargets.add(eachWriterTime);
-              }
+
+          for (String eachWriterTime : taskWriters.keySet()) {
+            if (eachWriterTime.compareTo(closeTargetTime) <= 0) {
+              closingTargets.add(eachWriterTime);
             }
           }
 
           for (String eachWriterTime : closingTargets) {
             WriterHolder writerHolder;
-            synchronized (taskWriters) {
-              writerHolder = taskWriters.remove(eachWriterTime);
-            }
-
+            writerHolder = taskWriters.remove(eachWriterTime);
             if (writerHolder != null) {
               LOG.info("Closing task history file: " + writerHolder.path);
               IOUtils.cleanup(LOG, writerHolder);
@@ -337,7 +336,7 @@ public class HistoryWriter extends AbstractService {
       return histories;
     }
 
-    private synchronized void writeQueryHistory(QueryHistory queryHistory) throws Exception {
+    private void writeQueryHistory(QueryHistory queryHistory) throws Exception {
       // QueryMaster's query detail history (json format)
       // <tajo.query-history.path>/<yyyyMMdd>/query-detail/<QUERY_ID>/query.hist
 
@@ -378,7 +377,7 @@ public class HistoryWriter extends AbstractService {
       }
     }
 
-    private synchronized WriterHolder writeQuerySummary(QueryInfo queryInfo) throws Exception {
+    private WriterHolder writeQuerySummary(QueryInfo queryInfo) throws Exception {
       if(stopped.get()) return null;
 
         // writing to HDFS and rolling hourly
@@ -406,7 +405,7 @@ public class HistoryWriter extends AbstractService {
       return querySummaryWriter;
     }
 
-    private synchronized void rollingQuerySummaryWriter() throws Exception {
+    private void rollingQuerySummaryWriter() throws Exception {
       // finding largest file sequence
       SimpleDateFormat df = new SimpleDateFormat("yyyyMMddHHmmss");
       String currentDateTime = df.format(new Date(System.currentTimeMillis()));
@@ -433,13 +432,13 @@ public class HistoryWriter extends AbstractService {
           try {
             holder.flush();
           } catch (IOException e) {
-            LOG.warn(e);
+            LOG.warn(e, e);
           }
         }
       }
     }
 
-    private synchronized WriterHolder writeTaskHistory(TaskHistory taskHistory) throws Exception {
+    private WriterHolder writeTaskHistory(TaskHistory taskHistory) throws Exception {
       SimpleDateFormat df = new SimpleDateFormat("yyyyMMddHH");
 
       String taskStartTime = df.format(new Date(taskHistory.getStartTime()));
@@ -533,14 +532,14 @@ public class HistoryWriter extends AbstractService {
     FSDataOutputStream out;
 
     @Override
-    public synchronized void close() throws IOException {
+    public void close() throws IOException {
       if (out != null) out.close();
     }
 
     /*
      * Sync buffered data to DataNodes or disks (flush to disk devices).
      */
-    private synchronized void flush() throws IOException {
+    private void flush() throws IOException {
       if (out != null) out.hsync();
     }
   }

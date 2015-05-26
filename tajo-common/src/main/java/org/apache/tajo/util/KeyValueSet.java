@@ -104,7 +104,7 @@ public class KeyValueSet implements ProtoObject<KeyValueSetProto>, Cloneable, Gs
     } else if (defaultVal != null) {
       return defaultVal;
     } else {
-      throw new IllegalArgumentException("No such a config key: "  + key);
+      throw new IllegalArgumentException("No such config key: "  + key);
     }
   }
 
@@ -205,7 +205,7 @@ public class KeyValueSet implements ProtoObject<KeyValueSetProto>, Cloneable, Gs
 
   }
 
-    @Override
+  @Override
 	public boolean equals(Object object) {
 		if(object instanceof KeyValueSet) {
 			KeyValueSet other = (KeyValueSet)object;

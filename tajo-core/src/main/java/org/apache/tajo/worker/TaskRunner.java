@@ -34,9 +34,10 @@ import org.apache.tajo.master.container.TajoContainerId;
 import org.apache.tajo.master.container.TajoContainerIdPBImpl;
 import org.apache.tajo.master.container.TajoConverterUtils;
 import org.apache.tajo.rpc.CallFuture;
+import org.apache.tajo.rpc.NettyClientBase;
 import org.apache.tajo.rpc.NullCallback;
-import org.jboss.netty.channel.ConnectTimeoutException;
 
+import java.net.ConnectException;
 import java.util.concurrent.*;
 
 import static org.apache.tajo.ipc.TajoWorkerProtocol.*;
@@ -113,6 +114,9 @@ public class TaskRunner extends AbstractService {
 
   @Override
   public void init(Configuration conf) {
+    if (!(conf instanceof TajoConf)) {
+      throw new IllegalArgumentException("conf should be a TajoConf Type.");
+    }
     this.systemConf = (TajoConf)conf;
 
     try {
@@ -121,7 +125,7 @@ public class TaskRunner extends AbstractService {
       LOG.info("TaskRunner basedir is created (" + baseDirPath +")");
     } catch (Throwable t) {
       t.printStackTrace();
-      LOG.error(t);
+      LOG.error(t, t);
     }
     super.init(conf);
     this.history.setState(getServiceState());
@@ -143,15 +147,17 @@ public class TaskRunner extends AbstractService {
     this.finishTime = System.currentTimeMillis();
     this.history.setFinishTime(finishTime);
     // If this flag become true, taskLauncher will be terminated.
-    this.stopped = true;
-
-    fetchLauncher.shutdown();
-    fetchLauncher = null;
 
     LOG.info("Stop TaskRunner: " + getId());
     synchronized (this) {
+      this.stopped = true;
+
+      fetchLauncher.shutdown();
+      fetchLauncher = null;
+
       notifyAll();
     }
+
     super.stop();
     this.history.setState(getServiceState());
   }
@@ -188,22 +194,8 @@ public class TaskRunner extends AbstractService {
           CallFuture<TaskRequestProto> callFuture = null;
           TaskRequestProto taskRequest = null;
 
-          while(!stopped) {
-            QueryMasterProtocolService.Interface qmClientService;
-            try {
-              qmClientService = getContext().getQueryMasterStub();
-            } catch (ConnectTimeoutException ce) {
-              // NettyClientBase throws ConnectTimeoutException if connection was failed
-              stop();
-              getContext().stopTaskRunner(getId());
-              LOG.error("Connecting to QueryMaster was failed.", ce);
-              break;
-            } catch (Throwable t) {
-              LOG.fatal("Unable to handle exception: " + t.getMessage(), t);
-              stop();
-              getContext().stopTaskRunner(getId());
-              break;
-            }
+          while(!stopped && !executionBlockContext.isStopped()) {
+            QueryMasterProtocolService.Interface qmClientService = executionBlockContext.getStub();
 
             try {
               if (callFuture == null) {
@@ -228,17 +220,19 @@ public class TaskRunner extends AbstractService {
                 if(stopped) {
                   break;
                 }
-
-                if(callFuture.getController().failed()){
-                  LOG.error(callFuture.getController().errorText());
-                  break;
-                }
                 // if there has been no assigning task for a given period,
                 // TaskRunner will retry to request an assigning task.
                 if (LOG.isDebugEnabled()) {
                   LOG.info("Retry assigning task:" + getId());
                 }
                 continue;
+              } catch (ExecutionException ee) {
+                if(!getContext().isStopped()){
+                  LOG.error(ee.getMessage(), ee);
+                } else {
+                  /* EB is stopped */
+                  break;
+                }
               }
 
               if (taskRequest != null) {
@@ -247,9 +241,7 @@ public class TaskRunner extends AbstractService {
                 // immediately.
                 if (taskRequest.getShouldDie()) {
                   LOG.info("Received ShouldDie flag:" + getId());
-                  stop();
-                  //notify to TaskRunnerManager
-                  getContext().stopTaskRunner(getId());
+                  break;
                 } else {
                   getContext().getWorkerContext().getWorkerSystemMetrics().counter("query", "task").inc();
                   LOG.info("Accumulated Received Task: " + (++receivedNum));
@@ -262,7 +254,7 @@ public class TaskRunner extends AbstractService {
                   }
 
                   LOG.info("Initializing: " + taskAttemptId);
-                  Task task;
+                  Task task = null;
                   try {
                     task = new Task(getId(), getTaskBaseDir(), taskAttemptId, executionBlockContext,
                         new TaskRequestImpl(taskRequest));
@@ -277,20 +269,22 @@ public class TaskRunner extends AbstractService {
                   } catch (Throwable t) {
                     LOG.error(t.getMessage(), t);
                     fatalError(qmClientService, taskAttemptId, t.getMessage());
+                    if(task != null) {
+                      task.cleanupTask();
+                    }
                   } finally {
                     callFuture = null;
                     taskRequest = null;
                   }
                 }
-              } else {
-                stop();
-                //notify to TaskRunnerManager
-                getContext().stopTaskRunner(getId());
               }
             } catch (Throwable t) {
               LOG.fatal(t.getMessage(), t);
             }
           }
+          stop();
+          //notify to TaskRunnerManager
+          getContext().stopTaskRunner(getId());
         }
       });
       taskLauncher.start();

@@ -21,8 +21,8 @@ package org.apache.tajo.plan.expr;
 
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.Expose;
+
 import org.apache.tajo.catalog.CatalogUtil;
-import org.apache.tajo.catalog.Schema;
 import org.apache.tajo.common.TajoDataTypes;
 import org.apache.tajo.datum.Datum;
 import org.apache.tajo.datum.DatumFactory;
@@ -57,18 +57,30 @@ public class InEval extends BinaryEval {
   }
 
   @Override
-  public Datum eval(Schema schema, Tuple tuple) {
+  public Datum eval(Tuple tuple) {
+    if (!isBound) {
+      throw new IllegalStateException("bind() must be called before eval()");
+    }
     if (values == null) {
       values = Sets.newHashSet(((RowConstantEval)rightExpr).getValues());
     }
 
-    Datum leftValue = leftExpr.eval(schema, tuple);
+    Datum leftValue = leftExpr.eval(tuple);
 
     if (leftValue.isNull()) {
       return NullDatum.get();
     }
 
     return DatumFactory.createBool(not ^ values.contains(leftValue));
+  }
+
+  @Override
+  public int hashCode() {
+    final int prime = 31;
+    int result = super.hashCode();
+    result = prime * result + (not ? 1231 : 1237);
+    result = prime * result + ((values == null) ? 0 : values.hashCode());
+    return result;
   }
 
   @Override

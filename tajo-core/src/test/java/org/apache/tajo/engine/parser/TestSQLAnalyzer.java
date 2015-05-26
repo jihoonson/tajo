@@ -485,6 +485,45 @@ public class TestSQLAnalyzer {
   }
 
   @Test
+  public void testAlterTableSetProperty1() throws IOException {
+    String sql = FileUtil.readTextFileFromResource("queries/default/alter_table_set_property_1.sql");
+    Expr expr = parseQuery(sql);
+    assertEquals(OpType.AlterTable, expr.getType());
+    AlterTable alterTable = (AlterTable)expr;
+    assertEquals(alterTable.getAlterTableOpType(), AlterTableOpType.SET_PROPERTY);
+    assertTrue(alterTable.hasParams());
+    assertTrue(alterTable.getParams().containsKey("timezone"));
+    assertEquals("GMT-7", alterTable.getParams().get("timezone"));
+  }
+
+  @Test
+  public void testAlterTableSetProperty2() throws IOException {
+    String sql = FileUtil.readTextFileFromResource("queries/default/alter_table_set_property_2.sql");
+    Expr expr = parseQuery(sql);
+    assertEquals(OpType.AlterTable, expr.getType());
+    AlterTable alterTable = (AlterTable)expr;
+    assertEquals(alterTable.getAlterTableOpType(), AlterTableOpType.SET_PROPERTY);
+    assertTrue(alterTable.hasParams());
+    assertTrue(alterTable.getParams().containsKey("text.delimiter"));
+    assertEquals("&", alterTable.getParams().get("text.delimiter"));
+  }
+
+  @Test
+  public void testAlterTableSetProperty3() throws IOException {
+    // update multiple table properties with a single 'SET PROPERTY' sql
+    String sql = FileUtil.readTextFileFromResource("queries/default/alter_table_set_property_3.sql");
+    Expr expr = parseQuery(sql);
+    assertEquals(OpType.AlterTable, expr.getType());
+    AlterTable alterTable = (AlterTable)expr;
+    assertEquals(alterTable.getAlterTableOpType(), AlterTableOpType.SET_PROPERTY);
+    assertTrue(alterTable.hasParams());
+    assertTrue(alterTable.getParams().containsKey("compression.type"));
+    assertEquals("RECORD", alterTable.getParams().get("compression.type"));
+    assertTrue(alterTable.getParams().containsKey("compression.codec"));
+    assertEquals("org.apache.hadoop.io.compress.SnappyCodec", alterTable.getParams().get("compression.codec"));
+  }
+
+  @Test
   public void testTableSubQuery1() throws IOException {
     String sql = FileUtil.readTextFileFromResource("queries/default/table_subquery1.sql");
     parseQuery(sql);
@@ -709,5 +748,15 @@ public class TestSQLAnalyzer {
   @Test
   public void testSetSession7() throws IOException {
     assertParseResult("setsession7.sql", "setsession7.result");
+  }
+
+  @Test
+  public void testCreateTableWithNested1() throws IOException {
+    assertParseResult("create_table_nested_1.sql", "create_table_nested_1.result");
+  }
+
+  @Test
+  public void testCreateTableWithNested2() throws IOException {
+    assertParseResult("create_table_nested_2.sql", "create_table_nested_2.result");
   }
 }
