@@ -66,6 +66,7 @@ public class GlobalEngine extends AbstractService {
 
   private SQLAnalyzer analyzer;
   private CatalogService catalog;
+  private ExpressionRewriter expressionRewriter;
   private PreLogicalPlanVerifier preVerifier;
   private LogicalPlanner planner;
   private LogicalOptimizer optimizer;
@@ -88,6 +89,7 @@ public class GlobalEngine extends AbstractService {
   public void start() {
     try  {
       analyzer = new SQLAnalyzer();
+      expressionRewriter = new ExpressionRewriter(context.getConf());
       preVerifier = new PreLogicalPlanVerifier(context.getCatalog());
       planner = new LogicalPlanner(context.getCatalog());
       optimizer = new LogicalOptimizer(context.getConf());
@@ -158,6 +160,9 @@ public class GlobalEngine extends AbstractService {
         planningContext = buildExpressionFromSql(query);
       }
 
+      // TODO: rewrite the query expression
+      planningContext = expressionRewriter.rewrite(queryContext, planningContext);
+      System.out.println(planningContext);
       String jsonExpr = planningContext.toJson();
       LogicalPlan plan = createLogicalPlan(queryContext, planningContext);
       SubmitQueryResponse response = queryExecutor.execute(queryContext, session, query, jsonExpr, plan);

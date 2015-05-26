@@ -46,7 +46,7 @@ import org.apache.tajo.plan.exprrewrite.EvalTreeOptimizer;
 import org.apache.tajo.plan.logical.*;
 import org.apache.tajo.plan.nameresolver.NameResolvingMode;
 import org.apache.tajo.plan.rewrite.rules.ProjectionPushDownRule;
-import org.apache.tajo.plan.util.ExprFinder;
+import org.apache.tajo.plan.util.ExprTreeUtil;
 import org.apache.tajo.plan.util.PlannerUtil;
 import org.apache.tajo.catalog.SchemaUtil;
 import org.apache.tajo.plan.verifier.VerifyException;
@@ -331,7 +331,7 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
     List<Integer> targetsIds = normalize(context, projection, normalizedExprList, new Matcher() {
       @Override
       public boolean isMatch(Expr expr) {
-        return ExprFinder.finds(expr, OpType.WindowFunction).size() == 0;
+        return ExprTreeUtil.finds(expr, OpType.WindowFunction).size() == 0;
       }
     });
 
@@ -345,7 +345,7 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
     targetsIds = normalize(context, projection, normalizedExprList, new Matcher() {
       @Override
       public boolean isMatch(Expr expr) {
-        return ExprFinder.finds(expr, OpType.WindowFunction).size() > 0;
+        return ExprTreeUtil.finds(expr, OpType.WindowFunction).size() > 0;
       }
     });
     addNamedExprs(block, referenceNames, normalizedExprList, windowSpecReferencesList, projection, targetsIds);

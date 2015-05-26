@@ -46,6 +46,10 @@ public class TablePrimarySubQuery extends Relation {
     return columnNames;
   }
 
+  public void setSubquery(Expr subQuery) {
+    this.subquery = subQuery;
+  }
+
   public Expr getSubQuery() {
     return subquery;
   }

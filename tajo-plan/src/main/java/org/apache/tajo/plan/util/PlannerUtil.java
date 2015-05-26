@@ -184,12 +184,18 @@ public class PlannerUtil {
    * @return an array of all descendant RelationNode of LogicalNode.
    */
   public static String[] getRelationLineage(LogicalNode from) {
-    LogicalNode[] scans = findAllNodes(from, NodeType.SCAN, NodeType.PARTITIONS_SCAN);
-    String[] tableNames = new String[scans.length];
+    LogicalNode[] relations = findAllNodes(from, NodeType.SCAN, NodeType.PARTITIONS_SCAN, NodeType.TABLE_SUBQUERY);
+    String[] tableNames = new String[relations.length];
     ScanNode scan;
-    for (int i = 0; i < scans.length; i++) {
-      scan = (ScanNode) scans[i];
-      tableNames[i] = scan.getCanonicalName();
+    for (int i = 0; i < relations.length; i++) {
+      if (relations[i].getType() == NodeType.SCAN ||
+          relations[i].getType() == NodeType.PARTITIONS_SCAN) {
+        scan = (ScanNode) relations[i];
+        tableNames[i] = scan.getCanonicalName();
+      } else if (relations[i].getType() == NodeType.TABLE_SUBQUERY) {
+        TableSubQueryNode subQueryNode = (TableSubQueryNode) relations[i];
+        tableNames[i] = subQueryNode.getCanonicalName();
+      }
     }
     return tableNames;
   }
