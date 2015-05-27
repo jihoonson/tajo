@@ -136,6 +136,15 @@ public class FilterPushDownRule extends BasicLogicalPlanVisitor<FilterPushDownCo
       if (node instanceof UnaryNode) {
         UnaryNode unary = (UnaryNode) node;
         unary.setChild(selNode.getChild());
+      } else if (node instanceof BinaryNode) {
+        BinaryNode binary = (BinaryNode) node;
+        if (binary.getLeftChild().equals(selNode)) {
+          binary.setLeftChild(selNode.getChild());
+        } else if (binary.getRightChild().equals(selNode)) {
+          binary.setRightChild(selNode.getChild());
+        } else {
+          throw new InvalidQueryException("Unexpected Logical Query Plan");
+        }
       } else {
         throw new InvalidQueryException("Unexpected Logical Query Plan");
       }
@@ -183,7 +192,10 @@ public class FilterPushDownRule extends BasicLogicalPlanVisitor<FilterPushDownCo
     Map<EvalNode, EvalNode> transformedMap = findCanPushdownAndTransform(context, block, joinNode, left, notMatched,
         null, 0);
     context.setFiltersTobePushed(transformedMap.keySet());
+//    context.addFiltersTobePushed(transformedMap.keySet());
+    stack.push(joinNode);
     visit(context, plan, block, left, stack);
+    stack.pop();
 
     context.setToOrigin(transformedMap);
     context.addFiltersTobePushed(notMatched);
@@ -193,7 +205,9 @@ public class FilterPushDownRule extends BasicLogicalPlanVisitor<FilterPushDownCo
         left.getOutSchema().size());
     context.setFiltersTobePushed(transformedMap.keySet());
 
+    stack.push(joinNode);
     visit(context, plan, block, right, stack);
+    stack.pop();
 
     context.setToOrigin(transformedMap);
     context.addFiltersTobePushed(notMatched);

@@ -30,7 +30,7 @@ import org.apache.tajo.catalog.Schema;
 import org.apache.tajo.common.TajoDataTypes.DataType;
 import org.apache.tajo.datum.Datum;
 import org.apache.tajo.exception.InternalException;
-import org.apache.tajo.plan.util.ExprFinder;
+import org.apache.tajo.plan.util.ExprTreeUtil;
 import org.apache.tajo.plan.LogicalPlan;
 import org.apache.tajo.plan.Target;
 import org.apache.tajo.util.TUtil;
@@ -361,7 +361,7 @@ public class EvalTreeUtil {
 
         // getting original expression of left term
         NamedExpr rawExpr = block.getNamedExprsManager().getNamedExpr(left.getQualifiedName());
-        Set<ColumnReferenceExpr> foundColumns = ExprFinder.finds(rawExpr.getExpr(), OpType.Column);
+        Set<ColumnReferenceExpr> foundColumns = ExprTreeUtil.finds(rawExpr.getExpr(), OpType.Column);
 
         // ensure there is only one column of an original expression
         if (foundColumns.size() == 1) {
@@ -372,7 +372,7 @@ public class EvalTreeUtil {
 
         // getting original expression of right term
         NamedExpr rawExpr = block.getNamedExprsManager().getNamedExpr(right.getQualifiedName());
-        Set<ColumnReferenceExpr> foundColumns = ExprFinder.finds(rawExpr.getExpr(), OpType.Column);
+        Set<ColumnReferenceExpr> foundColumns = ExprTreeUtil.finds(rawExpr.getExpr(), OpType.Column);
 
         // ensure there is only one column of an original expression
         if (foundColumns.size() == 1) {

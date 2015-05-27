@@ -22,6 +22,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import org.apache.tajo.LocalTajoTestingUtility;
+import org.apache.tajo.OverridableConf;
 import org.apache.tajo.TajoConstants;
 import org.apache.tajo.TajoTestingCluster;
 import org.apache.tajo.algebra.Expr;
@@ -37,11 +38,13 @@ import org.apache.tajo.engine.function.builtin.SumInt;
 import org.apache.tajo.engine.json.CoreGsonHelper;
 import org.apache.tajo.engine.parser.SQLAnalyzer;
 import org.apache.tajo.engine.query.QueryContext;
-import org.apache.tajo.session.Session;
 import org.apache.tajo.plan.*;
 import org.apache.tajo.plan.expr.*;
 import org.apache.tajo.plan.logical.*;
+import org.apache.tajo.plan.rewrite.InSubQueryRewriteRule;
 import org.apache.tajo.plan.util.PlannerUtil;
+import org.apache.tajo.plan.visitor.ExplainLogicalPlanVisitor;
+import org.apache.tajo.session.Session;
 import org.apache.tajo.util.CommonTestingUtil;
 import org.apache.tajo.util.FileUtil;
 import org.apache.tajo.util.KeyValueSet;
@@ -57,7 +60,6 @@ import java.util.*;
 import static org.apache.tajo.TajoConstants.DEFAULT_DATABASE_NAME;
 import static org.apache.tajo.TajoConstants.DEFAULT_TABLESPACE_NAME;
 import static org.junit.Assert.*;
-import static org.junit.Assert.assertEquals;
 
 public class TestLogicalPlanner {
   private static TajoTestingCluster util;
@@ -1221,5 +1223,180 @@ public class TestLogicalPlanner {
     LogicalRootNode root = plan.getRootBlock().getRoot();
     assertEquals(NodeType.INSERT, root.getChild().getType());
     return root.getChild();
+  }
+
+  @Test
+  public final void testInSubquery() throws PlanningException {
+    QueryContext qc = new QueryContext(util.getConfiguration(), session);
+
+    Expr expr = sqlAnalyzer.parse("select n_name from nation where n_regionkey in (select r_regionkey from region);");
+    System.out.println(expr);
+    InSubQueryRewriteRule rule = new InSubQueryRewriteRule();
+    OverridableConf overridableConf = new OverridableConf(util.getConfiguration());
+    assertTrue(rule.isEligible(overridableConf, expr));
+    expr = rule.rewrite(overridableConf, expr);
+    System.out.println("============================ Rewritten expr ============================");
+    System.out.println(expr);
+
+    LogicalPlan plan = planner.createPlan(qc, expr);
+    System.out.println("============================ This is a logical plan ============================");
+    System.out.println(plan);
+    System.out.println();
+  }
+
+  @Test
+  public final void testNestedInSubQuery() throws PlanningException {
+    QueryContext qc = new QueryContext(util.getConfiguration(), session);
+
+    Expr expr = sqlAnalyzer.parse("select n_name from nation where n_regionkey in (select r_regionkey from region where r_name in (select r_name from region where r_regionkey > 1 and r_regionkey < 3));");
+    InSubQueryRewriteRule rule = new InSubQueryRewriteRule();
+    OverridableConf overridableConf = new OverridableConf(util.getConfiguration());
+    assertTrue(rule.isEligible(overridableConf, expr));
+    expr = rule.rewrite(overridableConf, expr);
+    System.out.println(expr);
+    LogicalPlan plan = planner.createPlan(qc, expr);
+    for (LogicalPlan.QueryBlock block : plan.getQueryBlocks()) {
+      System.out.println(block.getName());
+      System.out.println(getLogicalPlanAsString(plan, block));
+    }
+  }
+
+  @Test
+  public final void testInSubQueryWithOtherConditions() throws PlanningException {
+    QueryContext qc = new QueryContext(util.getConfiguration(), session);
+
+    Expr expr = sqlAnalyzer.parse("select n_name from nation where n_regionkey in (select r_regionkey from region) and n_nationkey > 1;");
+    InSubQueryRewriteRule rule = new InSubQueryRewriteRule();
+    OverridableConf overridableConf = new OverridableConf(util.getConfiguration());
+    assertTrue(rule.isEligible(overridableConf, expr));
+    expr = rule.rewrite(overridableConf, expr);
+    System.out.println(expr);
+    LogicalPlan plan = planner.createPlan(qc, expr);
+    for (LogicalPlan.QueryBlock block : plan.getQueryBlocks()) {
+      System.out.println(block.getName());
+      System.out.println(getLogicalPlanAsString(plan, block));
+    }
+  }
+
+  @Test
+  public final void testMultipleInSubQuery() throws PlanningException {
+    QueryContext qc = new QueryContext(util.getConfiguration(), session);
+
+    Expr expr = sqlAnalyzer.parse("select n_name from nation where n_regionkey in (select r_regionkey from region) and n_nationkey in (select s_nationkey from supplier);");
+    InSubQueryRewriteRule rule = new InSubQueryRewriteRule();
+    OverridableConf overridableConf = new OverridableConf(util.getConfiguration());
+    assertTrue(rule.isEligible(overridableConf, expr));
+    expr = rule.rewrite(overridableConf, expr);
+    System.out.println(expr);
+    LogicalPlan plan = planner.createPlan(qc, expr);
+    for (LogicalPlan.QueryBlock block : plan.getQueryBlocks()) {
+      System.out.println(block.getName());
+      System.out.println(getLogicalPlanAsString(plan, block));
+    }
+  }
+
+  @Test
+  public final void testInSubQueryWithJoin() throws PlanningException {
+    QueryContext qc = new QueryContext(util.getConfiguration(), session);
+
+    Expr expr = sqlAnalyzer.parse("select n_name from nation, supplier where n_regionkey in (select r_regionkey from region) and n_nationkey = s_nationkey;");
+    InSubQueryRewriteRule rule = new InSubQueryRewriteRule();
+    OverridableConf overridableConf = new OverridableConf(util.getConfiguration());
+    assertTrue(rule.isEligible(overridableConf, expr));
+    expr = rule.rewrite(overridableConf, expr);
+    System.out.println(expr);
+    LogicalPlan plan = planner.createPlan(qc, expr);
+    for (LogicalPlan.QueryBlock block : plan.getQueryBlocks()) {
+      System.out.println(block.getName());
+      System.out.println(getLogicalPlanAsString(plan, block));
+    }
+  }
+
+  @Test
+  public final void testInSubQueryWithTableSubQuery() throws PlanningException {
+    QueryContext qc = new QueryContext(util.getConfiguration(), session);
+
+    Expr expr = sqlAnalyzer.parse("select n_name from (select * from nation) as T where n_regionkey in (select r_regionkey from region);");
+    InSubQueryRewriteRule rule = new InSubQueryRewriteRule();
+    OverridableConf overridableConf = new OverridableConf(util.getConfiguration());
+    assertTrue(rule.isEligible(overridableConf, expr));
+    expr = rule.rewrite(overridableConf, expr);
+    System.out.println(expr);
+    LogicalPlan plan = planner.createPlan(qc, expr);
+    for (LogicalPlan.QueryBlock block : plan.getQueryBlocks()) {
+      System.out.println(block.getName());
+      System.out.println(getLogicalPlanAsString(plan, block));
+    }
+  }
+
+  @Test
+  public final void testNotInSubQuery() throws PlanningException {
+    QueryContext qc = new QueryContext(util.getConfiguration(), session);
+
+    Expr expr = sqlAnalyzer.parse("select n_name from nation where n_nationkey not in (select r_regionkey from region);");
+    InSubQueryRewriteRule rule = new InSubQueryRewriteRule();
+    OverridableConf overridableConf = new OverridableConf(util.getConfiguration());
+    assertTrue(rule.isEligible(overridableConf, expr));
+    expr = rule.rewrite(overridableConf, expr);
+    System.out.println(expr);
+    LogicalPlan plan = planner.createPlan(qc, expr);
+    for (LogicalPlan.QueryBlock block : plan.getQueryBlocks()) {
+      System.out.println(block.getName());
+      System.out.println(getLogicalPlanAsString(plan, block));
+    }
+  }
+
+  @Test
+  public final void testInSubQuery2() throws PlanningException {
+    QueryContext qc = new QueryContext(util.getConfiguration(), session);
+
+    Expr expr = sqlAnalyzer.parse("select n_name from nation where n_nationkey in (select count(*) from region);");
+    InSubQueryRewriteRule rule = new InSubQueryRewriteRule();
+    OverridableConf overridableConf = new OverridableConf(util.getConfiguration());
+    assertTrue(rule.isEligible(overridableConf, expr));
+    expr = rule.rewrite(overridableConf, expr);
+    System.out.println(expr);
+    LogicalPlan plan = planner.createPlan(qc, expr);
+    for (LogicalPlan.QueryBlock block : plan.getQueryBlocks()) {
+      System.out.println(block.getName());
+      System.out.println(getLogicalPlanAsString(plan, block));
+    }
+  }
+
+  @Test
+  public final void testJoin() throws PlanningException {
+    QueryContext qc = new QueryContext(util.getConfiguration(), session);
+
+    Expr expr = sqlAnalyzer.parse("select n_name from nation left outer join region on n_regionkey = r_regionkey where n_regionkey is null");
+    System.out.println(expr);
+    LogicalPlan plan = planner.createPlan(qc, expr);
+    System.out.println(plan);
+  }
+
+  @Test
+  public final void testTableSubQuery() throws PlanningException {
+    QueryContext qc = new QueryContext(util.getConfiguration(), session);
+
+    Expr expr = sqlAnalyzer.parse("select n_name from (select count(*) as c from nation) as t");
+    System.out.println(expr);
+    LogicalPlan plan = planner.createPlan(qc, expr);
+    System.out.println(plan);
+  }
+
+  private String getLogicalPlanAsString(LogicalPlan plan, LogicalPlan.QueryBlock block) {
+    ExplainLogicalPlanVisitor explain = new ExplainLogicalPlanVisitor();
+
+    StringBuilder explains = new StringBuilder();
+    try {
+      ExplainLogicalPlanVisitor.Context explainContext = explain.getBlockPlanStrings(plan, block.getRoot());
+      while(!explainContext.explains.empty()) {
+        explains.append(
+            ExplainLogicalPlanVisitor.printDepthString(explainContext.getMaxDepth(), explainContext.explains.pop()));
+      }
+    } catch (PlanningException e) {
+      throw new RuntimeException(e);
+    }
+
+    return explains.toString();
   }
 }

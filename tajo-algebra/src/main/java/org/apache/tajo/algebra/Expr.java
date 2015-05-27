@@ -53,6 +53,14 @@ public abstract class Expr implements JsonSerializable, Cloneable {
    */
   abstract boolean equalsTo(Expr expr);
 
+  public boolean identical(Expr other) {
+    if (this.opType == other.opType && equalsTo(other)) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+
 	@Override
 	public boolean equals(Object obj) {
 	  if (obj instanceof Expr) {
