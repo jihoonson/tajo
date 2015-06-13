@@ -18,11 +18,14 @@
 
 package org.apache.tajo.engine.query;
 
+import com.google.protobuf.ServiceException;
 import org.apache.tajo.IntegrationTest;
+import org.apache.tajo.NamedTest;
 import org.apache.tajo.QueryTestCaseBase;
 import org.apache.tajo.TajoConstants;
 import org.apache.tajo.conf.TajoConf;
 import org.junit.AfterClass;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
@@ -34,168 +37,116 @@ import java.util.Collection;
 
 @Category(IntegrationTest.class)
 @RunWith(Parameterized.class)
-public class TestInSubQuery extends QueryTestCaseBase {
+@NamedTest("TestJoinQuery")
+public class TestInSubQuery extends TestJoinQuery {
 
-  public TestInSubQuery(String joinOption) {
-    super(TajoConstants.DEFAULT_DATABASE_NAME);
-
-    testingCluster.setAllTajoDaemonConfValue(TajoConf.ConfVars.$TEST_BROADCAST_JOIN_ENABLED.varname,
-        TajoConf.ConfVars.$TEST_BROADCAST_JOIN_ENABLED.defaultVal);
-    testingCluster.setAllTajoDaemonConfValue(TajoConf.ConfVars.$DIST_QUERY_BROADCAST_JOIN_THRESHOLD.varname,
-        TajoConf.ConfVars.$DIST_QUERY_BROADCAST_JOIN_THRESHOLD.defaultVal);
-
-    testingCluster.setAllTajoDaemonConfValue(
-        TajoConf.ConfVars.$EXECUTOR_HASH_JOIN_SIZE_THRESHOLD.varname,
-        TajoConf.ConfVars.$EXECUTOR_HASH_JOIN_SIZE_THRESHOLD.defaultVal);
-
-    testingCluster.setAllTajoDaemonConfValue(TajoConf.ConfVars.$EXECUTOR_HASH_JOIN_SIZE_THRESHOLD.varname,
-        TajoConf.ConfVars.$EXECUTOR_HASH_JOIN_SIZE_THRESHOLD.defaultVal);
-    testingCluster.setAllTajoDaemonConfValue(TajoConf.ConfVars.$EXECUTOR_GROUPBY_INMEMORY_HASH_THRESHOLD.varname,
-        TajoConf.ConfVars.$EXECUTOR_GROUPBY_INMEMORY_HASH_THRESHOLD.defaultVal);
-
-    if (joinOption.indexOf("NoBroadcast") >= 0) {
-      testingCluster.setAllTajoDaemonConfValue(TajoConf.ConfVars.$TEST_BROADCAST_JOIN_ENABLED.varname, "false");
-      testingCluster.setAllTajoDaemonConfValue(TajoConf.ConfVars.$DIST_QUERY_BROADCAST_JOIN_THRESHOLD.varname, "-1");
-    }
-
-    if (joinOption.indexOf("Hash") >= 0) {
-      testingCluster.setAllTajoDaemonConfValue(
-          TajoConf.ConfVars.$EXECUTOR_HASH_JOIN_SIZE_THRESHOLD.varname, String.valueOf(256 * 1048576));
-      testingCluster.setAllTajoDaemonConfValue(TajoConf.ConfVars.$EXECUTOR_HASH_JOIN_SIZE_THRESHOLD.varname,
-          String.valueOf(256 * 1048576));
-      testingCluster.setAllTajoDaemonConfValue(TajoConf.ConfVars.$EXECUTOR_GROUPBY_INMEMORY_HASH_THRESHOLD.varname,
-          String.valueOf(256 * 1048576));
-    }
-    if (joinOption.indexOf("Sort") >= 0) {
-      testingCluster.setAllTajoDaemonConfValue(
-          TajoConf.ConfVars.$EXECUTOR_HASH_JOIN_SIZE_THRESHOLD.varname, String.valueOf(1));
-      testingCluster.setAllTajoDaemonConfValue(TajoConf.ConfVars.$EXECUTOR_HASH_JOIN_SIZE_THRESHOLD.varname,
-          String.valueOf(1));
-      testingCluster.setAllTajoDaemonConfValue(TajoConf.ConfVars.$EXECUTOR_GROUPBY_INMEMORY_HASH_THRESHOLD.varname,
-          String.valueOf(1));
-    }
+  public TestInSubQuery(String joinOption) throws Exception {
+    super(joinOption);
   }
 
-  @Parameterized.Parameters
-  public static Collection<Object[]> generateParameters() {
-    return Arrays.asList(new Object[][]{
-        {"Hash_NoBroadcast"},
-        {"Sort_NoBroadcast"},
-        {"Hash"},
-        {"Sort"},
-    });
+  @BeforeClass
+  public static void setup() throws Exception {
+    TestJoinQuery.setup();
   }
 
   @AfterClass
-  public static void classTearDown() {
-    testingCluster.setAllTajoDaemonConfValue(TajoConf.ConfVars.$TEST_BROADCAST_JOIN_ENABLED.varname,
-        TajoConf.ConfVars.$TEST_BROADCAST_JOIN_ENABLED.defaultVal);
-    testingCluster.setAllTajoDaemonConfValue(TajoConf.ConfVars.$DIST_QUERY_BROADCAST_JOIN_THRESHOLD.varname,
-        TajoConf.ConfVars.$DIST_QUERY_BROADCAST_JOIN_THRESHOLD.defaultVal);
-
-    testingCluster.setAllTajoDaemonConfValue(
-        TajoConf.ConfVars.$EXECUTOR_HASH_JOIN_SIZE_THRESHOLD.varname,
-        TajoConf.ConfVars.$EXECUTOR_HASH_JOIN_SIZE_THRESHOLD.defaultVal);
-
-    testingCluster.setAllTajoDaemonConfValue(TajoConf.ConfVars.$EXECUTOR_HASH_JOIN_SIZE_THRESHOLD.varname,
-        TajoConf.ConfVars.$EXECUTOR_HASH_JOIN_SIZE_THRESHOLD.defaultVal);
-    testingCluster.setAllTajoDaemonConfValue(TajoConf.ConfVars.$EXECUTOR_GROUPBY_INMEMORY_HASH_THRESHOLD.varname,
-        TajoConf.ConfVars.$EXECUTOR_GROUPBY_INMEMORY_HASH_THRESHOLD.defaultVal);
+  public static void classTearDown() throws ServiceException {
+    TestJoinQuery.classTearDown();
   }
 
   @Test
+  @Option(withExplain = true, withExplainGlobal = true, parameterized = true, sort = true)
+  @SimpleTest()
   public final void testInSubQuery() throws Exception {
-    ResultSet res = executeQuery();
-    assertResultSet(res);
-    cleanupQuery(res);
+    runSimpleTests();
   }
 
   @Test
+  @Option(withExplain = true, withExplainGlobal = true, parameterized = true, sort = true)
+  @SimpleTest()
   public final void testInSubQuery2() throws Exception {
-    ResultSet res = executeQuery();
-    assertResultSet(res);
-    cleanupQuery(res);
+    runSimpleTests();
   }
 
   @Test
+  @Option(withExplain = true, withExplainGlobal = true, parameterized = true, sort = true)
+  @SimpleTest()
   public final void testNestedInSubQuery() throws Exception {
-    ResultSet res = executeQuery();
-    assertResultSet(res);
-    cleanupQuery(res);
+    runSimpleTests();
   }
 
   @Test
+  @Option(withExplain = true, withExplainGlobal = true, parameterized = true, sort = true)
+  @SimpleTest()
   public final void testInSubQueryWithOtherConditions() throws Exception {
-    ResultSet res = executeQuery();
-    assertResultSet(res);
-    cleanupQuery(res);
+    runSimpleTests();
   }
 
   @Test
+  @Option(withExplain = true, withExplainGlobal = true, parameterized = true, sort = true)
+  @SimpleTest()
   public final void testMultipleInSubQuery() throws Exception {
-    ResultSet res = executeQuery();
-    assertResultSet(res);
-    cleanupQuery(res);
+    runSimpleTests();
   }
 
   @Test
+  @Option(withExplain = true, withExplainGlobal = true, parameterized = true, sort = true)
+  @SimpleTest()
   public final void testInSubQueryWithJoin() throws Exception {
-    ResultSet res = executeQuery();
-    assertResultSet(res);
-    cleanupQuery(res);
+    runSimpleTests();
   }
 
   @Test
+  @Option(withExplain = true, withExplainGlobal = true, parameterized = true, sort = true)
+  @SimpleTest()
   public final void testInSubQueryWithTableSubQuery() throws Exception {
-    ResultSet res = executeQuery();
-    assertResultSet(res);
-    cleanupQuery(res);
+    runSimpleTests();
   }
 
   @Test
+  @Option(withExplain = true, withExplainGlobal = true, parameterized = true, sort = true)
+  @SimpleTest()
   public final void testNotInSubQuery() throws Exception {
-    ResultSet res = executeQuery();
-    assertResultSet(res);
-    cleanupQuery(res);
+    runSimpleTests();
   }
 
   @Test
+  @Option(withExplain = true, withExplainGlobal = true, parameterized = true, sort = true)
+  @SimpleTest()
   public final void testMultipleNotInSubQuery() throws Exception {
-    ResultSet res = executeQuery();
-    assertResultSet(res);
-    cleanupQuery(res);
+    runSimpleTests();
   }
 
   @Test
+  @Option(withExplain = true, withExplainGlobal = true, parameterized = true, sort = true)
+  @SimpleTest()
   public final void testNestedNotInSubQuery() throws Exception {
-    ResultSet res = executeQuery();
-    assertResultSet(res);
-    cleanupQuery(res);
+    runSimpleTests();
   }
 
   @Test
+  @Option(withExplain = true, withExplainGlobal = true, parameterized = true, sort = true)
+  @SimpleTest()
   public final void testInAndNotInSubQuery() throws Exception {
-    ResultSet res = executeQuery();
-    assertResultSet(res);
-    cleanupQuery(res);
+    runSimpleTests();
   }
 
   @Test
+  @Option(withExplain = true, withExplainGlobal = true, parameterized = true, sort = true)
+  @SimpleTest()
   public final void testNestedInAndNotInSubQuery() throws Exception {
-    ResultSet res = executeQuery();
-    assertResultSet(res);
-    cleanupQuery(res);
+    runSimpleTests();
   }
 
   @Test
+  @Option(withExplain = true, withExplainGlobal = true, parameterized = true, sort = true)
+  @SimpleTest()
   public final void testNestedInSubQuery2() throws Exception {
     // select c_name from customer
     // where c_nationkey in (
     //    select n_nationkey from nation where n_name like 'C%' and n_regionkey in (
     //    select count(*)-1 from region where r_regionkey > 0 and r_regionkey < 3))
-    ResultSet res = executeQuery();
-    assertResultSet(res);
-    cleanupQuery(res);
+    runSimpleTests();
   }
 
   @Test
