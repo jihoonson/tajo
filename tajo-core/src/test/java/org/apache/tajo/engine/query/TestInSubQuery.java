@@ -151,6 +151,6 @@ public class TestInSubQuery extends TestJoinQuery {
 
   @Test
   public final void testCorrelatedSubQuery() throws Exception {
-    executeString("select * from nation where n_regionkey in (select r_regionkey from region where n_name > r_name)");
+    executeString("select * from nation where n_regionkey in (select r_regionkey from region where default.nation.n_name > r_name)");
   }
 }

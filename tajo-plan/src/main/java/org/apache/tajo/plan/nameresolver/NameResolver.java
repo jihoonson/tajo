@@ -28,6 +28,7 @@ import org.apache.tajo.catalog.Column;
 import org.apache.tajo.catalog.NestedPathUtil;
 import org.apache.tajo.catalog.Schema;
 import org.apache.tajo.catalog.exception.NoSuchColumnException;
+import org.apache.tajo.exception.UnsupportedException;
 import org.apache.tajo.plan.algebra.AmbiguousFieldException;
 import org.apache.tajo.plan.LogicalPlan;
 import org.apache.tajo.plan.PlanningException;
@@ -149,12 +150,12 @@ public abstract class NameResolver {
    * @throws PlanningException
    */
   static Column resolveFromRelsWithinBlock(LogicalPlan plan, LogicalPlan.QueryBlock block,
-                                                  ColumnReferenceExpr columnRef) throws PlanningException {
+                                           ColumnReferenceExpr columnRef) throws PlanningException {
     String qualifier;
     String canonicalName;
 
     if (columnRef.hasQualifier()) {
-      Pair<String, String> normalized = lookupQualifierAndCanonicalName(block, columnRef);
+      Pair<String, String> normalized = lookupQualifierAndCanonicalName(plan, block, columnRef);
       qualifier = normalized.getFirst();
       canonicalName = normalized.getSecond();
 
@@ -301,7 +302,7 @@ public abstract class NameResolver {
    * @return A pair of normalized qualifier and column name
    * @throws PlanningException
    */
-  static Pair<String, String> lookupQualifierAndCanonicalName(LogicalPlan.QueryBlock block,
+  static Pair<String, String> lookupQualifierAndCanonicalName(LogicalPlan plan, LogicalPlan.QueryBlock block,
                                                               ColumnReferenceExpr columnRef)
       throws PlanningException {
     Preconditions.checkArgument(columnRef.hasQualifier(), "ColumnReferenceExpr must be qualified.");
@@ -355,7 +356,30 @@ public abstract class NameResolver {
 
     // throw exception if no column cannot be founded or two or more than columns are founded
     if (guessedRelations.size() == 0) {
-      throw new NoSuchColumnException(columnRef.getQualifier());
+//      Set<LogicalPlan.QueryBlock> parentBlocks = TUtil.newHashSet();
+//      LogicalPlan.QueryBlock currentBlock = block;
+//      while (!currentBlock.getName().equals(plan.getRootBlock().getName())) {
+//        LogicalPlan.QueryBlock parentBlock = plan.getParentBlock(currentBlock);
+//        if (parentBlock != null) {
+//          parentBlocks.add(parentBlock);
+//          currentBlock = parentBlock;
+//        } else {
+//          currentBlock = null;
+//        }
+//      }
+//      for (LogicalPlan.QueryBlock eachParent : parentBlocks) {
+//
+//      }
+
+      if (!plan.getRootBlock().getName().equals(block.getName())) {
+        LogicalPlan.QueryBlock parentBlock = plan.getParentBlock(block);
+        if (parentBlock != null) {
+          lookupQualifierAndCanonicalName(plan, parentBlock, columnRef);
+          throw new UnsupportedException("Correlated subquery is not supported yet.");
+        }
+      }
+
+      throw new NoSuchColumnException(columnRef.getCanonicalName());
     } else if (guessedRelations.size() > 1) {
       throw new AmbiguousFieldException(columnRef.getCanonicalName());
     }

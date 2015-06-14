@@ -50,7 +50,7 @@ public class ResolverByLegacy extends NameResolver {
     final String qualifier;
     final String qualifiedName;
 
-    Pair<String, String> normalized = lookupQualifierAndCanonicalName(block, columnRef);
+    Pair<String, String> normalized = lookupQualifierAndCanonicalName(plan, block, columnRef);
     qualifier = normalized.getFirst();
     qualifiedName = CatalogUtil.buildFQName(qualifier, columnRef.getName());
 
