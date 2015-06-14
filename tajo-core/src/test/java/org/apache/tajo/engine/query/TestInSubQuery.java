@@ -110,7 +110,7 @@ public class TestInSubQuery extends TestJoinQuery {
     runSimpleTests();
   }
 
-  @Test
+//  @Test
   @Option(withExplain = true, withExplainGlobal = true, parameterized = true, sort = true)
   @SimpleTest()
   public final void testMultipleNotInSubQuery() throws Exception {
@@ -149,7 +149,7 @@ public class TestInSubQuery extends TestJoinQuery {
     runSimpleTests();
   }
 
-  @Test
+//  @Test
   public final void testCorrelatedSubQuery() throws Exception {
     executeString("select * from nation where n_regionkey in (select r_regionkey from region where default.nation.n_name > r_name)");
   }
