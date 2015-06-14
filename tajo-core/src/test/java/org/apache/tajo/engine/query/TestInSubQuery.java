@@ -110,7 +110,7 @@ public class TestInSubQuery extends TestJoinQuery {
     runSimpleTests();
   }
 
-  // raise exception
+  // TODO: join order
 //  @Test
   @Option(withExplain = true, withExplainGlobal = true, parameterized = true, sort = true)
   @SimpleTest()

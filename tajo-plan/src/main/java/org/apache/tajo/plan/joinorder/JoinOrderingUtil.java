@@ -93,6 +93,7 @@ public class JoinOrderingUtil {
     return false;
   }
 
+  // TODO: consider semi and anti joins
   /**
    * Check two join types are associative according to the following rule.
    *
