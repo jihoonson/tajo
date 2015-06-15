@@ -372,9 +372,7 @@ public abstract class NameResolver {
 //      }
 
       if (!plan.getRootBlock().getName().equals(block.getName())) {
-        LogicalPlan.QueryBlock parentBlock = plan.getParentBlock(block);
-        if (parentBlock != null) {
-          lookupQualifierAndCanonicalName(plan, parentBlock, columnRef);
+        if (isCorrelatedSubquery(plan, block, columnRef)) {
           throw new UnsupportedException("Correlated subquery is not supported yet.");
         }
       }
@@ -403,6 +401,26 @@ public abstract class NameResolver {
     }
 
     return new Pair<String, String>(qualifier, columnName);
+  }
+
+  static boolean isCorrelatedSubquery(LogicalPlan plan, LogicalPlan.QueryBlock currentBlock,
+                                      ColumnReferenceExpr columnRef) throws PlanningException {
+    boolean isCorrelatedSubquery = false;
+    for (LogicalPlan.QueryBlock eachBlock : plan.getQueryBlocks()) {
+      if (isCorrelatedSubquery)
+        break;
+      if (eachBlock.getName().equals(currentBlock.getName()))
+        continue;
+
+      if (eachBlock != null) {
+        try {
+          lookupQualifierAndCanonicalName(plan, eachBlock, columnRef);
+          isCorrelatedSubquery = true;
+        } catch (NoSuchColumnException e) {
+        }
+      }
+    }
+    return isCorrelatedSubquery;
   }
 
   static Column ensureUniqueColumn(List<Column> candidates) throws VerifyException {

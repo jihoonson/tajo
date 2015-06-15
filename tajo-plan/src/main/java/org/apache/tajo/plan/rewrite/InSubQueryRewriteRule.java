@@ -46,6 +46,7 @@ public class InSubQueryRewriteRule implements ExpressionRewriteRule {
       for (Expr foundIn : ExprTreeUtil.finds(selection.getQual(), OpType.InPredicate)) {
         InPredicate inPredicate = (InPredicate) foundIn;
         if (inPredicate.getInValue().getType() == OpType.SimpleTableSubQuery) {
+          preprocessor.init();
           return true;
         }
       }
@@ -191,6 +192,10 @@ public class InSubQueryRewriteRule implements ExpressionRewriteRule {
     private final static String SUBQUERY_NAME_PREFIX = "SQ_";
     private int subQueryNamePostfix = 0;
 
+    public void init() {
+      subQueryNamePostfix = 0;
+    }
+
     private int getSubQueryNamePostfix() {
       return subQueryNamePostfix++;
     }
@@ -233,7 +238,7 @@ public class InSubQueryRewriteRule implements ExpressionRewriteRule {
     public Expr visitFilter(Context ctx, Stack<Expr> stack, Selection expr) throws PlanningException {
       Expr child = super.visitFilter(ctx, stack, expr);
 
-      for (Expr found : ExprTreeUtil.finds(expr.getQual(), OpType.InPredicate)) {
+      for (Expr found : ExprTreeUtil.findsInOrder(expr.getQual(), OpType.InPredicate)) {
         InPredicate inPredicate = (InPredicate) found;
         if (inPredicate.getInValue().getType() == OpType.SimpleTableSubQuery) {
           Preconditions.checkArgument(inPredicate.getPredicand().getType() == OpType.Column);
@@ -248,6 +253,7 @@ public class InSubQueryRewriteRule implements ExpressionRewriteRule {
           updateProjection(projection);
 //          ctx.willbeUpdatedProjections.add(projection);
 
+          // TODO: change left_outer to left_anti
           Join join = new Join(inPredicate.isNot() ? JoinType.LEFT_OUTER : JoinType.LEFT_SEMI);
           if (isWillBeReplaced(ctx, expr)) {
             // This selection has multiple IN subqueries.
@@ -271,6 +277,7 @@ public class InSubQueryRewriteRule implements ExpressionRewriteRule {
           // join condition
           join.setQual(buildJoinCondition(primarySubQuery, predicand, projection));
 
+          // TODO
           if (inPredicate.isNot()) {
 //            addQual(expr, buildFilterForNotInQuery(predicand));
             Selection newFilter = new Selection(buildFilterForNotInQuery(join.getQual()));

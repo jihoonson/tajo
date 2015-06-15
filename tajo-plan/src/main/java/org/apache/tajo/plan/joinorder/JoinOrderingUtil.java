@@ -106,18 +106,43 @@ public class JoinOrderingUtil {
    * (A left B) inner C   | A left (B inner C)    | Not equivalent
    * (A right B) inner C  | A right (B inner C)   | Equivalent
    * (A full B) inner C   | A full (B inner C)    | Not equivalent
+   * (A semi B) inner C   | A semi (B inner C)    | Equivalent
+   * (A anti B) inner C   | A anti (B inner C)    | Not equivalent
+   * --------------------------------------------------------------
    * (A inner B) left C   | A inner (B left C)    | Equivalent
    * (A left B) left C    | A left (B left C)     | Equivalent
    * (A right B) left C   | A right (B left C)    | Equivalent
    * (A full B) left C    | A full (B left C)     | Equivalent
+   * (A semi B) left C    | A semi (B left C)     | Equivalent
+   * (A anti B) left C    | A anti (B left C)     | Equivalent
+   * --------------------------------------------------------------
    * (A inner B) right C  | A inner (B right C)   | Not equivalent
    * (A left B) right C   | A left (B right C)    | Not equivalent
    * (A right B) right C  | A right (B right C)   | Equivalent
    * (A full B) right C   | A full (B right C)    | Not equivalent
+   * (A semi B) right C   | A semi (B right C)    | Not equivalent
+   * (A anti B) right C   | A anti (B right C)    | Not equivalent
+   * --------------------------------------------------------------
    * (A inner B) full C   | A inner (B full C)    | Not equivalent
    * (A left B) full C    | A left (B full C)     | Not equivalent
    * (A right B) full C   | A right (B full C)    | Equivalent
    * (A full B) full C    | A full (B full C)     | Equivalent
+   * (A semi B) full C    | A semi (B full C)     | Not equivalent
+   * (A anti B) full C    | A anti (B full C)     | Not equivalent
+   * --------------------------------------------------------------
+   * (A inner B) semi C   | A inner (B semi C)    | Equivalent
+   * (A left B) semi C    | A left (B semi C)     | Not equivalent
+   * (A right B) semi C   | A right (B semi C)    | Equivalent
+   * (A full B) semi C    | A full (B semi C)     | Not equivalent
+   * (A semi B) semi C    | A semi (B semi C)     | Equivalent
+   * (A anti B) semi C    | A anti (B semi C)     | Not equivalent
+   * --------------------------------------------------------------
+   * (A inner B) anti C   | A inner (B anti C)    | Equivalent
+   * (A left B) anti C    | A left (B anti C)     | Equivalent
+   * (A right B) anti C   | A right (B anti C)    | Equivalent
+   * (A full B) anti C    | A full (B anti C)     | Equivalent
+   * (A semi B) anti C    | A semi (B anti C)     | Equivalent
+   * (A anti B) anti C    | A anti (B anti C)     | Equivalent
    * ==============================================================
    *
    * @param leftType
@@ -129,8 +154,12 @@ public class JoinOrderingUtil {
       return true;
     }
 
-    if (leftType == JoinType.INNER && rightType == JoinType.CROSS ||
-        leftType == JoinType.CROSS && rightType == JoinType.INNER) {
+    boolean leftIsOneOfInnerJoin = leftType == JoinType.INNER || leftType == JoinType.CROSS
+        || leftType == JoinType.LEFT_SEMI;
+    boolean rightIsOneOfInnerJoin = rightType == JoinType.INNER || rightType == JoinType.CROSS
+        || rightType == JoinType.LEFT_SEMI;
+
+    if (leftIsOneOfInnerJoin && rightIsOneOfInnerJoin) {
       return true;
     }
 
@@ -138,15 +167,15 @@ public class JoinOrderingUtil {
       return true;
     }
 
-    if (leftType == JoinType.LEFT_OUTER) {
+    if (leftType == JoinType.LEFT_OUTER || leftType == JoinType.LEFT_ANTI) {
       // When the left type is the left outer join, input join types are associative
       // if the right type is also the left outer join.
       // This case is already checked above.
       return false;
     }
 
-    if ((leftType == JoinType.INNER) || leftType == JoinType.CROSS) {
-      if (rightType == JoinType.LEFT_OUTER) {
+    if (leftIsOneOfInnerJoin) {
+      if (rightType == JoinType.LEFT_OUTER || rightType == JoinType.LEFT_ANTI) {
         return true;
       } else {
         return false;
@@ -154,7 +183,7 @@ public class JoinOrderingUtil {
     }
 
     if (leftType == JoinType.FULL_OUTER) {
-      if (rightType == JoinType.LEFT_OUTER) {
+      if (rightType == JoinType.LEFT_OUTER || rightType == JoinType.LEFT_ANTI) {
         return true;
       } else {
         return false;

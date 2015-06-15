@@ -22,15 +22,17 @@ import org.apache.tajo.algebra.*;
 import org.apache.tajo.plan.PlanningException;
 import org.apache.tajo.plan.algebra.BaseAlgebraVisitor;
 import org.apache.tajo.plan.visitor.SimpleAlgebraVisitor;
+import org.apache.tajo.util.TUtil;
 
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.Stack;
 
 public class ExprTreeUtil {
 
   static class TypeFinderContext {
-    Set<Expr> set = new HashSet<Expr>();
+    List<Expr> set = TUtil.newList();
     OpType targetType;
     boolean findTopOnly;
 
@@ -61,7 +63,18 @@ public class ExprTreeUtil {
     } catch (PlanningException e) {
       throw new RuntimeException(e);
     }
-    return (Set<T>) context.set;
+    return (Set<T>) TUtil.newHashSet(context.set.toArray(new Expr[context.set.size()]));
+  }
+
+  public static <T extends Expr> List<T> findsInOrder(Expr expr, OpType type) {
+    TypeFinderContext context = new TypeFinderContext(type);
+    TypeFinder finder = new TypeFinder();
+    try {
+      finder.visit(context, new Stack<Expr>(), expr);
+    } catch (PlanningException e) {
+      throw new RuntimeException(e);
+    }
+    return (List<T>) context.set;
   }
 
   public static <T extends Expr> T findTopExpr(Expr expr, OpType type) {

@@ -21,9 +21,6 @@ package org.apache.tajo.engine.query;
 import com.google.protobuf.ServiceException;
 import org.apache.tajo.IntegrationTest;
 import org.apache.tajo.NamedTest;
-import org.apache.tajo.QueryTestCaseBase;
-import org.apache.tajo.TajoConstants;
-import org.apache.tajo.conf.TajoConf;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -31,9 +28,8 @@ import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
-import java.sql.ResultSet;
-import java.util.Arrays;
-import java.util.Collection;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
 
 @Category(IntegrationTest.class)
 @RunWith(Parameterized.class)
@@ -110,8 +106,7 @@ public class TestInSubQuery extends TestJoinQuery {
     runSimpleTests();
   }
 
-  // TODO: join order
-//  @Test
+  @Test
   @Option(withExplain = true, withExplainGlobal = true, parameterized = true, sort = true)
   @SimpleTest()
   public final void testMultipleNotInSubQuery() throws Exception {
@@ -125,8 +120,7 @@ public class TestInSubQuery extends TestJoinQuery {
     runSimpleTests();
   }
 
-  // TODO: join order
-//  @Test
+  @Test
   @Option(withExplain = true, withExplainGlobal = true, parameterized = true, sort = true)
   @SimpleTest()
   public final void testInAndNotInSubQuery() throws Exception {
@@ -151,9 +145,13 @@ public class TestInSubQuery extends TestJoinQuery {
     runSimpleTests();
   }
 
-  // TODO: raise exception
-//  @Test
+  @Test()
   public final void testCorrelatedSubQuery() throws Exception {
-    executeString("select * from nation where n_regionkey in (select r_regionkey from region where default.nation.n_name > r_name)");
+    try {
+      executeString("select * from nation where n_regionkey in (select r_regionkey from region where default.nation.n_name > r_name)");
+      fail("Correlated subquery must raise the UnsupportedException.");
+    } catch (ServiceException e) {
+      assertEquals("Correlated subquery is not supported yet.", e.getMessage());
+    }
   }
 }
