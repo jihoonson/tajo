@@ -254,7 +254,8 @@ public class InSubQueryRewriteRule implements ExpressionRewriteRule {
 //          ctx.willbeUpdatedProjections.add(projection);
 
           // TODO: change left_outer to left_anti
-          Join join = new Join(inPredicate.isNot() ? JoinType.LEFT_OUTER : JoinType.LEFT_SEMI);
+//          Join join = new Join(inPredicate.isNot() ? JoinType.LEFT_OUTER : JoinType.LEFT_SEMI);
+          Join join = new Join(inPredicate.isNot() ? JoinType.LEFT_ANTI : JoinType.LEFT_SEMI);
           if (isWillBeReplaced(ctx, expr)) {
             // This selection has multiple IN subqueries.
             // In this case, the new join must have the join corresponding to the other IN subquery as its child.
@@ -278,14 +279,16 @@ public class InSubQueryRewriteRule implements ExpressionRewriteRule {
           join.setQual(buildJoinCondition(primarySubQuery, predicand, projection));
 
           // TODO
-          if (inPredicate.isNot()) {
-//            addQual(expr, buildFilterForNotInQuery(predicand));
-            Selection newFilter = new Selection(buildFilterForNotInQuery(join.getQual()));
-            newFilter.setChild(join);
-            addWillBeReplaced(ctx, expr, newFilter);
-          } else {
-            addWillBeReplaced(ctx, expr, join);
-          }
+          addWillBeReplaced(ctx, expr, join);
+
+//          if (inPredicate.isNot()) {
+////            addQual(expr, buildFilterForNotInQuery(predicand));
+//            Selection newFilter = new Selection(buildFilterForNotInQuery(join.getQual()));
+//            newFilter.setChild(join);
+//            addWillBeReplaced(ctx, expr, newFilter);
+//          } else {
+//            addWillBeReplaced(ctx, expr, join);
+//          }
 
 //          child = super.visitJoin(ctx, stack, join);
         }
