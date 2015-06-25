@@ -23,6 +23,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import org.apache.tajo.LocalTajoTestingUtility;
 import org.apache.tajo.OverridableConf;
+import org.apache.tajo.QueryVars;
 import org.apache.tajo.TajoConstants;
 import org.apache.tajo.TajoTestingCluster;
 import org.apache.tajo.algebra.Expr;
@@ -30,7 +31,6 @@ import org.apache.tajo.algebra.JoinType;
 import org.apache.tajo.benchmark.TPCH;
 import org.apache.tajo.catalog.*;
 import org.apache.tajo.catalog.proto.CatalogProtos.FunctionType;
-import org.apache.tajo.catalog.proto.CatalogProtos.StoreType;
 import org.apache.tajo.common.TajoDataTypes.Type;
 import org.apache.tajo.datum.TextDatum;
 import org.apache.tajo.engine.function.FunctionLoader;
@@ -45,6 +45,7 @@ import org.apache.tajo.plan.rewrite.InSubQueryRewriteRule;
 import org.apache.tajo.plan.util.PlannerUtil;
 import org.apache.tajo.plan.visitor.ExplainLogicalPlanVisitor;
 import org.apache.tajo.session.Session;
+import org.apache.tajo.storage.TablespaceManager;
 import org.apache.tajo.util.CommonTestingUtil;
 import org.apache.tajo.util.FileUtil;
 import org.apache.tajo.util.KeyValueSet;
@@ -132,7 +133,7 @@ public class TestLogicalPlanner {
 
     catalog.createFunction(funcDesc);
     sqlAnalyzer = new SQLAnalyzer();
-    planner = new LogicalPlanner(catalog);
+    planner = new LogicalPlanner(catalog, TablespaceManager.getInstance());
   }
 
   @AfterClass
@@ -157,6 +158,13 @@ public class TestLogicalPlanner {
       "select length(name), length(deptname), *, empid+10 from employee where empId > 500", // 13
   };
 
+  private static QueryContext createQueryContext() {
+    QueryContext qc = new QueryContext(util.getConfiguration(), session);
+    qc.put(QueryVars.DEFAULT_SPACE_URI, "file:/");
+    qc.put(QueryVars.DEFAULT_SPACE_ROOT_URI, "file:/");
+    return qc;
+  }
+
   public static final void testCloneLogicalNode(LogicalNode n1) throws CloneNotSupportedException {
     LogicalNode copy = (LogicalNode) n1.clone();
     assertTrue(n1.deepEquals(copy));
@@ -164,7 +172,7 @@ public class TestLogicalPlanner {
 
   @Test
   public final void testSingleRelation() throws CloneNotSupportedException, PlanningException {
-    QueryContext qc = new QueryContext(util.getConfiguration(), session);
+    QueryContext qc = createQueryContext();
 
     Expr expr = sqlAnalyzer.parse(QUERIES[0]);
     LogicalPlan planNode = planner.createPlan(qc, expr);
@@ -198,7 +206,7 @@ public class TestLogicalPlanner {
 
   @Test
   public final void testImplicityJoinPlan() throws CloneNotSupportedException, PlanningException {
-    QueryContext qc = new QueryContext(util.getConfiguration(), session);
+    QueryContext qc = createQueryContext();
 
     // two relations
     Expr expr = sqlAnalyzer.parse(QUERIES[1]);
@@ -287,7 +295,7 @@ public class TestLogicalPlanner {
 
   @Test
   public final void testNaturalJoinPlan() throws PlanningException {
-    QueryContext qc = new QueryContext(util.getConfiguration(), session);
+    QueryContext qc = createQueryContext();
     // two relations
     Expr context = sqlAnalyzer.parse(JOINS[0]);
     LogicalNode plan = planner.createPlan(qc, context).getRootBlock().getRoot();
@@ -319,7 +327,7 @@ public class TestLogicalPlanner {
 
   @Test
   public final void testInnerJoinPlan() throws PlanningException {
-    QueryContext qc = new QueryContext(util.getConfiguration(), session);
+    QueryContext qc = createQueryContext();
     // two relations
     Expr expr = sqlAnalyzer.parse(JOINS[1]);
     LogicalPlan plan = planner.createPlan(qc, expr);
@@ -352,7 +360,7 @@ public class TestLogicalPlanner {
 
   @Test
   public final void testOuterJoinPlan() throws PlanningException {
-    QueryContext qc = new QueryContext(util.getConfiguration(), session);
+    QueryContext qc = createQueryContext();
 
     // two relations
     Expr expr = sqlAnalyzer.parse(JOINS[2]);
@@ -387,7 +395,7 @@ public class TestLogicalPlanner {
 
   @Test
   public final void testGroupby() throws CloneNotSupportedException, PlanningException {
-    QueryContext qc = new QueryContext(util.getConfiguration(), session);
+    QueryContext qc = createQueryContext();
 
     // without 'having clause'
     Expr context = sqlAnalyzer.parse(QUERIES[7]);
@@ -431,7 +439,7 @@ public class TestLogicalPlanner {
   public final void testMultipleJoin() throws IOException, PlanningException {
     Expr expr = sqlAnalyzer.parse(
         FileUtil.readTextFile(new File("src/test/resources/queries/TestJoinQuery/testTPCHQ2Join.sql")));
-    QueryContext qc = new QueryContext(util.getConfiguration(), session);
+    QueryContext qc = createQueryContext();
     LogicalNode plan = planner.createPlan(qc, expr).getRootBlock().getRoot();
     testJsonSerDerObject(plan);
     Schema expected = tpch.getOutSchema("q2");
@@ -490,7 +498,7 @@ public class TestLogicalPlanner {
     Expr expr = sqlAnalyzer.parse(
         FileUtil.readTextFile(new File
             ("src/test/resources/queries/TestJoinQuery/testJoinWithMultipleJoinQual1.sql")));
-    QueryContext qc = new QueryContext(util.getConfiguration(), session);
+    QueryContext qc = createQueryContext();
 
     LogicalPlan plan = planner.createPlan(qc, expr);
     LogicalNode node = plan.getRootBlock().getRoot();
@@ -520,7 +528,7 @@ public class TestLogicalPlanner {
     }
 
     for (Map.Entry<BinaryEval, Boolean> entry : qualMap.entrySet()) {
-      if (!entry.getValue().booleanValue()) {
+      if (!entry.getValue()) {
         Preconditions.checkArgument(false,
             "JoinQual not found. -> required JoinQual:" + entry.getKey().toJson());
       }
@@ -532,7 +540,7 @@ public class TestLogicalPlanner {
     Expr expr = sqlAnalyzer.parse(
         FileUtil.readTextFile(new File
             ("src/test/resources/queries/TestJoinQuery/testJoinWithMultipleJoinQual2.sql")));
-    QueryContext qc = new QueryContext(util.getConfiguration(), session);
+    QueryContext qc = createQueryContext();
 
     LogicalPlan plan = planner.createPlan(qc,expr);
     LogicalNode node = plan.getRootBlock().getRoot();
@@ -561,7 +569,7 @@ public class TestLogicalPlanner {
     }
 
     for (Map.Entry<BinaryEval, Boolean> entry : qualMap.entrySet()) {
-      if (!entry.getValue().booleanValue()) {
+      if (!entry.getValue()) {
         Preconditions.checkArgument(false,
             "SelectionQual not found. -> required JoinQual:" + entry.getKey().toJson());
       }
@@ -573,7 +581,7 @@ public class TestLogicalPlanner {
     Expr expr = sqlAnalyzer.parse(
         FileUtil.readTextFile(new File
             ("src/test/resources/queries/TestJoinQuery/testJoinWithMultipleJoinQual3.sql")));
-    QueryContext qc = new QueryContext(util.getConfiguration(), session);
+    QueryContext qc = createQueryContext();
 
     LogicalPlan plan = planner.createPlan(qc, expr);
     LogicalNode node = plan.getRootBlock().getRoot();
@@ -607,7 +615,7 @@ public class TestLogicalPlanner {
     }
 
     for (Map.Entry<BinaryEval, Boolean> entry : qualMap.entrySet()) {
-      if (!entry.getValue().booleanValue()) {
+      if (!entry.getValue()) {
         Preconditions.checkArgument(false,
             "ScanQual not found. -> required JoinQual:" + entry.getKey().toJson());
       }
@@ -620,7 +628,7 @@ public class TestLogicalPlanner {
     Expr expr = sqlAnalyzer.parse(
         FileUtil.readTextFile(new File
             ("src/test/resources/queries/TestJoinQuery/testJoinWithMultipleJoinQual4.sql")));
-    QueryContext qc = new QueryContext(util.getConfiguration(), session);
+    QueryContext qc = createQueryContext();
 
     LogicalPlan plan = planner.createPlan(qc, expr);
     LogicalNode node = plan.getRootBlock().getRoot();
@@ -677,14 +685,14 @@ public class TestLogicalPlanner {
 
 
     for (Map.Entry<BinaryEval, Boolean> entry : joinQualMap.entrySet()) {
-      if (!entry.getValue().booleanValue()) {
+      if (!entry.getValue()) {
         Preconditions.checkArgument(false,
             "JoinQual not found. -> required JoinQual:" + entry.getKey().toJson());
       }
     }
 
     for (Map.Entry<BinaryEval, Boolean> entry : scanMap.entrySet()) {
-      if (!entry.getValue().booleanValue()) {
+      if (!entry.getValue()) {
         Preconditions.checkArgument(false,
             "ScanQual not found. -> required JoinQual:" + entry.getKey().toJson());
       }
@@ -711,7 +719,7 @@ public class TestLogicalPlanner {
 
   @Test
   public final void testStoreTable() throws CloneNotSupportedException, PlanningException {
-    QueryContext qc = new QueryContext(util.getConfiguration(), session);
+    QueryContext qc = createQueryContext();
 
     Expr context = sqlAnalyzer.parse(QUERIES[8]);
 
@@ -729,7 +737,7 @@ public class TestLogicalPlanner {
 
   @Test
   public final void testOrderBy() throws CloneNotSupportedException, PlanningException {
-    QueryContext qc = new QueryContext(util.getConfiguration(), session);
+    QueryContext qc = createQueryContext();
 
     Expr expr = sqlAnalyzer.parse(QUERIES[4]);
 
@@ -759,7 +767,7 @@ public class TestLogicalPlanner {
 
   @Test
   public final void testLimit() throws CloneNotSupportedException, PlanningException {
-    QueryContext qc = new QueryContext(util.getConfiguration(), session);
+    QueryContext qc = createQueryContext();
 
     Expr expr = sqlAnalyzer.parse(QUERIES[12]);
 
@@ -781,7 +789,7 @@ public class TestLogicalPlanner {
 
   @Test
   public final void testSPJPush() throws CloneNotSupportedException, PlanningException {
-    QueryContext qc = new QueryContext(util.getConfiguration(), session);
+    QueryContext qc = createQueryContext();
 
     Expr expr = sqlAnalyzer.parse(QUERIES[5]);
     LogicalNode plan = planner.createPlan(qc, expr).getRootBlock().getRoot();
@@ -803,7 +811,7 @@ public class TestLogicalPlanner {
 
   @Test
   public final void testSPJ() throws CloneNotSupportedException, PlanningException {
-    QueryContext qc = new QueryContext(util.getConfiguration(), session);
+    QueryContext qc = createQueryContext();
 
     Expr expr = sqlAnalyzer.parse(QUERIES[6]);
     LogicalNode plan = planner.createPlan(qc, expr).getRootBlock().getRoot();
@@ -813,7 +821,7 @@ public class TestLogicalPlanner {
 
   @Test
   public final void testJson() throws PlanningException {
-    QueryContext qc = new QueryContext(util.getConfiguration(), session);
+    QueryContext qc = createQueryContext();
 
 	  Expr expr = sqlAnalyzer.parse(QUERIES[9]);
 	  LogicalNode plan = planner.createPlan(qc, expr).getRootBlock().getRoot();
@@ -835,7 +843,7 @@ public class TestLogicalPlanner {
 
   @Test
   public final void testVisitor() throws PlanningException {
-    QueryContext qc = new QueryContext(util.getConfiguration(), session);
+    QueryContext qc = createQueryContext();
 
     // two relations
     Expr expr = sqlAnalyzer.parse(QUERIES[1]);
@@ -862,7 +870,7 @@ public class TestLogicalPlanner {
 
   @Test
   public final void testExprNode() throws PlanningException {
-    QueryContext qc = new QueryContext(util.getConfiguration(), session);
+    QueryContext qc = createQueryContext();
 
     Expr expr = sqlAnalyzer.parse(QUERIES[10]);
     LogicalPlan rootNode = planner.createPlan(qc, expr);
@@ -884,7 +892,7 @@ public class TestLogicalPlanner {
 
   @Test
   public final void testAsterisk() throws CloneNotSupportedException, PlanningException {
-    QueryContext qc = new QueryContext(util.getConfiguration(), session);
+    QueryContext qc = createQueryContext();
 
     Expr expr = sqlAnalyzer.parse(QUERIES[13]);
     LogicalPlan planNode = planner.createPlan(qc, expr);
@@ -914,7 +922,7 @@ public class TestLogicalPlanner {
 
   @Test
   public final void testAlias1() throws PlanningException {
-    QueryContext qc = new QueryContext(util.getConfiguration(), session);
+    QueryContext qc = createQueryContext();
 
     Expr expr = sqlAnalyzer.parse(ALIAS[0]);
     LogicalNode plan = planner.createPlan(qc, expr).getRootBlock().getRoot();
@@ -942,7 +950,7 @@ public class TestLogicalPlanner {
 
   @Test
   public final void testAlias2() throws PlanningException {
-    QueryContext qc = new QueryContext(util.getConfiguration(), session);
+    QueryContext qc = createQueryContext();
 
     Expr expr = sqlAnalyzer.parse(ALIAS[1]);
     LogicalNode plan = planner.createPlan(qc, expr).getRootBlock().getRoot();
@@ -963,7 +971,7 @@ public class TestLogicalPlanner {
 
   @Test
   public final void testCreateTableDef() throws PlanningException {
-    QueryContext qc = new QueryContext(util.getConfiguration(), session);
+    QueryContext qc = createQueryContext();
 
     Expr expr = sqlAnalyzer.parse(CREATE_TABLE[0]);
     LogicalNode plan = planner.createPlan(qc, expr).getRootBlock().getRoot();
@@ -982,7 +990,7 @@ public class TestLogicalPlanner {
     assertEquals("score", def.getColumn(3).getSimpleName());
     assertEquals(Type.FLOAT4, def.getColumn(3).getDataType().getType());
     assertTrue("CSV".equalsIgnoreCase(createTable.getStorageType()));
-    assertEquals("/tmp/data", createTable.getPath().toString());
+    assertEquals("/tmp/data", createTable.getUri().toString());
     assertTrue(createTable.hasOptions());
     assertEquals("|", createTable.getOptions().get("csv.delimiter"));
   }
@@ -1049,7 +1057,7 @@ public class TestLogicalPlanner {
 
   @Test
   public final void testSetPlan() throws PlanningException {
-    QueryContext qc = new QueryContext(util.getConfiguration(), session);
+    QueryContext qc = createQueryContext();
 
     Expr expr = sqlAnalyzer.parse(setStatements[0]);
     LogicalNode plan = planner.createPlan(qc, expr).getRootBlock().getRoot();
@@ -1070,7 +1078,7 @@ public class TestLogicalPlanner {
 
   @Test
   public void testSetQualifier() throws PlanningException {
-    QueryContext qc = new QueryContext(util.getConfiguration(), session);
+    QueryContext qc = createQueryContext();
 
     Expr context = sqlAnalyzer.parse(setQualifiers[0]);
     LogicalNode plan = planner.createPlan(qc, context).getRootBlock().getRoot();
@@ -1123,7 +1131,7 @@ public class TestLogicalPlanner {
 
   @Test
   public final void testInsertInto0() throws PlanningException {
-    QueryContext qc = new QueryContext(util.getConfiguration(), session);
+    QueryContext qc = createQueryContext();
 
     Expr expr = sqlAnalyzer.parse(insertStatements[0]);
     LogicalPlan plan = planner.createPlan(qc, expr);
@@ -1136,7 +1144,7 @@ public class TestLogicalPlanner {
 
   @Test
   public final void testInsertInto1() throws PlanningException {
-    QueryContext qc = new QueryContext(util.getConfiguration(), session);
+    QueryContext qc = createQueryContext();
 
     Expr expr = sqlAnalyzer.parse(insertStatements[1]);
     LogicalPlan plan = planner.createPlan(qc, expr);
@@ -1148,7 +1156,7 @@ public class TestLogicalPlanner {
 
   @Test
   public final void testInsertInto2() throws PlanningException {
-    QueryContext qc = new QueryContext(util.getConfiguration(), session);
+    QueryContext qc = createQueryContext();
 
     Expr expr = sqlAnalyzer.parse(insertStatements[2]);
     LogicalPlan plan = planner.createPlan(qc, expr);
@@ -1163,19 +1171,19 @@ public class TestLogicalPlanner {
 
   @Test
   public final void testInsertInto3() throws PlanningException {
-    QueryContext qc = new QueryContext(util.getConfiguration(), session);
+    QueryContext qc = createQueryContext();
 
     Expr expr = sqlAnalyzer.parse(insertStatements[3]);
     LogicalPlan plan = planner.createPlan(qc, expr);
     assertEquals(1, plan.getQueryBlocks().size());
     InsertNode insertNode = getInsertNode(plan);
     assertFalse(insertNode.isOverwrite());
-    assertTrue(insertNode.hasPath());
+    assertTrue(insertNode.hasUri());
   }
 
   @Test
   public final void testInsertInto4() throws PlanningException {
-    QueryContext qc = new QueryContext(util.getConfiguration(), session);
+    QueryContext qc = createQueryContext();
 
     Expr expr = sqlAnalyzer.parse(insertStatements[4]);
     LogicalPlan plan = planner.createPlan(qc, expr);
@@ -1191,19 +1199,19 @@ public class TestLogicalPlanner {
 
   @Test
   public final void testInsertInto5() throws PlanningException {
-    QueryContext qc = new QueryContext(util.getConfiguration(), session);
+    QueryContext qc = createQueryContext();
 
     Expr expr = sqlAnalyzer.parse(insertStatements[5]);
     LogicalPlan plan = planner.createPlan(qc, expr);
     assertEquals(1, plan.getQueryBlocks().size());
     InsertNode insertNode = getInsertNode(plan);
     assertTrue(insertNode.isOverwrite());
-    assertTrue(insertNode.hasPath());
+    assertTrue(insertNode.hasUri());
   }
 
   @Test
   public final void testInsertInto6() throws PlanningException {
-    QueryContext qc = new QueryContext(util.getConfiguration(), session);
+    QueryContext qc = createQueryContext();
 
     Expr expr = sqlAnalyzer.parse(insertStatements[6]);
     LogicalPlan plan = planner.createPlan(qc, expr);
