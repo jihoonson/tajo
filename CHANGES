@@ -4,6 +4,8 @@ Release 0.11.0 - unreleased
 
   NEW FEATURES
 
+    TAJO-1661: Implement CORR function. (jihoon)
+
     TAJO-1537: Implement a virtual table for sessions. 
     (Contributed by Yongjin Choi, Committed by hyunsik)
 
@@ -27,6 +29,20 @@ Release 0.11.0 - unreleased
 
   IMPROVEMENT
 
+    TAJO-1659: Simplify scan iteration in SeqScan. (hyunsik)
+
+    TAJO-751: JDBC driver should support cancel() method.
+    (Contributed by navis, Committed by jihoon)
+
+    TAJO-1649: Change Rest API /databases/{database-name}/functions to 
+    /functions. (Contributed by DaeMyung Kang, Committed by hyunsik)
+
+    TAJO-1646: Add extlib directory for third-party libraries. (hyunsik)
+
+    TAJO-1636: query rest api uri should change
+    from /databases/{database_name}/queies to /queries.
+    (Contributed by DaeMyung Kang, Committed by jaehwa)
+
     TAJO-1624: Add managed table or external description in Table management 
     section. (hyunsik)
 
@@ -48,8 +64,8 @@ Release 0.11.0 - unreleased
 
     TAJO-1603: Refactor StorageManager. (hyunsik)
 
-    TAJO-1542: Refactoring of HashJoinExecs. (Contributed by Navis, Committed by 
-    hyunsik)
+    TAJO-1542: Refactoring of HashJoinExecs. (Contributed by Navis, 
+    Committed by hyunsik)
 
     TAJO-1591: Change StoreType represented as Enum to String type. (hyunsik)
 
@@ -59,9 +75,6 @@ Release 0.11.0 - unreleased
     TAJO-1576: Sometimes DefaultTajoCliOutputFormatter.parseErrorMessage() 
     eliminates an important kind of information. 
     (Contributed by Jongyoung Park, Committed by jihoon)
-
-    TAJO-1408: Make IntermediateEntryProto more compact. 
-    (Contributed by navis, Committed by hyunsik)
 
     TAJO-1584: Remove QueryMaster client sharing in TajoMaster and TajoWorker.
     (jinho)
@@ -149,6 +162,17 @@ Release 0.11.0 - unreleased
     (Contributed by navis, Committed by hyunsik)
 
   BUG FIXES
+
+    TAJO-1644: When inserting empty data into a partitioned table,
+    existing data would be removed. (jaehwa)
+
+    TAJO-1642: CatalogServer need to check meta table first. (jaehwa)
+
+    TAJO-1650: TestQueryResource.testGetAllQueries() occasionally fails.
+    (Contributed by jinho, Committed by jaehwa)
+ 
+    TAJO-1634: REST API: fix error when offset is zero.
+    (Contributed by DaeMyung Kang, Committed by jaehwa)
 
     TAJO-1630: Test failure after TAJO-1130. (jihoon)
 
@@ -332,6 +356,10 @@ Release 0.11.0 - unreleased
 
 
   SUB TASKS
+
+    TAJO-1658: Filter push down to underlying storages. (hyunsik)
+
+    TAJO-1616: Implement TablespaceManager to load Tablespaces. (hyunsik)
 
     TAJO-1615: Implement TaskManager. (jinho)
 
