@@ -90,17 +90,12 @@ public class InSubQueryRewriteRule implements ExpressionRewriteRule {
       }
     }
 
-//    for (Map.Entry<Selection, List<InPredicate>> entry : context.willBeRemovedQuals.entrySet()) {
     for (Pair<Selection, List<InPredicate>> entry : context.willBeRemovedQuals) {
       Selection selection = entry.getFirst();
       for (InPredicate qual : entry.getSecond()) {
         removeInQual(selection, qual);
       }
     }
-
-//    for (Projection projection : context.willbeUpdatedProjections) {
-//      updateProjection(projection);
-//    }
     return rewritten;
   }
 
@@ -174,14 +169,12 @@ public class InSubQueryRewriteRule implements ExpressionRewriteRule {
   static class Context {
     OverridableConf queryContext;
     List<Pair<Selection, Expr>> willBeReplacedExprs;
-//    Map<Selection, List<InPredicate>> willBeRemovedQuals;
     List<Pair<Selection, List<InPredicate>>> willBeRemovedQuals;
     List<Projection> willbeUpdatedProjections;
 
     public Context(OverridableConf queryContext) {
       this.queryContext = queryContext;
       this.willBeReplacedExprs = TUtil.newList();
-//      this.willBeRemovedQuals = TUtil.newHashMap();
       this.willBeRemovedQuals = TUtil.newList();
       this.willbeUpdatedProjections = TUtil.newList();
     }
@@ -204,36 +197,6 @@ public class InSubQueryRewriteRule implements ExpressionRewriteRule {
       return SUBQUERY_NAME_PREFIX + getSubQueryNamePostfix();
     }
 
-//    public Expr postHook(Context ctx, Stack<Expr> stack, Expr expr, Expr current) throws PlanningException {
-//      if (current instanceof UnaryOperator) {
-//        UnaryOperator unary = (UnaryOperator) current;
-//        if (unary.getChild().getType() == OpType.Filter) {
-//          if (ctx.replacedMap.containsKey(unary.getChild())) {
-//            unary.setChild(ctx.replacedMap.get(unary.getChild()));
-//          }
-//        }
-//      } else if (current instanceof BinaryOperator) {
-//        BinaryOperator binary = (BinaryOperator) current;
-//        if (binary.getLeft().getType() == OpType.Filter) {
-//          if (ctx.replacedMap.isWillBeReplaced(binary.getLeft())) {
-//            binary.setLeft(ctx.replacedMap.getWillBeReplaced(binary.getLeft()));
-//          }
-//        } else if (binary.getRight().getType() == OpType.Filter) {
-//          if (ctx.replacedMap.isWillBeReplaced(binary.getRight())) {
-//            binary.setRight(ctx.replacedMap.getWillBeReplaced(binary.getRight()));
-//          }
-//        }
-//      } else if (current instanceof TablePrimarySubQuery) {
-//        TablePrimarySubQuery subQuery = (TablePrimarySubQuery) current;
-//        if (subQuery.getSubQuery().getType() == OpType.Filter) {
-//          if (ctx.replacedMap.isWillBeReplaced(subQuery.getSubQuery())) {
-//            subQuery.setSubquery(ctx.replacedMap.getWillBeReplaced(subQuery.getSubQuery()));
-//          }
-//        }
-//      }
-//      return current;
-//    }
-
     @Override
     public Expr visitFilter(Context ctx, Stack<Expr> stack, Selection expr) throws PlanningException {
       Expr child = super.visitFilter(ctx, stack, expr);
@@ -246,29 +209,21 @@ public class InSubQueryRewriteRule implements ExpressionRewriteRule {
           SimpleTableSubQuery subQuery = (SimpleTableSubQuery) inPredicate.getInValue();
           TablePrimarySubQuery primarySubQuery = new TablePrimarySubQuery(getNextSubQueryName(),
               subQuery.getSubQuery());
-//          TUtil.putToNestedList(ctx.willBeRemovedQuals, expr, inPredicate);
           addWillBeRemovedQual(ctx, expr, inPredicate);
 
           Projection projection = ExprTreeUtil.findTopExpr(primarySubQuery.getSubQuery(), OpType.Projection);
           updateProjection(projection);
-//          ctx.willbeUpdatedProjections.add(projection);
 
           // TODO: change left_outer to left_anti
-//          Join join = new Join(inPredicate.isNot() ? JoinType.LEFT_OUTER : JoinType.LEFT_SEMI);
           Join join = new Join(inPredicate.isNot() ? JoinType.LEFT_ANTI : JoinType.LEFT_SEMI);
           if (isWillBeReplaced(ctx, expr)) {
             // This selection has multiple IN subqueries.
             // In this case, the new join must have the join corresponding to the other IN subquery as its child.
             join.setLeft(getWillBeReplaced(ctx, expr));
-//            join.setRight(primarySubQuery);
-//
-//            join.setQual(buildJoinCondition(primarySubQuery, predicand, projection));
-//            ctx.replacedMap.put(expr, join);
           } else {
             if (isRemovable(ctx, expr)) {
               join.setLeft(expr.getChild());
             } else {
-//              removeInQual(expr, inPredicate);
               join.setLeft(expr);
             }
           }
@@ -280,17 +235,6 @@ public class InSubQueryRewriteRule implements ExpressionRewriteRule {
 
           // TODO
           addWillBeReplaced(ctx, expr, join);
-
-//          if (inPredicate.isNot()) {
-////            addQual(expr, buildFilterForNotInQuery(predicand));
-//            Selection newFilter = new Selection(buildFilterForNotInQuery(join.getQual()));
-//            newFilter.setChild(join);
-//            addWillBeReplaced(ctx, expr, newFilter);
-//          } else {
-//            addWillBeReplaced(ctx, expr, join);
-//          }
-
-//          child = super.visitJoin(ctx, stack, join);
         }
       }
       return child;
@@ -327,24 +271,6 @@ public class InSubQueryRewriteRule implements ExpressionRewriteRule {
       context.willBeReplacedExprs.add(new Pair<Selection, Expr>(oldExpr, newExpr));
     }
 
-    private boolean hasWillBeRemovedQual(Context context, Selection selection) {
-      for (Pair<Selection, List<InPredicate>> pair : context.willBeRemovedQuals) {
-        if (pair.getFirst().identical(selection)) {
-          return true;
-        }
-      }
-      return false;
-    }
-
-    private List<InPredicate> getWillBeRemovedQuals(Context context, Selection selection) {
-      for (Pair<Selection, List<InPredicate>> pair : context.willBeRemovedQuals) {
-        if (pair.getFirst().identical(selection)) {
-          return pair.getSecond();
-        }
-      }
-      return null;
-    }
-
     private void addWillBeRemovedQual(Context context, Selection selection, InPredicate qual) {
       Pair<Selection, List<InPredicate>> update = null;
       for (Pair<Selection, List<InPredicate>> pair : context.willBeRemovedQuals) {
@@ -364,9 +290,7 @@ public class InSubQueryRewriteRule implements ExpressionRewriteRule {
       if (expr.getQual().getType() == OpType.InPredicate) {
         return true;
       } else {
-//        int removedQualsNum = hasWillBeRemovedQual(ctx, expr) ? getWillBeRemovedQuals(ctx, expr).size() : 0;
         int inPredicateNum = ExprTreeUtil.finds(expr.getQual(), OpType.InPredicate).size();
-//        int inPredicateNum = ExprTreeUtil.finds(expr.getQual(), OpType.InPredicate).size();
         int leafQualNum = new LeafQualFinder().find(expr.getQual()).size();
         if (inPredicateNum == leafQualNum) {
           return true;
@@ -374,12 +298,6 @@ public class InSubQueryRewriteRule implements ExpressionRewriteRule {
           return false;
         }
       }
-
-//      if (expr.getQual().getType() == OpType.InPredicate) {
-//        return true;
-//      } else {
-//        return false;
-//      }
     }
 
     private BinaryOperator buildJoinCondition(TablePrimarySubQuery subQuery, ColumnReferenceExpr predicand,
@@ -394,11 +312,6 @@ public class InSubQueryRewriteRule implements ExpressionRewriteRule {
       }
       BinaryOperator joinCondition = new BinaryOperator(OpType.Equals, predicand, rhs);
       return joinCondition;
-    }
-
-    private IsNullPredicate buildFilterForNotInQuery(Expr joinQual) {
-      BinaryOperator binaryQual = (BinaryOperator) joinQual;
-      return new IsNullPredicate(false, binaryQual.getRight());
     }
   }
 

@@ -356,21 +356,6 @@ public abstract class NameResolver {
 
     // throw exception if no column cannot be founded or two or more than columns are founded
     if (guessedRelations.size() == 0) {
-//      Set<LogicalPlan.QueryBlock> parentBlocks = TUtil.newHashSet();
-//      LogicalPlan.QueryBlock currentBlock = block;
-//      while (!currentBlock.getName().equals(plan.getRootBlock().getName())) {
-//        LogicalPlan.QueryBlock parentBlock = plan.getParentBlock(currentBlock);
-//        if (parentBlock != null) {
-//          parentBlocks.add(parentBlock);
-//          currentBlock = parentBlock;
-//        } else {
-//          currentBlock = null;
-//        }
-//      }
-//      for (LogicalPlan.QueryBlock eachParent : parentBlocks) {
-//
-//      }
-
       if (!plan.getRootBlock().getName().equals(block.getName())) {
         if (isCorrelatedSubquery(plan, block, columnRef)) {
           throw new UnsupportedException("Correlated subquery is not supported yet.");

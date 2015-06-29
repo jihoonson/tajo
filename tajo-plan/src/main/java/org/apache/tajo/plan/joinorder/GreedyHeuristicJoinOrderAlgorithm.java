@@ -325,12 +325,6 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
       switch (joinEdge.getJoinType()) {
         // TODO - improve cost estimation
         // cost = estimated input size * filter factor * estimated write size
-//        case INNER:
-//          factor = factor * Math.pow(DEFAULT_SELECTION_FACTOR, joinEdge.getJoinQual().size())
-//              * SchemaUtil.estimateSchemaSize(joinEdge.getSchema())
-//              / (SchemaUtil.estimateSchemaSize(joinEdge.getLeftVertex().getSchema())
-//              + SchemaUtil.estimateSchemaSize(joinEdge.getRightVertex().getSchema()));
-//          break;
         // for outer joins, filter factor does not matter
         case LEFT_OUTER:
           factor = SchemaUtil.estimateSchemaSize(joinEdge.getSchema()) /
@@ -349,7 +343,6 @@ public class GreedyHeuristicJoinOrderAlgorithm implements JoinOrderAlgorithm {
         case INNER:
         default:
           // by default, do the same operation with that of inner join
-//          factor = factor * Math.pow(DEFAULT_SELECTION_FACTOR, joinEdge.getJoinQual().size());
           factor = factor * Math.pow(DEFAULT_SELECTION_FACTOR, joinEdge.getJoinQual().size())
               * SchemaUtil.estimateSchemaSize(joinEdge.getSchema())
               / (SchemaUtil.estimateSchemaSize(joinEdge.getLeftVertex().getSchema())

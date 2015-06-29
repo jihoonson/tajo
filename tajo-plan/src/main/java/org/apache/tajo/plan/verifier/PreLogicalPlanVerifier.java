@@ -94,25 +94,6 @@ public class PreLogicalPlanVerifier extends BaseAlgebraVisitor<PreLogicalPlanVer
           names.add(namedExpr.getAlias());
         }
       }
-//<<<<<<< HEAD
-//
-//      Set<GeneralSetFunctionExpr> exprs = ExprTreeUtil.finds(namedExpr.getExpr(), OpType.GeneralSetFunction);
-//
-//      // Currently, avg functions with distinct aggregation are not supported.
-//      // This code does not allow users to use avg functions with distinct aggregation.
-//      if (distinctValues != null) {
-//        for (GeneralSetFunctionExpr setFunction : exprs) {
-//          if (setFunction.getSignature().equalsIgnoreCase("avg")) {
-//            if (setFunction.isDistinct()) {
-//              throw new PlanningException("avg(distinct) function is not supported yet.");
-//            } else {
-//              throw new PlanningException("avg() function with distinct aggregation functions is not supported yet.");
-//            }
-//          }
-//        }
-//      }
-//=======
-//>>>>>>> 25bd5cb44a03ee425b02e2bc2553f7d0f8affff5
     }
     return expr;
   }

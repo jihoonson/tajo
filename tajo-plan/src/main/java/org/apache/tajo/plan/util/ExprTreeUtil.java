@@ -126,10 +126,6 @@ public class ExprTreeUtil {
         super.visit(ctx, stack, expr);
       }
 
-//    if (ctx.targetType == expr.getType()) {
-//      ctx.set.add(expr);
-//    }
-
       return null;
     }
   }
@@ -155,42 +151,6 @@ public class ExprTreeUtil {
           ctx.found = subQuery;
         }
     }
-//    @Override
-//    public Object visit(ParentFinderContext ctx, Stack<Expr> stack, Expr expr) throws PlanningException {
-//
-//      if (expr instanceof UnaryOperator) {
-//        UnaryOperator unary = (UnaryOperator) expr;
-//        if (unary.getChild().equals(ctx.target)) {
-//          ctx.found = unary;
-//          return null;
-//        }
-//        preHook(ctx, stack, expr);
-//        visitUnaryOperator(ctx, stack, unary);
-//        postHook(ctx, stack, expr, null);
-//      } else if (expr instanceof BinaryOperator) {
-//        BinaryOperator binary = (BinaryOperator) expr;
-//        if (binary.getLeft().equals(ctx.target) ||
-//            binary.getRight().equals(ctx.target)) {
-//          ctx.found = binary;
-//          return null;
-//        }
-//        preHook(ctx, stack, expr);
-//        visitBinaryOperator(ctx, stack, binary);
-//        postHook(ctx, stack, expr, null);
-//      } else if (expr instanceof TablePrimarySubQuery) {
-//        TablePrimarySubQuery subQuery = (TablePrimarySubQuery) expr;
-//        if (subQuery.getSubQuery().equals(ctx.target)) {
-//          ctx.found = subQuery;
-//          return null;
-//        }
-//        preHook(ctx, stack, expr);
-//        visitTableSubQuery(ctx, stack, subQuery);
-//        postHook(ctx, stack, expr, null);
-//      } else {
-//        super.visit(ctx, stack, expr);
-//      }
-//
-//      return null;
     }
   }
 }
