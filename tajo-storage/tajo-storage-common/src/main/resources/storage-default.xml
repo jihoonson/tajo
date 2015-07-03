@@ -39,7 +39,7 @@
   <!--- Registered Scanner Handler -->
   <property>
     <name>tajo.storage.scanner-handler</name>
-    <value>text,csv,json,kernlog,raw,rcfile,row,parquet,sequencefile,avro,hbase</value>
+    <value>text,csv,json,kernlog,syslog,raw,rcfile,row,parquet,sequencefile,avro,hbase</value>
   </property>
 
   <!--- Fragment Class Configurations -->
@@ -57,6 +57,10 @@
   </property>
   <property>
     <name>tajo.storage.fragment.kernlog.class</name>
+    <value>org.apache.tajo.storage.fragment.FileFragment</value>
+  </property>
+  <property>
+    <name>tajo.storage.fragment.syslog.class</name>
     <value>org.apache.tajo.storage.fragment.FileFragment</value>
   </property>
   <property>
@@ -106,6 +110,11 @@
 
   <property>
     <name>tajo.storage.scanner-handler.kernlog.class</name>
+    <value>org.apache.tajo.storage.text.DelimitedTextFile$DelimitedTextFileScanner</value>
+  </property>
+
+  <property>
+    <name>tajo.storage.scanner-handler.syslog.class</name>
     <value>org.apache.tajo.storage.text.DelimitedTextFile$DelimitedTextFileScanner</value>
   </property>
 
@@ -167,6 +176,11 @@
 
   <property>
     <name>tajo.storage.appender-handler.kernlog.class</name>
+    <value>org.apache.tajo.storage.text.DelimitedTextFile$DelimitedTextFileAppender</value>
+  </property>
+
+  <property>
+    <name>tajo.storage.appender-handler.syslog.class</name>
     <value>org.apache.tajo.storage.text.DelimitedTextFile$DelimitedTextFileAppender</value>
   </property>
 
