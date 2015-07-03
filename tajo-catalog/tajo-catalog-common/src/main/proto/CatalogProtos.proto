@@ -40,6 +40,7 @@ enum StoreType {
   HBASE = 12;
   SYSTEM = 13;
   KERNLOG = 14;
+  SYSLOG = 15;
 }
 
 enum OrderType {

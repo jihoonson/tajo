@@ -309,6 +309,8 @@ public class CatalogUtil {
       return StoreType.HBASE;
     } else if (typeStr.equalsIgnoreCase(StoreType.KERNLOG.name())) {
       return StoreType.KERNLOG;
+    } else if (typeStr.equalsIgnoreCase(StoreType.SYSLOG.name())) {
+      return StoreType.SYSLOG;
     } else {
       return null;
     }
@@ -892,6 +894,8 @@ public class CatalogUtil {
       options.set(VALIDATION, StorageConstants.PARQUET_DEFAULT_IS_VALIDATION_ENABLED);
     } else if (storeType.equalsIgnoreCase("KERNLOG")) {
       options.set(StorageConstants.TEXT_SERDE_CLASS, "org.apache.tajo.storage.text.KernLogSerDe");
+    } else if (storeType.equalsIgnoreCase("SYSLOG")) {
+      options.set(StorageConstants.TEXT_SERDE_CLASS, "org.apache.tajo.storage.text.SysLogSerDe");
     }
 
     return options;

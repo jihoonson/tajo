@@ -45,11 +45,15 @@ public class KernLogDeserializer extends TextLineDeserializer {
     String line = new String(bytes);
     String[] tokens = line.split(" ");
     Datum[] datums = new Datum[schema.size()];
-    datums[0] = DatumFactory.createTimestamp("2015" + tokens[0] + tokens[1] + tokens[2]);
+    datums[0] = DatumFactory.createTimestamp("2015 " + tokens[0] + " " + tokens[1] + " " + tokens[2]);
     datums[1] = DatumFactory.createText(tokens[3]);
     datums[2] = DatumFactory.createText(tokens[4]);
     datums[3] = DatumFactory.createFloat8(tokens[5].substring(1, tokens[5].length() - 1));
-    datums[4] = DatumFactory.createText(tokens[6]);
+    StringBuilder sb = new StringBuilder();
+    for (int i = 6; i < tokens.length; i++) {
+      sb.append(tokens[i]);
+    }
+    datums[4] = DatumFactory.createText(sb.toString());
     output.put(datums);
   }
 
