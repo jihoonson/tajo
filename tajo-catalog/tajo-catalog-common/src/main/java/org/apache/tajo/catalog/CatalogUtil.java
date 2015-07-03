@@ -307,6 +307,8 @@ public class CatalogUtil {
       return StoreType.JSON;
     } else if (typeStr.equalsIgnoreCase(StoreType.HBASE.name())) {
       return StoreType.HBASE;
+    } else if (typeStr.equalsIgnoreCase(StoreType.KERNLOG.name())) {
+      return StoreType.KERNLOG;
     } else {
       return null;
     }
@@ -888,6 +890,8 @@ public class CatalogUtil {
       options.set(COMPRESSION, StorageConstants.PARQUET_DEFAULT_COMPRESSION_CODEC_NAME);
       options.set(ENABLE_DICTIONARY, StorageConstants.PARQUET_DEFAULT_IS_DICTIONARY_ENABLED);
       options.set(VALIDATION, StorageConstants.PARQUET_DEFAULT_IS_VALIDATION_ENABLED);
+    } else if (storeType.equalsIgnoreCase("KERNLOG")) {
+      options.set(StorageConstants.TEXT_SERDE_CLASS, "org.apache.tajo.storage.text.KernLogSerDe");
     }
 
     return options;

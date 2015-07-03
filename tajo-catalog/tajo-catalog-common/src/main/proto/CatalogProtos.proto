@@ -39,6 +39,7 @@ enum StoreType {
   JSON = 11;
   HBASE = 12;
   SYSTEM = 13;
+  KERNLOG = 14;
 }
 
 enum OrderType {

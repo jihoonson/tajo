@@ -748,4 +748,15 @@ public class TestSelectQuery extends QueryTestCaseBase {
     assertResultSet(res);
     cleanupQuery(res);
   }
+
+  @Test
+  public void testKern() throws Exception {
+    try {
+      executeString("create external table kernlog (time timestamp, host text, msg_type text, elapsed_time float8, message text) using kernlog location 'file:///var/log/kern.log';");
+      ResultSet res = executeString("select * from kernlog limit 10");
+      System.out.println(resultSetToString(res));
+    } finally {
+      executeString("drop table kernlog");
+    }
+  }
 }
