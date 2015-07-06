@@ -25,7 +25,7 @@ import org.apache.tajo.catalog.TableMeta;
 public class KernLogSerDe extends TextLineSerDe {
   @Override
   public TextLineDeserializer createDeserializer(Schema schema, TableMeta meta, Column[] projected) {
-    return new KernLogDeserializer(schema, meta);
+    return new KernLogDeserializer(schema, meta, projected);
   }
 
   @Override
