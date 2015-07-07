@@ -18,9 +18,9 @@
 
 package org.apache.tajo.engine.planner.physical;
 
-import org.apache.tajo.worker.TaskAttemptContext;
 import org.apache.tajo.plan.logical.JoinNode;
 import org.apache.tajo.storage.Tuple;
+import org.apache.tajo.worker.TaskAttemptContext;
 
 import java.io.IOException;
 import java.util.List;
@@ -59,8 +59,7 @@ public class HashLeftSemiJoinExec extends HashJoinExec {
     while(!context.isStopped() && !finished) {
       if (iterator != null && iterator.hasNext()) {
         frameTuple.setRight(iterator.next());
-        projector.eval(frameTuple, outTuple);
-        return outTuple;
+        return targetEvaluator.eval(frameTuple);
       }
       // getting new outer
       Tuple leftTuple = leftChild.next(); // it comes from a disk

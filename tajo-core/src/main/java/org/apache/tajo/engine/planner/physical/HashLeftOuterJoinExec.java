@@ -46,8 +46,7 @@ public class HashLeftOuterJoinExec extends HashJoinExec {
     while (!context.isStopped() && !finished) {
       if (iterator != null && iterator.hasNext()) {
         frameTuple.setRight(iterator.next());
-        projector.eval(frameTuple, outTuple);
-        return outTuple;
+        return targetEvaluator.eval(frameTuple);
       }
       Tuple leftTuple = leftChild.next(); // it comes from a disk
       if (leftTuple == null) { // if no more tuples in left tuples on disk, a join is completed.

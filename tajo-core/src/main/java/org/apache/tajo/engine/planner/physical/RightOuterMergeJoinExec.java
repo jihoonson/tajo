@@ -23,22 +23,19 @@ import org.apache.tajo.catalog.SortSpec;
 import org.apache.tajo.datum.DatumFactory;
 import org.apache.tajo.engine.utils.TupleUtil;
 import org.apache.tajo.plan.logical.JoinNode;
-import org.apache.tajo.storage.FrameTuple;
 import org.apache.tajo.storage.Tuple;
 import org.apache.tajo.storage.TupleComparator;
-import org.apache.tajo.storage.VTuple;
 import org.apache.tajo.worker.TaskAttemptContext;
 
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
+@TupleProducer
 public class RightOuterMergeJoinExec extends CommonJoinExec {
   // temporal tuples and states for nested loop join
-  private FrameTuple frameTuple;
   private Tuple leftTuple = null;
   private Tuple rightTuple = null;
-  private Tuple outTuple = null;
   private Tuple nextLeft = null;
 
   private List<Tuple> leftTupleSlots;
@@ -73,9 +70,6 @@ public class RightOuterMergeJoinExec extends CommonJoinExec {
         plan.getJoinQual(), outer.getSchema(), inner.getSchema());
 
     // for join
-    frameTuple = new FrameTuple();
-    outTuple = new VTuple(outSchema.size());
-
     leftNumCols = outer.getSchema().size();
   }
 
@@ -83,7 +77,7 @@ public class RightOuterMergeJoinExec extends CommonJoinExec {
    * creates a tuple of a given size filled with NULL values in all fields
    */
   private Tuple createNullPaddedTuple(int columnNum){
-    VTuple tuple = new VTuple(columnNum);
+    Tuple tuple = createEmptyTuple(columnNum);
     for (int i = 0; i < columnNum; i++) {
       tuple.put(i, DatumFactory.createNullDatum());
     }
@@ -132,12 +126,10 @@ public class RightOuterMergeJoinExec extends CommonJoinExec {
             // output a tuple with the nulls padded leftTuple
             Tuple nullPaddedTuple = createNullPaddedTuple(leftNumCols);
             frameTuple.set(nullPaddedTuple, rightTuple);
-            projector.eval(frameTuple, outTuple);
-
             // we simulate we found a match, which is exactly the null padded one
             rightTuple = rightChild.next();
 
-            return outTuple;
+            return targetEvaluator.eval(frameTuple);
           }
         }
         //////////////////////////////////////////////////////////////////////
@@ -170,10 +162,9 @@ public class RightOuterMergeJoinExec extends CommonJoinExec {
         if (rightFiltered(rightTuple)) {
           Tuple nullPaddedTuple = createNullPaddedTuple(leftNumCols);
           frameTuple.set(nullPaddedTuple, rightTuple);
-          projector.eval(frameTuple, outTuple);
-
           rightTuple = null;
-          return outTuple;
+
+          return targetEvaluator.eval(frameTuple);
         }
         initRightDone = true;
 
@@ -204,12 +195,11 @@ public class RightOuterMergeJoinExec extends CommonJoinExec {
             // output a tuple with the nulls padded left tuple
             Tuple nullPaddedTuple = createNullPaddedTuple(leftNumCols);
             frameTuple.set(nullPaddedTuple, rightTuple);
-            projector.eval(frameTuple, outTuple);
-
             // we simulate we found a match, which is exactly the null padded one
             // BEFORE RETURN, MOVE FORWARD
             rightTuple = null;
-            return outTuple;
+
+            return targetEvaluator.eval(frameTuple);
 
           } else if (cmp < 0) {
             // If the left tuple is lower than the right tuple, just move forward the left tuple cursor.
@@ -233,9 +223,9 @@ public class RightOuterMergeJoinExec extends CommonJoinExec {
           boolean endOuter = false;
           boolean endInner = false;
 
-          previous = new VTuple(leftTuple);
+          previous = createCopy(leftTuple);
           do {
-            leftTupleSlots.add(new VTuple(leftTuple));
+            leftTupleSlots.add(previous);
             leftTuple = leftChild.next();
             if( leftTuple == null) {
               endOuter = true;
@@ -243,10 +233,10 @@ public class RightOuterMergeJoinExec extends CommonJoinExec {
           } while ((endOuter != true) && (tupleComparator[0].compare(previous, leftTuple) == 0));
           posLeftTupleSlots = 0;
 
-          previous = new VTuple(rightTuple);
+          previous = createCopy(rightTuple);
 
           do {
-            innerTupleSlots.add(new VTuple(rightTuple));
+            innerTupleSlots.add(previous);
             rightTuple = rightChild.next();
             if(rightTuple == null) {
               endInner = true;
@@ -263,15 +253,14 @@ public class RightOuterMergeJoinExec extends CommonJoinExec {
         if (previous != null && rightFiltered(previous)) {
           Tuple nullPaddedTuple = createNullPaddedTuple(leftNumCols);
           frameTuple.set(nullPaddedTuple, previous);
-          projector.eval(frameTuple, outTuple);
-
           // reset tuple slots for a new round
           leftTupleSlots.clear();
           innerTupleSlots.clear();
           posRightTupleSlots = -1;
           posLeftTupleSlots = -1;
 
-          return outTuple;
+          return targetEvaluator.eval(frameTuple);
+
         }
       } // if newRound
 
@@ -283,48 +272,44 @@ public class RightOuterMergeJoinExec extends CommonJoinExec {
       if ((end == false) || ((end == true) && (endInPopulationStage == true))){
 
         if(posLeftTupleSlots == 0){
-          nextLeft = new VTuple (leftTupleSlots.get(posLeftTupleSlots));
+          nextLeft = leftTupleSlots.get(posLeftTupleSlots);
           posLeftTupleSlots = posLeftTupleSlots + 1;
         }
 
 
         if(posRightTupleSlots <= (innerTupleSlots.size() -1)) {
 
-          Tuple aTuple = new VTuple(innerTupleSlots.get(posRightTupleSlots));
+          Tuple aTuple = innerTupleSlots.get(posRightTupleSlots);
           posRightTupleSlots = posRightTupleSlots + 1;
 
           frameTuple.set(nextLeft, aTuple);
           if (joinQual.eval(frameTuple).asBool()) {
-            projector.eval(frameTuple, outTuple);
-            return outTuple;
+            return targetEvaluator.eval(frameTuple);
           } else {
             // padding null
             Tuple nullPaddedTuple = TupleUtil.createNullPaddedTuple(leftNumCols);
             frameTuple.set(nullPaddedTuple, aTuple);
-            projector.eval(frameTuple, outTuple);
-            return outTuple;
+            return targetEvaluator.eval(frameTuple);
           }
         } else {
           // right (inner) slots reached end and should be rewind if there are still tuples in the outer slots
           if(posLeftTupleSlots <= (leftTupleSlots.size() - 1)) {
             //rewind the right slots position
             posRightTupleSlots = 0;
-            Tuple aTuple = new VTuple(innerTupleSlots.get(posRightTupleSlots));
+            Tuple aTuple = innerTupleSlots.get(posRightTupleSlots);
             posRightTupleSlots = posRightTupleSlots + 1;
-            nextLeft = new VTuple (leftTupleSlots.get(posLeftTupleSlots));
+            nextLeft = leftTupleSlots.get(posLeftTupleSlots);
             posLeftTupleSlots = posLeftTupleSlots + 1;
 
             frameTuple.set(nextLeft, aTuple);
 
             if (joinQual.eval(frameTuple).asBool()) {
-              projector.eval(frameTuple, outTuple);
-              return outTuple;
+              return targetEvaluator.eval(frameTuple);
             } else {
               // padding null
               Tuple nullPaddedTuple = TupleUtil.createNullPaddedTuple(leftNumCols);
               frameTuple.set(nullPaddedTuple, aTuple);
-              projector.eval(frameTuple, outTuple);
-              return outTuple;
+              return targetEvaluator.eval(frameTuple);
             }
           }
         }

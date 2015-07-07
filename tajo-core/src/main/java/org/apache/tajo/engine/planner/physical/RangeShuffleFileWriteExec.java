@@ -26,6 +26,7 @@ import org.apache.hadoop.fs.RawLocalFileSystem;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.tajo.catalog.*;
 import org.apache.tajo.conf.TajoConf;
+import org.apache.tajo.datum.NullDatum;
 import org.apache.tajo.plan.util.PlannerUtil;
 import org.apache.tajo.storage.*;
 import org.apache.tajo.storage.index.bst.BSTIndex;
@@ -43,12 +44,13 @@ public class RangeShuffleFileWriteExec extends UnaryPhysicalExec {
   private static Log LOG = LogFactory.getLog(RangeShuffleFileWriteExec.class);
   private final SortSpec[] sortSpecs;
   private int [] indexKeys = null;
-  private Schema keySchema;
 
   private BSTIndex.BSTIndexWriter indexWriter;
   private TupleComparator comp;
   private FileAppender appender;
   private TableMeta meta;
+
+  private Tuple keyTuple;
 
   public RangeShuffleFileWriteExec(final TaskAttemptContext context,
                                    final PhysicalExec child, final Schema inSchema, final Schema outSchema,
@@ -61,7 +63,8 @@ public class RangeShuffleFileWriteExec extends UnaryPhysicalExec {
     super.init();
 
     indexKeys = new int[sortSpecs.length];
-    keySchema = PlannerUtil.sortSpecsToSchema(sortSpecs);
+    keyTuple = new VTuple(indexKeys.length);
+    Schema keySchema = PlannerUtil.sortSpecsToSchema(sortSpecs);
 
     Column col;
     for (int i = 0 ; i < sortSpecs.length; i++) {
@@ -90,8 +93,7 @@ public class RangeShuffleFileWriteExec extends UnaryPhysicalExec {
   @Override
   public Tuple next() throws IOException {
     Tuple tuple;
-    Tuple keyTuple;
-    Tuple prevKeyTuple = null;
+    Tuple prevKeyTuple = createNullTuple(indexKeys.length);
     long offset;
 
 
@@ -99,11 +101,10 @@ public class RangeShuffleFileWriteExec extends UnaryPhysicalExec {
       while(!context.isStopped() && (tuple = child.next()) != null) {
         offset = appender.getOffset();
         appender.addTuple(tuple);
-        keyTuple = new VTuple(keySchema.size());
         RowStoreUtil.project(tuple, keyTuple, indexKeys);
-        if (prevKeyTuple == null || !prevKeyTuple.equals(keyTuple)) {
+        if (!prevKeyTuple.equals(keyTuple)) {
           indexWriter.write(keyTuple, offset);
-          prevKeyTuple = keyTuple;
+          prevKeyTuple.put(keyTuple.getValues());
         }
       }
     } catch (RuntimeException e) {
@@ -112,6 +113,14 @@ public class RangeShuffleFileWriteExec extends UnaryPhysicalExec {
     }
 
     return null;
+  }
+
+  private Tuple createNullTuple(int size) {
+    Tuple tuple = new VTuple(size);
+    for (int i = 0; i < size; i++) {
+      tuple.put(i, NullDatum.get());
+    }
+    return tuple;
   }
 
   @Override

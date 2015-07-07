@@ -26,11 +26,11 @@ import org.apache.tajo.storage.Tuple;
 import org.apache.tajo.storage.VTuple;
 import org.apache.tajo.worker.TaskAttemptContext;
 
-public class Projector {
+public class TargetEvaluator {
   private final EvalNode[] evals;
   private final Tuple outTuple;
 
-  public Projector(TaskAttemptContext context, Schema inSchema, Schema outSchema, Target [] targets) {
+  public TargetEvaluator(TaskAttemptContext context, Schema inSchema, Schema outSchema, Target[] targets) {
     this.outTuple = new VTuple(outSchema.size());
 
     evals = new EvalNode[targets.length];

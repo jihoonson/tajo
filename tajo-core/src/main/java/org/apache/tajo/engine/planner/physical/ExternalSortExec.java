@@ -204,9 +204,9 @@ public class ExternalSortExec extends SortExec {
     int chunkId = 0;
     long runStartTime = System.currentTimeMillis();
     while (!context.isStopped() && (tuple = child.next()) != null) { // partition sort start
-      Tuple vtuple = new VTuple(tuple);
-      inMemoryTable.add(vtuple);
-      memoryConsumption += MemoryUtil.calculateMemorySize(vtuple);
+      Tuple copy = createCopy(tuple);
+      inMemoryTable.add(copy);
+      memoryConsumption += MemoryUtil.calculateMemorySize(copy);
 
       if (memoryConsumption > sortBufferBytesNum) {
         long runEndTime = System.currentTimeMillis();
@@ -686,7 +686,7 @@ public class ExternalSortExec extends SortExec {
     }
 
     protected Tuple prepare(int index, Tuple tuple) {
-      return tuple == null ? null : new VTuple(tuple);
+      return tuple == null ? null : tuple;
     }
 
     protected int compare() {

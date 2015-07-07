@@ -33,6 +33,7 @@ import java.util.Map.Entry;
 /**
  * This is the hash-based GroupBy Operator.
  */
+@TupleProducer
 public class HashAggregateExec extends AggregationExec {
   private final Tuple outTuple;
   private Map<Tuple, FunctionContext[]> hashTable;

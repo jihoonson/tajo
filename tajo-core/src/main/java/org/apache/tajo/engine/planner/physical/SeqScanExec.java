@@ -53,7 +53,7 @@ public class SeqScanExec extends ScanExec {
 
   private CatalogProtos.FragmentProto [] fragments;
 
-  private Projector projector;
+  private TargetEvaluator targetEvaluator;
 
   private TableStats inputStats;
 
@@ -197,7 +197,7 @@ public class SeqScanExec extends ScanExec {
       // for non-projected fields.
       Schema actualInSchema = scanner.isProjectable() ? projectedFields : inSchema;
 
-      this.projector = new Projector(context, actualInSchema, outSchema, plan.getTargets());
+      this.targetEvaluator = new TargetEvaluator(context, actualInSchema, outSchema, plan.getTargets());
 
       if (plan.hasQual()) {
         qual.bind(context.getEvalContext(), actualInSchema);
@@ -246,7 +246,7 @@ public class SeqScanExec extends ScanExec {
   public Tuple next() throws IOException {
 
     while(scanIt.hasNext()) {
-      return projector.eval(scanIt.next());
+      return targetEvaluator.eval(scanIt.next());
     }
 
     return null;

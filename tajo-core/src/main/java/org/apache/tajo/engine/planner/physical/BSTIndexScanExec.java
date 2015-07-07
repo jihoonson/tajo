@@ -39,7 +39,7 @@ public class BSTIndexScanExec extends PhysicalExec {
   private EvalNode qual;
   private BSTIndex.BSTIndexReader reader;
   
-  private Projector projector;
+  private TargetEvaluator targetEvaluator;
 
   private boolean initialize = true;
 
@@ -58,7 +58,7 @@ public class BSTIndexScanExec extends PhysicalExec {
     this.fileScanner = OldStorageManager.getSeekableScanner(context.getConf(),
         scanNode.getTableDesc().getMeta(), scanNode.getInSchema(), fragment, outSchema);
     this.fileScanner.init();
-    this.projector = new Projector(context, inSchema, outSchema, scanNode.getTargets());
+    this.targetEvaluator = new TargetEvaluator(context, inSchema, outSchema, scanNode.getTargets());
 
     FileSystem fs = fileName.getFileSystem(context.getConf());
     this.reader = new BSTIndex(fs.getConf()).
@@ -104,14 +104,14 @@ public class BSTIndexScanExec extends PhysicalExec {
     Tuple tuple;
     if (!scanNode.hasQual()) {
       if ((tuple = fileScanner.next()) != null) {
-        return projector.eval(tuple);
+        return targetEvaluator.eval(tuple);
       } else {
         return null;
       }
     } else {
        while(reader.isCurInMemory() && (tuple = fileScanner.next()) != null) {
          if (qual.eval(tuple).isTrue()) {
-           return projector.eval(tuple);
+           return targetEvaluator.eval(tuple);
          } else {
            long offset = reader.next();
            if (offset == -1) return null;
@@ -134,7 +134,7 @@ public class BSTIndexScanExec extends PhysicalExec {
     fileScanner = null;
     scanNode = null;
     qual = null;
-    projector = null;
+    targetEvaluator = null;
   }
 
   @Override

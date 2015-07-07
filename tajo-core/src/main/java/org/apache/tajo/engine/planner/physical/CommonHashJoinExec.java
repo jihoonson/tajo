@@ -41,6 +41,7 @@ import java.util.Map;
  *
  * @param <T> Tuple collection type to load small relation onto in-memory
  */
+@TupleProducer
 public abstract class CommonHashJoinExec<T> extends CommonJoinExec {
 
   protected final List<Column[]> joinKeyPairs;
@@ -120,22 +121,9 @@ public abstract class CommonHashJoinExec<T> extends CommonJoinExec {
     Map<Tuple, List<Tuple>> map = new HashMap<Tuple, List<Tuple>>(100000);
 
     while (!context.isStopped() && (tuple = rightChild.next()) != null) {
-      Tuple keyTuple = new VTuple(joinKeyPairs.size());
+      Tuple keyTuple = createEmptyTuple(joinKeyPairs.size());
       for (int i = 0; i < rightKeyList.length; i++) {
         keyTuple.put(i, tuple.asDatum(rightKeyList[i]));
-      }
-
-      /*
-       * TODO
-       * Currently, some physical executors can return new instances of tuple, but others not.
-       * This sometimes causes wrong results due to the singleton Tuple instance.
-       * The below line is a temporal solution to fix this problem.
-       * This will be improved at https://issues.apache.org/jira/browse/TAJO-1343.
-       */
-      try {
-        tuple = tuple.clone();
-      } catch (CloneNotSupportedException e) {
-        throw new IOException(e);
       }
 
       List<Tuple> newValue = map.get(keyTuple);
@@ -143,7 +131,7 @@ public abstract class CommonHashJoinExec<T> extends CommonJoinExec {
         map.put(keyTuple, newValue = new ArrayList<Tuple>());
       }
       // if source is scan or groupby, it needs not to be cloned
-      newValue.add(new VTuple(tuple));
+      newValue.add(createCopy(tuple));
     }
     return map;
   }

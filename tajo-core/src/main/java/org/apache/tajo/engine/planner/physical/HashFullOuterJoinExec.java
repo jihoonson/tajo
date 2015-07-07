@@ -81,8 +81,7 @@ public class HashFullOuterJoinExec extends CommonHashJoinExec<Pair<Boolean, List
     while (!context.isStopped() && !finished) {
       if (iterator != null && iterator.hasNext()) {
         frameTuple.setRight(iterator.next());
-        projector.eval(frameTuple, outTuple);
-        return outTuple;
+        return targetEvaluator.eval(frameTuple);
       }
       if (finalLoop) {
         finished = true;

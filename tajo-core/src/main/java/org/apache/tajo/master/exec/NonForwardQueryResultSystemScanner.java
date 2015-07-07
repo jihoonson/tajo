@@ -33,7 +33,7 @@ import org.apache.tajo.conf.TajoConf;
 import org.apache.tajo.datum.DatumFactory;
 import org.apache.tajo.engine.codegen.CompilationError;
 import org.apache.tajo.engine.planner.PhysicalPlannerImpl;
-import org.apache.tajo.engine.planner.physical.Projector;
+import org.apache.tajo.engine.planner.physical.TargetEvaluator;
 import org.apache.tajo.engine.planner.global.ExecutionBlock;
 import org.apache.tajo.engine.planner.global.ExecutionBlockCursor;
 import org.apache.tajo.engine.planner.global.GlobalPlanner;
@@ -673,7 +673,7 @@ public class NonForwardQueryResultSystemScanner implements NonForwardQueryResult
     
     private ScanNode scanNode;
     private EvalNode qual;
-    private Projector projector;
+    private TargetEvaluator targetEvaluator;
     private TableStats tableStats;
     private final List<Tuple> cachedData;
     private int currentRow;
@@ -692,14 +692,13 @@ public class NonForwardQueryResultSystemScanner implements NonForwardQueryResult
       currentRow = 0;
       isClosed = false;
       
-      projector = new Projector(context, inSchema, outSchema, scanNode.getTargets());
+      targetEvaluator = new TargetEvaluator(context, inSchema, outSchema, scanNode.getTargets());
     }
 
     @Override
     public Tuple next() throws IOException {
       Tuple aTuple;
-      Tuple outTuple = new VTuple(outColumnNum);
-      
+
       if (isClosed) {
         return null;
       }
@@ -711,17 +710,14 @@ public class NonForwardQueryResultSystemScanner implements NonForwardQueryResult
       if (!scanNode.hasQual()) {
         if (currentRow < cachedData.size()) {
           aTuple = cachedData.get(currentRow++);
-          projector.eval(aTuple, outTuple);
-          outTuple.setOffset(aTuple.getOffset());
-          return outTuple;
+          return targetEvaluator.eval(aTuple);
         }
         return null;
       } else {
         while (currentRow < cachedData.size()) {
           aTuple = cachedData.get(currentRow++);
           if (qual.eval(aTuple).isTrue()) {
-            projector.eval(aTuple, outTuple);
-            return outTuple;
+            return targetEvaluator.eval(aTuple);
           }
         }
         return null;
@@ -741,7 +737,7 @@ public class NonForwardQueryResultSystemScanner implements NonForwardQueryResult
     public void close() throws IOException {
       scanNode = null;
       qual = null;
-      projector = null;
+      targetEvaluator = null;
       cachedData.clear();
       currentRow = -1;
       isClosed = true;

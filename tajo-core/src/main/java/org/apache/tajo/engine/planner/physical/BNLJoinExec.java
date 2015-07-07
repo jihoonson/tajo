@@ -18,11 +18,10 @@
 
 package org.apache.tajo.engine.planner.physical;
 
-import org.apache.tajo.plan.util.PlannerUtil;
 import org.apache.tajo.plan.logical.JoinNode;
+import org.apache.tajo.plan.util.PlannerUtil;
 import org.apache.tajo.storage.FrameTuple;
 import org.apache.tajo.storage.Tuple;
-import org.apache.tajo.storage.VTuple;
 import org.apache.tajo.worker.TaskAttemptContext;
 
 import java.io.IOException;
@@ -43,7 +42,6 @@ public class BNLJoinExec extends CommonJoinExec {
   // temporal tuples and states for nested loop join
   private FrameTuple frameTuple;
   private Tuple leftTuple = null;
-  private Tuple outputTuple = null;
   private Tuple rightNext = null;
 
   private final static int TUPLE_SLOT_SIZE = 10000;
@@ -65,7 +63,6 @@ public class BNLJoinExec extends CommonJoinExec {
 
     // for join
     frameTuple = new FrameTuple();
-    outputTuple = new VTuple(outSchema.size());
   }
 
   public Tuple next() throws IOException {
@@ -163,8 +160,7 @@ public class BNLJoinExec extends CommonJoinExec {
 
       frameTuple.set(leftTuple, rightIterator.next());
       if (!hasJoinQual || joinQual.eval(frameTuple).isTrue()) {
-        projector.eval(frameTuple, outputTuple);
-        return outputTuple;
+        return targetEvaluator.eval(frameTuple);
       }
     }
     return null;

@@ -43,6 +43,7 @@ import java.util.List;
 /**
  * The sort-based window aggregation operator
  */
+@TupleProducer
 public class WindowAggExec extends UnaryPhysicalExec {
   // plan information
   protected final int outputColumnNum;
@@ -209,10 +210,12 @@ public class WindowAggExec extends UnaryPhysicalExec {
         if (readTuple == null) { // the end of tuple
           noMoreTuples = true;
           transition(WindowState.EVALUATION);
+        } else {
+          readTuple = createCopy(readTuple);
         }
 
         if (readTuple != null && hasPartitionKeys) { // get a key tuple
-          currentKey = new VTuple(partitionKeyIds.length);
+          currentKey = createEmptyTuple(partitionKeyIds.length);
           for (int i = 0; i < partitionKeyIds.length; i++) {
             currentKey.put(i, readTuple.asDatum(partitionKeyIds[i]));
           }
@@ -257,7 +260,7 @@ public class WindowAggExec extends UnaryPhysicalExec {
   private void accumulatingWindow(Tuple currentKey, Tuple inTuple) {
 
     if (lastKey == null || lastKey.equals(currentKey)) { // if the current key is same to the previous key
-      accumulatedInTuples.add(new VTuple(inTuple));
+      accumulatedInTuples.add(inTuple);
 
     } else {
       // if the current key is different from the previous key,
@@ -271,14 +274,14 @@ public class WindowAggExec extends UnaryPhysicalExec {
   }
 
   private void preAccumulatingNextWindow(Tuple inTuple) {
-    Tuple projectedTuple = new VTuple(outSchema.size());
+    Tuple projectedTuple = createEmptyTuple(outSchema.size());
     for(int idx = 0; idx < nonFunctionColumnNum; idx++) {
       projectedTuple.put(idx, inTuple.asDatum(nonFunctionColumns[idx]));
     }
     nextAccumulatedProjected = Lists.newArrayList();
     nextAccumulatedProjected.add(projectedTuple);
     nextAccumulatedInTuples = Lists.newArrayList();
-    nextAccumulatedInTuples.add(new VTuple(inTuple));
+    nextAccumulatedInTuples.add(inTuple);
   }
 
   private void evaluationWindowFrame() {
@@ -289,7 +292,7 @@ public class WindowAggExec extends UnaryPhysicalExec {
     for (int i = 0; i <accumulatedInTuples.size(); i++) {
       Tuple inTuple = accumulatedInTuples.get(i);
 
-      Tuple projectedTuple = new VTuple(schemaForOrderBy.size());
+      Tuple projectedTuple = createEmptyTuple(schemaForOrderBy.size());
       for (int c = 0; c < nonFunctionColumnNum; c++) {
         projectedTuple.put(c, inTuple.asDatum(nonFunctionColumns[c]));
       }
