@@ -19,5 +19,5 @@
 package org.apache.tajo.catalog;
 
 public interface SchemaObject {
-	public Schema getSchema();
+	Schema getSchema();
 }

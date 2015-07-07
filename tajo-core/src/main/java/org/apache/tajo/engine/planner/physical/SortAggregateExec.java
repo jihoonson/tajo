@@ -44,21 +44,22 @@ public class SortAggregateExec extends AggregationExec {
   private Tuple lastKey = null;
   private boolean finished = false;
   private FunctionContext contexts[];
+  private final Tuple outTuple;
 
   public SortAggregateExec(TaskAttemptContext context, GroupbyNode plan, PhysicalExec child) throws IOException {
     super(context, plan, child);
     contexts = new FunctionContext[plan.getAggFunctions() == null ? 0 : plan.getAggFunctions().length];
+    outTuple = new VTuple(outSchema.size());
   }
 
   @Override
   public Tuple next() throws IOException {
     Tuple currentKey;
     Tuple tuple = null;
-    Tuple outputTuple = null;
 
     while(!context.isStopped() && (tuple = child.next()) != null) {
       // get a key tuple
-      currentKey = new VTuple(groupingKeyIds.length);
+      currentKey = createEmptyTuple(groupingKeyIds.length);
       for(int i = 0; i < groupingKeyIds.length; i++) {
         currentKey.put(i, tuple.asDatum(groupingKeyIds[i]));
       }
@@ -85,14 +86,13 @@ public class SortAggregateExec extends AggregationExec {
 
       } else { /** Finalization State */
         // finalize aggregate and return
-        outputTuple = new VTuple(outSchema.size());
         int tupleIdx = 0;
 
         for(; tupleIdx < groupingKeyNum; tupleIdx++) {
-          outputTuple.put(tupleIdx, lastKey.asDatum(tupleIdx));
+          outTuple.put(tupleIdx, lastKey.asDatum(tupleIdx));
         }
         for(int aggFuncIdx = 0; aggFuncIdx < aggFunctionsNum; tupleIdx++, aggFuncIdx++) {
-          outputTuple.put(tupleIdx, aggFunctions[aggFuncIdx].terminate(contexts[aggFuncIdx]));
+          outTuple.put(tupleIdx, aggFunctions[aggFuncIdx].terminate(contexts[aggFuncIdx]));
         }
 
         for(int evalIdx = 0; evalIdx < aggFunctionsNum; evalIdx++) {
@@ -101,7 +101,7 @@ public class SortAggregateExec extends AggregationExec {
         }
 
         lastKey = currentKey;
-        return outputTuple;
+        return outTuple;
       }
     } // while loop
 
@@ -110,17 +110,16 @@ public class SortAggregateExec extends AggregationExec {
       return null;
     }
     if (!finished) {
-      outputTuple = new VTuple(outSchema.size());
       int tupleIdx = 0;
       for(; tupleIdx < groupingKeyNum; tupleIdx++) {
-        outputTuple.put(tupleIdx, lastKey.asDatum(tupleIdx));
+        outTuple.put(tupleIdx, lastKey.asDatum(tupleIdx));
       }
       for(int aggFuncIdx = 0; aggFuncIdx < aggFunctionsNum; tupleIdx++, aggFuncIdx++) {
-        outputTuple.put(tupleIdx, aggFunctions[aggFuncIdx].terminate(contexts[aggFuncIdx]));
+        outTuple.put(tupleIdx, aggFunctions[aggFuncIdx].terminate(contexts[aggFuncIdx]));
       }
       finished = true;
     }
-    return outputTuple;
+    return outTuple;
   }
 
   @Override

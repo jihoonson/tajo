@@ -26,6 +26,7 @@ import org.apache.tajo.worker.TaskAttemptContext;
 
 import java.io.IOException;
 
+@TupleProducer
 public abstract class AggregationExec extends UnaryPhysicalExec {
 
   protected final int groupingKeyNum;

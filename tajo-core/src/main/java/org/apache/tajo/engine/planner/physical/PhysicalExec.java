@@ -25,7 +25,9 @@ import org.apache.tajo.catalog.Schema;
 import org.apache.tajo.catalog.SchemaObject;
 import org.apache.tajo.catalog.statistics.TableStats;
 import org.apache.tajo.engine.codegen.CompilationError;
+import org.apache.tajo.exception.UnsupportedException;
 import org.apache.tajo.storage.Tuple;
+import org.apache.tajo.storage.VTuple;
 import org.apache.tajo.worker.TaskAttemptContext;
 
 import java.io.IOException;
@@ -36,6 +38,7 @@ public abstract class PhysicalExec implements SchemaObject {
   protected Schema inSchema;
   protected Schema outSchema;
   protected int outColumnNum;
+  private final boolean isTupleProducer;
 
   public PhysicalExec(final TaskAttemptContext context, final Schema inSchema,
                       final Schema outSchema) {
@@ -43,6 +46,7 @@ public abstract class PhysicalExec implements SchemaObject {
     this.inSchema = inSchema;
     this.outSchema = outSchema;
     this.outColumnNum = outSchema.size();
+    this.isTupleProducer = getClass().isAnnotationPresent(TupleProducer.class);
   }
 
   public final Schema getSchema() {
@@ -67,7 +71,7 @@ public abstract class PhysicalExec implements SchemaObject {
   public abstract float getProgress();
 
   protected void info(Log log, String message) {
-    log.info("["+ context.getTaskId() + "] " + message);
+    log.info("[" + context.getTaskId() + "] " + message);
   }
 
   protected void warn(Log log, String message) {
@@ -85,5 +89,21 @@ public abstract class PhysicalExec implements SchemaObject {
 
   public TableStats getInputStats() {
     return null;
+  }
+
+  protected Tuple createEmptyTuple(int size) {
+    if (isTupleProducer) {
+      return new VTuple(size);
+    } else {
+      throw new UnsupportedException("createEmptyTuple() cannot be called at " + getClass().getName());
+    }
+  }
+
+  protected Tuple createCopy(Tuple origin) {
+    if (isTupleProducer) {
+      return new VTuple(origin);
+    } else {
+      throw new UnsupportedException("createCopy() cannot be called at " + getClass().getName());
+    }
   }
 }

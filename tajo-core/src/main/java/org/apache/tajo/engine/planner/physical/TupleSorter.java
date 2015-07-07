@@ -28,7 +28,7 @@ public interface TupleSorter {
 
   Iterable<Tuple> sort();
 
-  public static class DefaultSorter implements TupleSorter {
+  class DefaultSorter implements TupleSorter {
 
     private final List<Tuple> target;
     private final TupleComparator comparator;

@@ -34,7 +34,7 @@ import java.util.Map.Entry;
  * This is the hash-based GroupBy Operator.
  */
 public class HashAggregateExec extends AggregationExec {
-  private Tuple tuple = null;
+  private final Tuple outTuple;
   private Map<Tuple, FunctionContext[]> hashTable;
   private boolean computed = false;
   private Iterator<Entry<Tuple, FunctionContext []>> iterator = null;
@@ -42,14 +42,14 @@ public class HashAggregateExec extends AggregationExec {
   public HashAggregateExec(TaskAttemptContext ctx, GroupbyNode plan, PhysicalExec subOp) throws IOException {
     super(ctx, plan, subOp);
     hashTable = new HashMap<Tuple, FunctionContext []>(100000);
-    this.tuple = new VTuple(plan.getOutSchema().size());
+    this.outTuple = new VTuple(plan.getOutSchema().size());
   }
 
   private void compute() throws IOException {
     Tuple tuple;
     Tuple keyTuple;
     while(!context.isStopped() && (tuple = child.next()) != null) {
-      keyTuple = new VTuple(groupingKeyIds.length);
+      keyTuple = createEmptyTuple(groupingKeyIds.length);
       // build one key tuple
       for(int i = 0; i < groupingKeyIds.length; i++) {
         keyTuple.put(i, tuple.asDatum(groupingKeyIds[i]));
@@ -98,13 +98,13 @@ public class HashAggregateExec extends AggregationExec {
 
       int tupleIdx = 0;
       for (; tupleIdx < groupingKeyNum; tupleIdx++) {
-        tuple.put(tupleIdx, keyTuple.asDatum(tupleIdx));
+        outTuple.put(tupleIdx, keyTuple.asDatum(tupleIdx));
       }
       for (int funcIdx = 0; funcIdx < aggFunctionsNum; funcIdx++, tupleIdx++) {
-        tuple.put(tupleIdx, aggFunctions[funcIdx].terminate(contexts[funcIdx]));
+        outTuple.put(tupleIdx, aggFunctions[funcIdx].terminate(contexts[funcIdx]));
       }
 
-      return tuple;
+      return outTuple;
     } else {
       return null;
     }

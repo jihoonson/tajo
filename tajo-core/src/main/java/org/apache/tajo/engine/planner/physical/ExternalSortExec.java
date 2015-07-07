@@ -64,6 +64,7 @@ import static org.apache.tajo.storage.RawFile.RawFileScanner;
  *   <li>Unbalance merge if needed</li>
  * </ul>
  */
+@TupleProducer
 public class ExternalSortExec extends SortExec {
   /** Class logger */
   private static final Log LOG = LogFactory.getLog(ExternalSortExec.class);

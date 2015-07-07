@@ -28,6 +28,7 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 
+@TupleProducer
 public class MemSortExec extends SortExec {
   private SortNode plan;
   private List<Tuple> tupleSlots;
@@ -51,7 +52,7 @@ public class MemSortExec extends SortExec {
     if (!sorted) {
       Tuple tuple;
       while (!context.isStopped() && (tuple = child.next()) != null) {
-        tupleSlots.add(new VTuple(tuple));
+        tupleSlots.add(createCopy(tuple));
       }
       iterator = getSorter(tupleSlots).sort().iterator();
       sorted = true;
