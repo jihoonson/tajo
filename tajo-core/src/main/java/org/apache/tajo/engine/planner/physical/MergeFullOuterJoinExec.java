@@ -23,6 +23,7 @@ import org.apache.tajo.catalog.SortSpec;
 import org.apache.tajo.engine.utils.TupleUtil;
 import org.apache.tajo.plan.logical.JoinNode;
 import org.apache.tajo.storage.FrameTuple;
+import org.apache.tajo.storage.NullTuple;
 import org.apache.tajo.storage.Tuple;
 import org.apache.tajo.storage.TupleComparator;
 import org.apache.tajo.worker.TaskAttemptContext;
@@ -119,7 +120,8 @@ public class MergeFullOuterJoinExec extends CommonJoinExec {
 
           if((leftTuple == null) && (rightTuple != null)){
             // output a tuple with the nulls padded leftTuple
-            Tuple nullPaddedTuple = TupleUtil.createNullPaddedTuple(leftNumCols);
+//            Tuple nullPaddedTuple = TupleUtil.createNullPaddedTuple(leftNumCols);
+            Tuple nullPaddedTuple = NullTuple.create(leftNumCols);
             frameTuple.set(nullPaddedTuple, rightTuple);
             // we simulate we found a match, which is exactly the null padded one
             rightTuple = rightChild.next();
@@ -128,7 +130,8 @@ public class MergeFullOuterJoinExec extends CommonJoinExec {
 
           if((leftTuple != null) && (rightTuple == null)){
             // output a tuple with the nulls padded leftTuple
-            Tuple nullPaddedTuple = TupleUtil.createNullPaddedTuple(rightNumCols);
+//            Tuple nullPaddedTuple = TupleUtil.createNullPaddedTuple(rightNumCols);
+            Tuple nullPaddedTuple = NullTuple.create(rightNumCols);
             frameTuple.set(leftTuple, nullPaddedTuple);
             // we simulate we found a match, which is exactly the null padded one
             leftTuple = leftChild.next();

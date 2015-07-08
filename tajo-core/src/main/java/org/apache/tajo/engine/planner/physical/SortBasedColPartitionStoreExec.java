@@ -22,8 +22,7 @@
 package org.apache.tajo.engine.planner.physical;
 
 import org.apache.tajo.catalog.statistics.StatisticsUtil;
-import org.apache.tajo.datum.Datum;
-import org.apache.tajo.datum.NullDatum;
+import org.apache.tajo.engine.utils.TupleUtil;
 import org.apache.tajo.plan.logical.StoreTableNode;
 import org.apache.tajo.storage.Tuple;
 import org.apache.tajo.storage.VTuple;
@@ -45,7 +44,7 @@ public class SortBasedColPartitionStoreExec extends ColPartitionStoreExec {
     super(context, plan, child);
 
     currentKey = new VTuple(keyNum);
-    prevKey = createNullTuple(keyNum);
+    prevKey = TupleUtil.createNullPaddedTuple(keyNum);
   }
 
   private void fillKeyTuple(Tuple inTuple, Tuple keyTuple) {
@@ -99,14 +98,6 @@ public class SortBasedColPartitionStoreExec extends ColPartitionStoreExec {
     }
 
     return null;
-  }
-
-  private Tuple createNullTuple(int size) {
-    Tuple tuple = new VTuple(size);
-    for (int i = 0; i < size; i++) {
-      tuple.put(i, NullDatum.get());
-    }
-    return tuple;
   }
 
   @Override

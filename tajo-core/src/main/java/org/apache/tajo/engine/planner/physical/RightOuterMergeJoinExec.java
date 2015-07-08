@@ -23,6 +23,7 @@ import org.apache.tajo.catalog.SortSpec;
 import org.apache.tajo.datum.DatumFactory;
 import org.apache.tajo.engine.utils.TupleUtil;
 import org.apache.tajo.plan.logical.JoinNode;
+import org.apache.tajo.storage.NullTuple;
 import org.apache.tajo.storage.Tuple;
 import org.apache.tajo.storage.TupleComparator;
 import org.apache.tajo.worker.TaskAttemptContext;
@@ -74,17 +75,6 @@ public class RightOuterMergeJoinExec extends CommonJoinExec {
   }
 
   /**
-   * creates a tuple of a given size filled with NULL values in all fields
-   */
-  private Tuple createNullPaddedTuple(int columnNum){
-    Tuple tuple = createEmptyTuple(columnNum);
-    for (int i = 0; i < columnNum; i++) {
-      tuple.put(i, DatumFactory.createNullDatum());
-    }
-    return tuple;
-  }
-
-  /**
    *
    * Right outer merge join consists of four stages
    * <ul>
@@ -124,7 +114,8 @@ public class RightOuterMergeJoinExec extends CommonJoinExec {
             return null;
           } else {
             // output a tuple with the nulls padded leftTuple
-            Tuple nullPaddedTuple = createNullPaddedTuple(leftNumCols);
+//            Tuple nullPaddedTuple = TupleUtil.createNullPaddedTuple(leftNumCols);
+            Tuple nullPaddedTuple = NullTuple.create(leftNumCols);
             frameTuple.set(nullPaddedTuple, rightTuple);
             // we simulate we found a match, which is exactly the null padded one
             rightTuple = rightChild.next();
@@ -160,7 +151,7 @@ public class RightOuterMergeJoinExec extends CommonJoinExec {
           }
         }
         if (rightFiltered(rightTuple)) {
-          Tuple nullPaddedTuple = createNullPaddedTuple(leftNumCols);
+          Tuple nullPaddedTuple = TupleUtil.createNullPaddedTuple(leftNumCols);
           frameTuple.set(nullPaddedTuple, rightTuple);
           rightTuple = null;
 
@@ -193,7 +184,7 @@ public class RightOuterMergeJoinExec extends CommonJoinExec {
           if (cmp > 0) {
             // before getting a new tuple from the right,  a left null padded tuple should be built
             // output a tuple with the nulls padded left tuple
-            Tuple nullPaddedTuple = createNullPaddedTuple(leftNumCols);
+            Tuple nullPaddedTuple = TupleUtil.createNullPaddedTuple(leftNumCols);
             frameTuple.set(nullPaddedTuple, rightTuple);
             // we simulate we found a match, which is exactly the null padded one
             // BEFORE RETURN, MOVE FORWARD
@@ -251,7 +242,7 @@ public class RightOuterMergeJoinExec extends CommonJoinExec {
           }
         } // if end false
         if (previous != null && rightFiltered(previous)) {
-          Tuple nullPaddedTuple = createNullPaddedTuple(leftNumCols);
+          Tuple nullPaddedTuple = TupleUtil.createNullPaddedTuple(leftNumCols);
           frameTuple.set(nullPaddedTuple, previous);
           // reset tuple slots for a new round
           leftTupleSlots.clear();

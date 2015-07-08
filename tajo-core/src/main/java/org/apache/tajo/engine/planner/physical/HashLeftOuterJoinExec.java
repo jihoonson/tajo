@@ -28,6 +28,7 @@ import java.io.IOException;
 import java.util.Iterator;
 import java.util.List;
 
+@TupleProducer
 public class HashLeftOuterJoinExec extends HashJoinExec {
 
   private static final Log LOG = LogFactory.getLog(HashLeftOuterJoinExec.class);

@@ -42,17 +42,17 @@ import java.util.Map;
  * <code>HashShuffleFileWriteExec</code> is a physical executor to store intermediate data into a number of
  * file outputs associated with shuffle keys. The file outputs are stored on local disks.
  */
+@TupleProducer
 public final class HashShuffleFileWriteExec extends UnaryPhysicalExec {
   private static Log LOG = LogFactory.getLog(HashShuffleFileWriteExec.class);
   private ShuffleFileWriteNode plan;
   private final TableMeta meta;
   private Partitioner partitioner;
-//  private final Path storeTablePath;
   private Map<Integer, HashShuffleAppender> appenderMap = new HashMap<Integer, HashShuffleAppender>();
   private final int numShuffleOutputs;
   private final int [] shuffleKeyIds;
-  private HashShuffleAppenderManager hashShuffleAppenderManager;
-  private int numHashShuffleBufferTuples;
+  private final HashShuffleAppenderManager hashShuffleAppenderManager;
+  private final int numHashShuffleBufferTuples;
 
   public HashShuffleFileWriteExec(TaskAttemptContext context,
                                   final ShuffleFileWriteNode plan, final PhysicalExec child) throws IOException {
@@ -113,10 +113,8 @@ public final class HashShuffleFileWriteExec extends UnaryPhysicalExec {
           partitionTupleList = new ArrayList<Tuple>(1000);
           partitionTuples.put(partId, partitionTupleList);
         }
-        try {
-          partitionTupleList.add(tuple.clone());
-        } catch (CloneNotSupportedException e) {
-        }
+        partitionTupleList.add(createCopy(tuple));
+
         if (tupleCount >= numHashShuffleBufferTuples) {
           for (Map.Entry<Integer, List<Tuple>> entry : partitionTuples.entrySet()) {
             int appendPartId = entry.getKey();
