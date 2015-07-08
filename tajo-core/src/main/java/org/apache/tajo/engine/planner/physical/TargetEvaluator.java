@@ -22,6 +22,7 @@ import org.apache.tajo.SessionVars;
 import org.apache.tajo.catalog.Schema;
 import org.apache.tajo.plan.Target;
 import org.apache.tajo.plan.expr.EvalNode;
+import org.apache.tajo.plan.util.PlannerUtil;
 import org.apache.tajo.storage.Tuple;
 import org.apache.tajo.storage.VTuple;
 import org.apache.tajo.worker.TaskAttemptContext;
@@ -33,17 +34,25 @@ public class TargetEvaluator {
   public TargetEvaluator(TaskAttemptContext context, Schema inSchema, Schema outSchema, Target[] targets) {
     this.outTuple = new VTuple(outSchema.size());
 
-    evals = new EvalNode[targets.length];
+    Target[] realTargets;
+
+    if (targets == null) {
+      realTargets = PlannerUtil.schemaToTargets(outSchema);
+    } else {
+      realTargets = targets;
+    }
+
+    evals = new EvalNode[realTargets.length];
 
     if (context.getQueryContext().getBool(SessionVars.CODEGEN)) {
       EvalNode eval;
-      for (int i = 0; i < targets.length; i++) {
-        eval = targets[i].getEvalTree();
+      for (int i = 0; i < realTargets.length; i++) {
+        eval = realTargets[i].getEvalTree();
         evals[i] = context.getPrecompiledEval(inSchema, eval);
       }
     } else {
-      for (int i = 0; i < targets.length; i++) {
-        evals[i] = targets[i].getEvalTree();
+      for (int i = 0; i < realTargets.length; i++) {
+        evals[i] = realTargets[i].getEvalTree();
       }
     }
     for (EvalNode eval : evals) {

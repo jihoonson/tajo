@@ -40,6 +40,7 @@ import java.io.IOException;
  * If currentKey is different from the last key, it computes final aggregation results, and then
  * it makes an output tuple.
  */
+@TupleProducer
 public class SortAggregateExec extends AggregationExec {
   private Tuple lastKey = null;
   private boolean finished = false;
