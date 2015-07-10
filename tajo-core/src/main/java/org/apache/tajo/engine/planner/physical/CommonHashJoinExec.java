@@ -83,7 +83,7 @@ public abstract class CommonHashJoinExec<T> extends CommonJoinExec {
     leftNumCols = outer.getSchema().size();
     rightNumCols = inner.getSchema().size();
 
-    keyTuple = new VTuple(leftKeyList.length);
+    keyTuple = createEmptyTuple(leftKeyList.length);
   }
 
   protected void loadRightToHashTable() throws IOException {
@@ -130,7 +130,6 @@ public abstract class CommonHashJoinExec<T> extends CommonJoinExec {
       if (newValue == null) {
         map.put(keyTuple, newValue = new ArrayList<Tuple>());
       }
-      // if source is scan or groupby, it needs not to be cloned
       newValue.add(createCopy(tuple));
     }
     return map;

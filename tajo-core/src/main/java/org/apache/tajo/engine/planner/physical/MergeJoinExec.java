@@ -31,6 +31,7 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 
+@TupleProducer
 public class MergeJoinExec extends CommonJoinExec {
 
   // temporal tuples and states for nested loop join

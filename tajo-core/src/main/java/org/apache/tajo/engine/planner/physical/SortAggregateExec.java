@@ -44,7 +44,7 @@ import java.io.IOException;
 public class SortAggregateExec extends AggregationExec {
   private Tuple lastKey = null;
   private boolean finished = false;
-  private FunctionContext contexts[];
+  private final FunctionContext contexts[];
   private final Tuple outTuple;
 
   public SortAggregateExec(TaskAttemptContext context, GroupbyNode plan, PhysicalExec child) throws IOException {

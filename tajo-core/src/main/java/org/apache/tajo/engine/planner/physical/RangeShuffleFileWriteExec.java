@@ -26,7 +26,7 @@ import org.apache.hadoop.fs.RawLocalFileSystem;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.tajo.catalog.*;
 import org.apache.tajo.conf.TajoConf;
-import org.apache.tajo.datum.NullDatum;
+import org.apache.tajo.engine.utils.TupleUtil;
 import org.apache.tajo.plan.util.PlannerUtil;
 import org.apache.tajo.storage.*;
 import org.apache.tajo.storage.index.bst.BSTIndex;
@@ -46,17 +46,20 @@ public class RangeShuffleFileWriteExec extends UnaryPhysicalExec {
   private int [] indexKeys = null;
 
   private BSTIndex.BSTIndexWriter indexWriter;
-  private TupleComparator comp;
+//  private TupleComparator comp;
   private FileAppender appender;
-  private TableMeta meta;
+//  private TableMeta meta;
 
   private Tuple keyTuple;
+
+//  private final TargetEvaluator targetEvaluator;
 
   public RangeShuffleFileWriteExec(final TaskAttemptContext context,
                                    final PhysicalExec child, final Schema inSchema, final Schema outSchema,
                                    final SortSpec[] sortSpecs) throws IOException {
     super(context, inSchema, outSchema, child);
     this.sortSpecs = sortSpecs;
+//    this.targetEvaluator = new TargetEvaluator(context, inSchema, outSchema, null);
   }
 
   public void init() throws IOException {
@@ -73,10 +76,10 @@ public class RangeShuffleFileWriteExec extends UnaryPhysicalExec {
     }
 
     BSTIndex bst = new BSTIndex(new TajoConf());
-    this.comp = new BaseTupleComparator(keySchema, sortSpecs);
+    TupleComparator comp = new BaseTupleComparator(keySchema, sortSpecs);
     Path storeTablePath = new Path(context.getWorkDir(), "output");
     LOG.info("Output data directory: " + storeTablePath);
-    this.meta = CatalogUtil.newTableMeta(context.getDataChannel() != null ?
+    TableMeta meta = CatalogUtil.newTableMeta(context.getDataChannel() != null ?
         context.getDataChannel().getStoreType() : "RAW");
     FileSystem fs = new RawLocalFileSystem();
     fs.mkdirs(storeTablePath);
@@ -93,34 +96,21 @@ public class RangeShuffleFileWriteExec extends UnaryPhysicalExec {
   @Override
   public Tuple next() throws IOException {
     Tuple tuple;
-    Tuple prevKeyTuple = createNullTuple(indexKeys.length);
+    Tuple prevKeyTuple = TupleUtil.createNullPaddedTuple(indexKeys.length);
     long offset;
 
-
-    try {
-      while(!context.isStopped() && (tuple = child.next()) != null) {
-        offset = appender.getOffset();
-        appender.addTuple(tuple);
-        RowStoreUtil.project(tuple, keyTuple, indexKeys);
-        if (!prevKeyTuple.equals(keyTuple)) {
-          indexWriter.write(keyTuple, offset);
-          prevKeyTuple.put(keyTuple.getValues());
-        }
+    while(!context.isStopped() && (tuple = child.next()) != null) {
+      offset = appender.getOffset();
+      appender.addTuple(tuple);
+      RowStoreUtil.project(tuple, keyTuple, indexKeys);
+//        Tuple keyTuple = targetEvaluator.eval(tuple);
+      if (!prevKeyTuple.equals(keyTuple)) {
+        indexWriter.write(keyTuple, offset);
+        prevKeyTuple.put(keyTuple.getValues());
       }
-    } catch (RuntimeException e) {
-      e.printStackTrace();
-      throw e;
     }
 
     return null;
-  }
-
-  private Tuple createNullTuple(int size) {
-    Tuple tuple = new VTuple(size);
-    for (int i = 0; i < size; i++) {
-      tuple.put(i, NullDatum.get());
-    }
-    return tuple;
   }
 
   @Override

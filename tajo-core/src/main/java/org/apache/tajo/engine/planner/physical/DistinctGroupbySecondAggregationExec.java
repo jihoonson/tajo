@@ -26,57 +26,55 @@ package org.apache.tajo.engine.planner.physical;
   import org.apache.tajo.plan.logical.DistinctGroupbyNode;
   import org.apache.tajo.plan.logical.GroupbyNode;
   import org.apache.tajo.storage.Tuple;
-  import org.apache.tajo.storage.VTuple;
+  import org.apache.tajo.util.TUtil;
   import org.apache.tajo.worker.TaskAttemptContext;
 
   import java.io.IOException;
-  import java.util.ArrayList;
-  import java.util.HashSet;
-  import java.util.List;
-  import java.util.Set;
+  import java.util.*;
 
-/**
- * This class adjusts shuffle columns between DistinctGroupbyFirstAggregationExec and
- * DistinctGroupbyThirdAggregationExec. It shuffled by grouping columns and aggregation columns. Because of the
- * shuffle, more DistinctGroupbyThirdAggregationExec will execute compare than previous two distinct group by
- * algorithm. And then, many DistinctGroupbyThirdAggregationExec improve the performance of count distinct query.
- *
- * For example, there is a query as follows:
- *  select sum(distinct l_orderkey), l_linenumber, l_returnflag, l_linestatus, l_shipdate,
- *         count(distinct l_partkey), sum(l_orderkey)
- *  from lineitem
- *  group by l_linenumber, l_returnflag, l_linestatus, l_shipdate;
- *
- *  In this case, execution plan for this operator will set shuffle type as follows:
- *    Incoming: 1 => 2 (type=HASH_SHUFFLE, key=?distinctseq (INT2), default.lineitem.l_linenumber (INT4),
- *      default.lineitem.l_returnflag (TEXT), default.lineitem.l_linestatus (TEXT), default.lineitem.l_shipdate (TEXT),
- *     default.lineitem.l_partkey (INT4), default.lineitem.l_orderkey (INT4), num=32)
- *
- *    Outgoing: 2 => 3 (type=HASH_SHUFFLE, key=default.lineitem.l_linenumber (INT4),
- *      default.lineitem.l_returnflag (TEXT), default.lineitem.l_linestatus (TEXT),
- *      default.lineitem.l_shipdate (TEXT), num=32)
- *
- *  For reference, input data and output data results as follows:
- *
- *  -------------------------------------------------------------------------------------------------------------------
- *  NodeSequence, l_linenumber, l_returnflag, l_linestatus, l_shipdate, l_partkey for distinct,
- *  l_orderkey for distinct, l_orderkey for nondistinct
- *  -------------------------------------------------------------------------------------------------------------------
- *  0, 2, R, F, 1993-11-09, 3, NULL, 3
- *  0, 2, N, O, 1996-04-12, 1, NULL, 1
- *  0, 1, N, O, 1997-01-28, 2, NULL, 2
- *  0, 1, R, F, 1994-02-02, 2, NULL, 3
- *  0, 1, N, O, 1996-03-13, 1, NULL, 1
- *  1, 2, R, F, 1993-11-09, NULL, 3, NULL
- *  1, 2, N, O, 1996-04-12, NULL, 1, NULL
- *  1, 1, N, O, 1997-01-28, NULL, 2, NULL
- *  1, 1, R, F, 1994-02-02, NULL, 3, NULL
- *  1, 1, N, O, 1996-03-13, NULL, 1, NULL
- *
- */
+  /**
+   * This class adjusts shuffle columns between DistinctGroupbyFirstAggregationExec and
+   * DistinctGroupbyThirdAggregationExec. It shuffled by grouping columns and aggregation columns. Because of the
+   * shuffle, more DistinctGroupbyThirdAggregationExec will execute compare than previous two distinct group by
+   * algorithm. And then, many DistinctGroupbyThirdAggregationExec improve the performance of count distinct query.
+   *
+   * For example, there is a query as follows:
+   *  select sum(distinct l_orderkey), l_linenumber, l_returnflag, l_linestatus, l_shipdate,
+   *         count(distinct l_partkey), sum(l_orderkey)
+   *  from lineitem
+   *  group by l_linenumber, l_returnflag, l_linestatus, l_shipdate;
+   *
+   *  In this case, execution plan for this operator will set shuffle type as follows:
+   *    Incoming: 1 => 2 (type=HASH_SHUFFLE, key=?distinctseq (INT2), default.lineitem.l_linenumber (INT4),
+   *      default.lineitem.l_returnflag (TEXT), default.lineitem.l_linestatus (TEXT), default.lineitem.l_shipdate (TEXT),
+   *     default.lineitem.l_partkey (INT4), default.lineitem.l_orderkey (INT4), num=32)
+   *
+   *    Outgoing: 2 => 3 (type=HASH_SHUFFLE, key=default.lineitem.l_linenumber (INT4),
+   *      default.lineitem.l_returnflag (TEXT), default.lineitem.l_linestatus (TEXT),
+   *      default.lineitem.l_shipdate (TEXT), num=32)
+   *
+   *  For reference, input data and output data results as follows:
+   *
+   *  -------------------------------------------------------------------------------------------------------------------
+   *  NodeSequence, l_linenumber, l_returnflag, l_linestatus, l_shipdate, l_partkey for distinct,
+   *  l_orderkey for distinct, l_orderkey for nondistinct
+   *  -------------------------------------------------------------------------------------------------------------------
+   *  0, 2, R, F, 1993-11-09, 3, NULL, 3
+   *  0, 2, N, O, 1996-04-12, 1, NULL, 1
+   *  0, 1, N, O, 1997-01-28, 2, NULL, 2
+   *  0, 1, R, F, 1994-02-02, 2, NULL, 3
+   *  0, 1, N, O, 1996-03-13, 1, NULL, 1
+   *  1, 2, R, F, 1993-11-09, NULL, 3, NULL
+   *  1, 2, N, O, 1996-04-12, NULL, 1, NULL
+   *  1, 1, N, O, 1997-01-28, NULL, 2, NULL
+   *  1, 1, R, F, 1994-02-02, NULL, 3, NULL
+   *  1, 1, N, O, 1996-03-13, NULL, 1, NULL
+   *
+   */
+@TupleProducer
 public class DistinctGroupbySecondAggregationExec extends UnaryPhysicalExec {
-  private static Log LOG = LogFactory.getLog(DistinctGroupbySecondAggregationExec.class);
-  private DistinctGroupbyNode plan;
+  private final static Log LOG = LogFactory.getLog(DistinctGroupbySecondAggregationExec.class);
+  private final DistinctGroupbyNode plan;
 
   private boolean finished = false;
 
@@ -85,6 +83,7 @@ public class DistinctGroupbySecondAggregationExec extends UnaryPhysicalExec {
   private FunctionContext[] nonDistinctAggrContexts;
   private AggregationFunctionCallEval[] nonDistinctAggrFunctions;
   private int nonDistinctAggrTupleStartIndex = -1;
+  private final Map<Integer, Tuple> keyTupleCache = TUtil.newHashMap(); // pairs of (key tuple length, key tuple)
 
   public DistinctGroupbySecondAggregationExec(TaskAttemptContext context, DistinctGroupbyNode plan, SortExec sortExec)
       throws IOException {
@@ -170,8 +169,8 @@ public class DistinctGroupbySecondAggregationExec extends UnaryPhysicalExec {
 
     Tuple result = null;
     while (!context.isStopped()) {
-      Tuple childTuple = child.next();
-      if (childTuple == null) {
+      Tuple tuple = child.next();
+      if (tuple == null) {
         finished = true;
 
         if (prevTuple == null) {
@@ -183,13 +182,6 @@ public class DistinctGroupbySecondAggregationExec extends UnaryPhysicalExec {
         }
         result = prevTuple;
         break;
-      }
-
-      Tuple tuple = null;
-      try {
-        tuple = childTuple.clone();
-      } catch (CloneNotSupportedException e) {
-        throw new IOException(e.getMessage(), e);
       }
 
       int distinctSeq = tuple.getInt2(0);
@@ -266,7 +258,14 @@ public class DistinctGroupbySecondAggregationExec extends UnaryPhysicalExec {
   private Tuple getKeyTuple(int distinctSeq, Tuple tuple) {
     int[] columnIndexes = distinctKeyIndexes[distinctSeq];
 
-    Tuple keyTuple = new VTuple(numGroupingColumns + columnIndexes.length + 1);
+    int keyLength = numGroupingColumns + columnIndexes.length + 1;
+    Tuple keyTuple;
+    if (keyTupleCache.containsKey(keyLength)) {
+      keyTuple = keyTupleCache.get(keyLength);
+    } else {
+      keyTuple = createEmptyTuple(keyLength);
+      keyTupleCache.put(keyLength, keyTuple);
+    }
     keyTuple.put(0, tuple.asDatum(0));
     for (int i = 0; i < numGroupingColumns; i++) {
       keyTuple.put(i + 1, tuple.asDatum(i + 1));
@@ -289,5 +288,6 @@ public class DistinctGroupbySecondAggregationExec extends UnaryPhysicalExec {
   @Override
   public void close() throws IOException {
     super.close();
+    keyTupleCache.clear();
   }
 }

@@ -43,7 +43,7 @@ public class HashAggregateExec extends AggregationExec {
   public HashAggregateExec(TaskAttemptContext ctx, GroupbyNode plan, PhysicalExec subOp) throws IOException {
     super(ctx, plan, subOp);
     hashTable = new HashMap<Tuple, FunctionContext []>(100000);
-    this.outTuple = new VTuple(plan.getOutSchema().size());
+    this.outTuple = createEmptyTuple(plan.getOutSchema().size());
   }
 
   private void compute() throws IOException {

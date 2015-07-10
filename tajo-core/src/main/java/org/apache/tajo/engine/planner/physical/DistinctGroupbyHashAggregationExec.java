@@ -21,25 +21,25 @@ package org.apache.tajo.engine.planner.physical;
 import org.apache.tajo.catalog.Column;
 import org.apache.tajo.catalog.Schema;
 import org.apache.tajo.catalog.statistics.TableStats;
-import org.apache.tajo.datum.DatumFactory;
 import org.apache.tajo.datum.NullDatum;
+import org.apache.tajo.engine.utils.TupleUtil;
 import org.apache.tajo.plan.expr.AggregationFunctionCallEval;
 import org.apache.tajo.plan.expr.EvalNode;
 import org.apache.tajo.plan.function.FunctionContext;
 import org.apache.tajo.plan.logical.DistinctGroupbyNode;
 import org.apache.tajo.plan.logical.GroupbyNode;
 import org.apache.tajo.storage.Tuple;
-import org.apache.tajo.storage.VTuple;
 import org.apache.tajo.worker.TaskAttemptContext;
 
 import java.io.IOException;
 import java.util.*;
 import java.util.Map.Entry;
 
+@TupleProducer
 public class DistinctGroupbyHashAggregationExec extends UnaryPhysicalExec {
   private boolean finished = false;
 
-  private DistinctGroupbyNode plan;
+  private final DistinctGroupbyNode plan;
   private HashAggregator[] hashAggregators;
   private int distinctGroupingKeyIds[];
   private boolean first = true;
@@ -49,6 +49,7 @@ public class DistinctGroupbyHashAggregationExec extends UnaryPhysicalExec {
   private int fetchedRows;
 
   private int[] resultColumnIdIndexes;
+  private Tuple nullTuple;
 
   public DistinctGroupbyHashAggregationExec(TaskAttemptContext context, DistinctGroupbyNode plan, PhysicalExec subOp)
       throws IOException {
@@ -88,6 +89,7 @@ public class DistinctGroupbyHashAggregationExec extends UnaryPhysicalExec {
     }
 
     outputColumnNum = plan.getOutSchema().size();
+    nullTuple = TupleUtil.createNullPaddedTuple(outputColumnNum);
 
     int allGroupbyOutColNum = 0;
     for (GroupbyNode eachGroupby: plan.getSubPlans()) {
@@ -167,11 +169,7 @@ public class DistinctGroupbyHashAggregationExec extends UnaryPhysicalExec {
       // If DistinctGroupbyHashAggregationExec does not have any rows,
       // it should return NullDatum.
       if (totalNumRows == 0 && groupbyNodeNum == 0) {
-        Tuple tuple = new VTuple(outputColumnNum);
-        for (int i = 0; i < tuple.size(); i++) {
-          tuple.put(i, DatumFactory.createNullDatum());
-        }
-        return tuple;
+        return nullTuple;
       } else {
         return null;
       }
@@ -208,18 +206,20 @@ public class DistinctGroupbyHashAggregationExec extends UnaryPhysicalExec {
     // currentAggregatedTuples has tuples which has same group key.
     currentAggregatedTuples = new ArrayList<Tuple>();
     int listIndex = 0;
+    Tuple[] tuples = new Tuple[hashAggregators.length];
     while (true) {
       // Each item in tuples is VTuple. So the tuples variable is two dimensions(tuple[aggregator][datum]).
-      Tuple[] tuples = new Tuple[hashAggregators.length];
       for (int i = 0; i < hashAggregators.length; i++) {
         List<Tuple> aggregatedTuples = tupleSlots.get(i);
         if (aggregatedTuples.size() > listIndex) {
           tuples[i] = tupleSlots.get(i).get(listIndex);
+        } else {
+          tuples[i] = null;
         }
       }
 
       //merge
-      Tuple mergedTuple = new VTuple(outputColumnNum);
+      Tuple mergedTuple = createEmptyTuple(outputColumnNum);
       int resultColumnIdx = 0;
 
       boolean allNull = true;
@@ -386,12 +386,12 @@ public class DistinctGroupbyHashAggregationExec extends UnaryPhysicalExec {
     }
 
     public void compute(Tuple tuple) throws IOException {
-      Tuple outerKeyTuple = new VTuple(distinctGroupingKeyIds.length);
+      Tuple outerKeyTuple = createEmptyTuple(distinctGroupingKeyIds.length);
       for (int i = 0; i < distinctGroupingKeyIds.length; i++) {
         outerKeyTuple.put(i, tuple.asDatum(distinctGroupingKeyIds[i]));
       }
 
-      Tuple keyTuple = new VTuple(groupingKeyIds.length);
+      Tuple keyTuple = createEmptyTuple(groupingKeyIds.length);
       for (int i = 0; i < groupingKeyIds.length; i++) {
         keyTuple.put(i, tuple.asDatum(groupingKeyIds[i]));
       }
@@ -424,7 +424,7 @@ public class DistinctGroupbyHashAggregationExec extends UnaryPhysicalExec {
       List<Tuple> aggregatedTuples = new ArrayList<Tuple>();
 
       for (Entry<Tuple, FunctionContext[]> entry : groupTuples.entrySet()) {
-        Tuple tuple = new VTuple(groupingKeyIds.length + aggFunctionsNum);
+        Tuple tuple = createEmptyTuple(groupingKeyIds.length + aggFunctionsNum);
         Tuple groupbyKey = entry.getKey();
         int index = 0;
         for (; index < groupbyKey.size(); index++) {

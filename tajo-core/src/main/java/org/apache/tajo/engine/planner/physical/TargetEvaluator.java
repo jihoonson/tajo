@@ -20,6 +20,7 @@ package org.apache.tajo.engine.planner.physical;
 
 import org.apache.tajo.SessionVars;
 import org.apache.tajo.catalog.Schema;
+import org.apache.tajo.exception.UnsupportedException;
 import org.apache.tajo.plan.Target;
 import org.apache.tajo.plan.expr.EvalNode;
 import org.apache.tajo.plan.util.PlannerUtil;
@@ -64,7 +65,11 @@ public class TargetEvaluator {
     for (int i = 0; i < evals.length; i++) {
       outTuple.put(i, evals[i].eval(in));
     }
-    outTuple.setOffset(in.getOffset());
+    try {
+      outTuple.setOffset(in.getOffset());
+    } catch (UnsupportedException e) {
+
+    }
     return outTuple;
   }
 }

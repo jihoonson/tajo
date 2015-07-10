@@ -41,6 +41,7 @@ public class DistinctGroupbySortAggregationExec extends PhysicalExec {
   private int groupbyNodeNum;
 
   private int[] resultColumnIdIndexes;
+  private final Tuple mergedTuple;
 
   public DistinctGroupbySortAggregationExec(final TaskAttemptContext context, DistinctGroupbyNode plan,
                                             SortAggregateExec[] aggregateExecs) throws IOException {
@@ -50,6 +51,7 @@ public class DistinctGroupbySortAggregationExec extends PhysicalExec {
 
     currentTuples = new Tuple[groupbyNodeNum];
     outColumnNum = outSchema.size();
+    mergedTuple = new VTuple(outColumnNum);
 
     int allGroupbyOutColNum = 0;
     for (GroupbyNode eachGroupby: plan.getSubPlans()) {
@@ -110,8 +112,6 @@ public class DistinctGroupbySortAggregationExec extends PhysicalExec {
       return null;
     }
 
-    Tuple mergedTuple = new VTuple(outColumnNum);
-
     int mergeTupleIndex = 0;
     for (int i = 0; i < currentTuples.length; i++) {
       int tupleSize = currentTuples[i].size();
@@ -126,6 +126,7 @@ public class DistinctGroupbySortAggregationExec extends PhysicalExec {
   }
 
   private Tuple getEmptyTuple() {
+    // This function is called only one time, so the below tuple instance is create once.
     Tuple tuple = new VTuple(outSchema.size());
     NullDatum nullDatum = DatumFactory.createNullDatum();
 
