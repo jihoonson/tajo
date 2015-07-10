@@ -336,4 +336,44 @@ public class TestJoinOnPartitionedTables extends TestJoinQuery {
       executeString("DROP TABLE customer_broad_parts PURGE");
     }
   }
+
+  @Test
+  public final void testMelon() throws Exception {
+    String sql = "SELECT \n" +
+        "    sx_std.s_suppkey , SUM(COALESCE(sx_std.sx_std_price,0)) AS std_price \n" +
+        "FROM \n" +
+        "    ( \n" +
+        "    SELECT \n" +
+        "        t1.s_suppkey, SUM(COALESCE(t2.n_nationkey,0)) AS sx_std_price \n" +
+        "    FROM \n" +
+        "        ( \n" +
+        "        SELECT \n" +
+        "            *\n" +
+        "        FROM \n" +
+        "            supplier\n" +
+        "        ) t1 \n" +
+        "    JOIN \n" +
+        "        nation_partitioned t2 ON (t1.s_suppkey = t2.n_regionkey) \n" +
+        "    GROUP BY \n" +
+        "        t1.s_suppkey\n" +
+        "    UNION ALL \n" +
+        "    SELECT \n" +
+        "        t3.s_suppkey, SUM(COALESCE(t4.n_nationkey,0)) AS sx_std_price \n" +
+        "    FROM \n" +
+        "        ( \n" +
+        "        SELECT \n" +
+        "            *\n" +
+        "        FROM \n" +
+        "            supplier\n" +
+        "        ) t3 \n" +
+        "    JOIN \n" +
+        "        nation_partitioned t4 ON (t3.s_suppkey = t4.n_regionkey) \n" +
+        "    GROUP BY \n" +
+        "        t3.s_suppkey \n" +
+        "    ) sx_std \n" +
+        "GROUP BY \n" +
+        "    sx_std.s_suppkey";
+
+    executeString(sql);
+  }
 }
