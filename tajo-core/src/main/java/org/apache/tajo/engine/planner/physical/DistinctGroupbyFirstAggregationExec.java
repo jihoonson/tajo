@@ -282,7 +282,7 @@ public class DistinctGroupbyFirstAggregationExec extends UnaryPhysicalExec {
       if (contexts == null) {
         return null;
       }
-
+      aggregatedTuple.clear();
       for (int i = 0; i < aggFunctionsNum; i++) {
         aggregatedTuple.put(i, aggFunctions[i].terminate(contexts[i]));
       }

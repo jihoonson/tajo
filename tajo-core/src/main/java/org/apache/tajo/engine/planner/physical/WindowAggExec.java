@@ -210,8 +210,6 @@ public class WindowAggExec extends UnaryPhysicalExec {
         if (readTuple == null) { // the end of tuple
           noMoreTuples = true;
           transition(WindowState.EVALUATION);
-        } else {
-          readTuple = createCopy(readTuple);
         }
 
         if (readTuple != null && hasPartitionKeys) { // get a key tuple
@@ -260,7 +258,7 @@ public class WindowAggExec extends UnaryPhysicalExec {
   private void accumulatingWindow(Tuple currentKey, Tuple inTuple) {
 
     if (lastKey == null || lastKey.equals(currentKey)) { // if the current key is same to the previous key
-      accumulatedInTuples.add(inTuple);
+      accumulatedInTuples.add(createCopy(inTuple));
 
     } else {
       // if the current key is different from the previous key,
@@ -281,7 +279,7 @@ public class WindowAggExec extends UnaryPhysicalExec {
     nextAccumulatedProjected = Lists.newArrayList();
     nextAccumulatedProjected.add(projectedTuple);
     nextAccumulatedInTuples = Lists.newArrayList();
-    nextAccumulatedInTuples.add(inTuple);
+    nextAccumulatedInTuples.add(createCopy(inTuple));
   }
 
   private void evaluationWindowFrame() {

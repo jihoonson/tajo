@@ -108,7 +108,7 @@ public class MergeJoinExec extends CommonJoinExec {
 
         previous = createCopy(outerTuple);
         do {
-          outerTupleSlots.add(previous);
+          outerTupleSlots.add(createCopy(outerTuple));
           outerTuple = leftChild.next();
           if (outerTuple == null) {
             end = true;
@@ -120,7 +120,7 @@ public class MergeJoinExec extends CommonJoinExec {
 
         previous = createCopy(innerTuple);
         do {
-          innerTupleSlots.add(previous);
+          innerTupleSlots.add(createCopy(innerTuple));
           innerTuple = rightChild.next();
           if (innerTuple == null) {
             end = true;

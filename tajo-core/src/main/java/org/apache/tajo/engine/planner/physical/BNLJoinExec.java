@@ -29,6 +29,7 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 
+@TupleProducer
 public class BNLJoinExec extends CommonJoinExec {
 
   private List<Tuple> leftTupleSlots;
@@ -74,7 +75,7 @@ public class BNLJoinExec extends CommonJoinExec {
           leftEnd = true;
           break;
         }
-        leftTupleSlots.add(t);
+        addTupleToSlot(leftTupleSlots, t);
       }
       leftIterator = leftTupleSlots.iterator();
       leftTuple = leftIterator.next();
@@ -87,7 +88,7 @@ public class BNLJoinExec extends CommonJoinExec {
           rightEnd = true;
           break;
         }
-        rightTupleSlots.add(t);
+        addTupleToSlot(rightTupleSlots, t);
       }
       rightIterator = rightTupleSlots.iterator();
     }
@@ -116,7 +117,7 @@ public class BNLJoinExec extends CommonJoinExec {
                 leftEnd = true;
                 break;
               }
-              leftTupleSlots.add(t);
+              addTupleToSlot(leftTupleSlots, t);
             }
             if (leftTupleSlots.isEmpty()) {
               return null;
@@ -131,14 +132,14 @@ public class BNLJoinExec extends CommonJoinExec {
           
           rightTupleSlots.clear();
           if (rightNext != null) {
-            rightTupleSlots.add(rightNext);
+            addTupleToSlot(rightTupleSlots, rightNext);
             for (int k = 1; k < TUPLE_SLOT_SIZE; k++) { // fill right
               Tuple t = rightChild.next();
               if (t == null) {
                 rightEnd = true;
                 break;
               }
-              rightTupleSlots.add(t);
+              addTupleToSlot(rightTupleSlots, t);
             }
           } else {
             for (int k = 0; k < TUPLE_SLOT_SIZE; k++) { // fill right
@@ -147,7 +148,7 @@ public class BNLJoinExec extends CommonJoinExec {
                 rightEnd = true;
                 break;
               }
-              rightTupleSlots.add(t);
+              addTupleToSlot(rightTupleSlots, t);
             }
           }
           
@@ -164,6 +165,10 @@ public class BNLJoinExec extends CommonJoinExec {
       }
     }
     return null;
+  }
+
+  private void addTupleToSlot(List<Tuple> slot, Tuple t) {
+    slot.add(createCopy(t));
   }
 
   @Override

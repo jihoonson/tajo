@@ -193,8 +193,15 @@ public class DistinctGroupbySecondAggregationExec extends UnaryPhysicalExec {
           initNonDistinctAggrContext();
           mergeNonDistinctAggr(tuple);
         }
-        prevKeyTuple = keyTuple;
-        prevTuple = tuple;
+//        prevKeyTuple = keyTuple;
+        prevKeyTuple = createEmptyTuple(keyTuple.size());
+        prevKeyTuple.put(keyTuple.getValues());
+        if (prevTuple == null) {
+          prevTuple = createEmptyTuple(tuple.size());
+        } else {
+          prevTuple.clear();
+        }
+        prevTuple.put(tuple.getValues());
         prevSeq = distinctSeq;
         continue;
       }
@@ -206,8 +213,15 @@ public class DistinctGroupbySecondAggregationExec extends UnaryPhysicalExec {
         }
         result = prevTuple;
 
-        prevKeyTuple = keyTuple;
-        prevTuple = tuple;
+//        prevKeyTuple = keyTuple;
+        prevKeyTuple.clear();
+        prevKeyTuple.put(keyTuple.getValues());
+        if (prevTuple == null) {
+          prevTuple = createEmptyTuple(tuple.size());
+        } else {
+          prevTuple.clear();
+        }
+        prevTuple.put(tuple.getValues());
         prevSeq = distinctSeq;
 
         if (distinctSeq == 0 && nonDistinctAggrFunctions != null) {
@@ -216,8 +230,15 @@ public class DistinctGroupbySecondAggregationExec extends UnaryPhysicalExec {
         }
         break;
       } else {
-        prevKeyTuple = keyTuple;
-        prevTuple = tuple;
+//        prevKeyTuple = keyTuple;
+        prevKeyTuple.clear();
+        prevKeyTuple.put(keyTuple.getValues());
+        if (prevTuple == null) {
+          prevTuple = createEmptyTuple(tuple.size());
+        } else {
+          prevTuple.clear();
+        }
+        prevTuple.put(tuple.getValues());
         prevSeq = distinctSeq;
         if (distinctSeq == 0 && nonDistinctAggrFunctions != null) {
           mergeNonDistinctAggr(tuple);
@@ -262,6 +283,7 @@ public class DistinctGroupbySecondAggregationExec extends UnaryPhysicalExec {
     Tuple keyTuple;
     if (keyTupleCache.containsKey(keyLength)) {
       keyTuple = keyTupleCache.get(keyLength);
+      keyTuple.clear();
     } else {
       keyTuple = createEmptyTuple(keyLength);
       keyTupleCache.put(keyLength, keyTuple);

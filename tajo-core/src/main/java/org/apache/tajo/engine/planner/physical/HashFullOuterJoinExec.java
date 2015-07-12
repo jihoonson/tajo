@@ -27,6 +27,7 @@ import org.apache.tajo.worker.TaskAttemptContext;
 import java.io.IOException;
 import java.util.*;
 
+@TupleProducer
 public class HashFullOuterJoinExec extends CommonHashJoinExec<Pair<Boolean, List<Tuple>>> {
 
   private boolean finalLoop; // final loop for right unmatched

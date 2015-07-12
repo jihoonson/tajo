@@ -215,7 +215,7 @@ public class MergeFullOuterJoinExec extends CommonJoinExec {
 
           previous = createCopy(leftTuple);
           do {
-            leftTupleSlots.add(previous);
+            leftTupleSlots.add(createCopy(leftTuple));
             leftTuple = leftChild.next();
             if(leftTuple == null) {
               endLeft = true;
@@ -228,7 +228,7 @@ public class MergeFullOuterJoinExec extends CommonJoinExec {
 
           previous = createCopy(rightTuple);
           do {
-            rightTupleSlots.add(previous);
+            rightTupleSlots.add(createCopy(rightTuple));
             rightTuple = rightChild.next();
             if(rightTuple == null) {
               endRight = true;

@@ -20,7 +20,6 @@ package org.apache.tajo.engine.planner.physical;
 
 import com.google.common.base.Preconditions;
 import org.apache.tajo.catalog.SortSpec;
-import org.apache.tajo.datum.DatumFactory;
 import org.apache.tajo.engine.utils.TupleUtil;
 import org.apache.tajo.plan.logical.JoinNode;
 import org.apache.tajo.storage.NullTuple;
@@ -40,7 +39,7 @@ public class RightOuterMergeJoinExec extends CommonJoinExec {
   private Tuple nextLeft = null;
 
   private List<Tuple> leftTupleSlots;
-  private List<Tuple> innerTupleSlots;
+  private List<Tuple> rightTupleSlots;
 
   private JoinTupleComparator joinComparator = null;
   private TupleComparator [] tupleComparator = null;
@@ -61,7 +60,7 @@ public class RightOuterMergeJoinExec extends CommonJoinExec {
     Preconditions.checkArgument(plan.hasJoinQual(), "Sort-merge join is only used for the equi-join, " +
         "but there is no join condition");
     this.leftTupleSlots = new ArrayList<Tuple>(INITIAL_TUPLE_SLOT);
-    this.innerTupleSlots = new ArrayList<Tuple>(INITIAL_TUPLE_SLOT);
+    this.rightTupleSlots = new ArrayList<Tuple>(INITIAL_TUPLE_SLOT);
     SortSpec[][] sortSpecs = new SortSpec[2][];
     sortSpecs[0] = outerSortKey;
     sortSpecs[1] = innerSortKey;
@@ -92,7 +91,7 @@ public class RightOuterMergeJoinExec extends CommonJoinExec {
       if((posRightTupleSlots == -1) && (posLeftTupleSlots == -1)) {
         newRound = true;
       }
-      if ((posRightTupleSlots == innerTupleSlots.size()) && (posLeftTupleSlots == leftTupleSlots.size())) {
+      if ((posRightTupleSlots == rightTupleSlots.size()) && (posLeftTupleSlots == leftTupleSlots.size())) {
         newRound = true;
       }
 
@@ -165,7 +164,7 @@ public class RightOuterMergeJoinExec extends CommonJoinExec {
 
         // reset tuple slots for a new round
         leftTupleSlots.clear();
-        innerTupleSlots.clear();
+        rightTupleSlots.clear();
         posRightTupleSlots = -1;
         posLeftTupleSlots = -1;
 
@@ -216,7 +215,7 @@ public class RightOuterMergeJoinExec extends CommonJoinExec {
 
           previous = createCopy(leftTuple);
           do {
-            leftTupleSlots.add(previous);
+            leftTupleSlots.add(createCopy(leftTuple));
             leftTuple = leftChild.next();
             if( leftTuple == null) {
               endOuter = true;
@@ -227,7 +226,7 @@ public class RightOuterMergeJoinExec extends CommonJoinExec {
           previous = createCopy(rightTuple);
 
           do {
-            innerTupleSlots.add(previous);
+            rightTupleSlots.add(createCopy(rightTuple));
             rightTuple = rightChild.next();
             if(rightTuple == null) {
               endInner = true;
@@ -246,7 +245,7 @@ public class RightOuterMergeJoinExec extends CommonJoinExec {
           frameTuple.set(nullPaddedTuple, previous);
           // reset tuple slots for a new round
           leftTupleSlots.clear();
-          innerTupleSlots.clear();
+          rightTupleSlots.clear();
           posRightTupleSlots = -1;
           posLeftTupleSlots = -1;
 
@@ -268,9 +267,9 @@ public class RightOuterMergeJoinExec extends CommonJoinExec {
         }
 
 
-        if(posRightTupleSlots <= (innerTupleSlots.size() -1)) {
+        if(posRightTupleSlots <= (rightTupleSlots.size() -1)) {
 
-          Tuple aTuple = innerTupleSlots.get(posRightTupleSlots);
+          Tuple aTuple = rightTupleSlots.get(posRightTupleSlots);
           posRightTupleSlots = posRightTupleSlots + 1;
 
           frameTuple.set(nextLeft, aTuple);
@@ -287,7 +286,7 @@ public class RightOuterMergeJoinExec extends CommonJoinExec {
           if(posLeftTupleSlots <= (leftTupleSlots.size() - 1)) {
             //rewind the right slots position
             posRightTupleSlots = 0;
-            Tuple aTuple = innerTupleSlots.get(posRightTupleSlots);
+            Tuple aTuple = rightTupleSlots.get(posRightTupleSlots);
             posRightTupleSlots = posRightTupleSlots + 1;
             nextLeft = leftTupleSlots.get(posLeftTupleSlots);
             posLeftTupleSlots = posLeftTupleSlots + 1;
@@ -313,7 +312,7 @@ public class RightOuterMergeJoinExec extends CommonJoinExec {
   public void rescan() throws IOException {
     super.rescan();
     leftTupleSlots.clear();
-    innerTupleSlots.clear();
+    rightTupleSlots.clear();
     posRightTupleSlots = -1;
     posLeftTupleSlots = -1;
   }
@@ -322,9 +321,9 @@ public class RightOuterMergeJoinExec extends CommonJoinExec {
   public void close() throws IOException {
     super.close();
     leftTupleSlots.clear();
-    innerTupleSlots.clear();
+    rightTupleSlots.clear();
     leftTupleSlots = null;
-    innerTupleSlots = null;
+    rightTupleSlots = null;
   }
 }
 

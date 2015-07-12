@@ -27,6 +27,7 @@ import org.apache.tajo.plan.function.FunctionContext;
 import org.apache.tajo.plan.logical.DistinctGroupbyNode;
 import org.apache.tajo.plan.logical.GroupbyNode;
 import org.apache.tajo.storage.Tuple;
+import org.apache.tajo.storage.VTuple;
 import org.apache.tajo.worker.TaskAttemptContext;
 
 import java.io.IOException;
@@ -140,7 +141,7 @@ public class DistinctGroupbyThirdAggregationExec extends UnaryPhysicalExec {
     }
 
     if (resultTuple == null) {
-      resultTuple = createEmptyTuple(resultTupleLength);
+      resultTuple = new VTuple(resultTupleLength);
     } else {
       resultTuple.clear();
     }
@@ -170,8 +171,14 @@ public class DistinctGroupbyThirdAggregationExec extends UnaryPhysicalExec {
         break;
       }
 
+      if (prevTuple == null) {
+        prevTuple = new VTuple(tuple.size());
+      }
+
       if (curKeyTuple == null) {
-        curKeyTuple = createEmptyTuple(numGroupingColumns);
+        curKeyTuple = new VTuple(numGroupingColumns);
+      } else {
+        curKeyTuple.clear();
       }
 
       int distinctSeq = tuple.getInt2(0);
@@ -179,8 +186,12 @@ public class DistinctGroupbyThirdAggregationExec extends UnaryPhysicalExec {
 
       // First tuple
       if (prevKeyTuple == null) {
-        prevKeyTuple = curKeyTuple;
-        prevTuple = tuple;
+//        prevKeyTuple = curKeyTuple;
+        prevKeyTuple = new VTuple(curKeyTuple.size());
+        prevKeyTuple.put(curKeyTuple.getValues());
+//        prevTuple = tuple;
+        prevTuple.clear();
+        prevTuple.put(tuple.getValues());
 
         aggregators[distinctSeq].merge(tuple);
         continue;
@@ -195,14 +206,22 @@ public class DistinctGroupbyThirdAggregationExec extends UnaryPhysicalExec {
           eachAggr.terminate(resultTuple);
         }
 
-        prevKeyTuple = curKeyTuple;
-        prevTuple = tuple;
+//        prevKeyTuple = curKeyTuple;
+        prevKeyTuple.clear();
+        prevKeyTuple.put(curKeyTuple.getValues());
+//        prevTuple = tuple;
+        prevTuple.clear();
+        prevTuple.put(tuple.getValues());
 
         aggregators[distinctSeq].merge(tuple);
         break;
       } else {
-        prevKeyTuple = curKeyTuple;
-        prevTuple = tuple;
+//        prevKeyTuple = curKeyTuple;
+        prevKeyTuple.clear();
+        prevKeyTuple.put(curKeyTuple.getValues());
+//        prevTuple = tuple;
+        prevTuple.clear();
+        prevTuple.put(tuple.getValues());
         aggregators[distinctSeq].merge(tuple);
       }
     }
@@ -212,9 +231,7 @@ public class DistinctGroupbyThirdAggregationExec extends UnaryPhysicalExec {
 
   private Tuple makeEmptyTuple() {
     if (emptyTuple == null) {
-      emptyTuple = createEmptyTuple(resultTupleLength);
-    } else {
-      emptyTuple.clear();
+      emptyTuple = new VTuple(resultTupleLength);
     }
     for (DistinctFinalAggregator eachAggr: aggregators) {
       eachAggr.terminateEmpty(resultTuple);

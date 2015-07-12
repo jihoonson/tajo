@@ -119,8 +119,9 @@ public class SortAggregateExec extends AggregationExec {
         outTuple.put(tupleIdx, aggFunctions[aggFuncIdx].terminate(contexts[aggFuncIdx]));
       }
       finished = true;
+      return outTuple;
     }
-    return outTuple;
+    return null;
   }
 
   @Override
