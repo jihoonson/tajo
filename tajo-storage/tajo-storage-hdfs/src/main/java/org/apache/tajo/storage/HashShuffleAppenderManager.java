@@ -63,14 +63,16 @@ public class HashShuffleAppenderManager {
   }
 
   public HashShuffleAppender getAppender(TajoConf tajoConf, ExecutionBlockId ebId, int partId,
-                              TableMeta meta, Schema outSchema) throws IOException {
+                                         TableMeta meta, Schema outSchema) throws IOException {
+    Map<Integer, PartitionAppenderMeta> partitionAppenderMap;
     synchronized (appenderMap) {
-      Map<Integer, PartitionAppenderMeta> partitionAppenderMap = appenderMap.get(ebId);
+      partitionAppenderMap = appenderMap.get(ebId);
 
       if (partitionAppenderMap == null) {
         partitionAppenderMap = new ConcurrentHashMap<Integer, PartitionAppenderMeta>();
         appenderMap.put(ebId, partitionAppenderMap);
       }
+    }
 
       PartitionAppenderMeta partitionAppenderMeta = partitionAppenderMap.get(partId);
       if (partitionAppenderMeta == null) {
@@ -103,7 +105,6 @@ public class HashShuffleAppenderManager {
       }
 
       return partitionAppenderMeta.appender;
-    }
   }
 
   public static int getPartParentId(int partId, TajoConf tajoConf) {
