@@ -116,7 +116,6 @@ public final class HashShuffleFileWriteExec extends UnaryPhysicalExec {
             writtenBytes += appendedSize;
             entry.getValue().clear();
           }
-          partitionTuples.clear();
           tupleCount = 0;
         }
       }

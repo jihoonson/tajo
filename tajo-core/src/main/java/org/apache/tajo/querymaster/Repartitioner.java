@@ -292,7 +292,6 @@ public class Repartitioner {
 
     // Grouping IntermediateData by a partition key and a table name
     List<ExecutionBlock> childBlocks = masterPlan.getChilds(stage.getId());
-    LOG.info("# of childBlocks: " + childBlocks.size());
 
     // In the case of join with union, there is one ScanNode for union.
     Map<ExecutionBlockId, ExecutionBlockId> unionScanMap = execBlock.getUnionScanMap();
@@ -302,12 +301,6 @@ public class Repartitioner {
         scanEbId = childBlock.getId();
       }
       Stage childExecSM = stage.getContext().getStage(childBlock.getId());
-      LOG.info("child stage id: " + childExecSM.getBlock().getId());
-      if (childExecSM.getHashShuffleIntermediateEntries() != null) {
-        LOG.info("# of hash entries of child stage: " + childExecSM.getHashShuffleIntermediateEntries().size());
-      } else {
-        LOG.info("hash entries of child stage is null");
-      }
 
       if (childExecSM.getHashShuffleIntermediateEntries() != null &&
           !childExecSM.getHashShuffleIntermediateEntries().isEmpty()) {
