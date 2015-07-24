@@ -46,8 +46,6 @@ public final class HashShuffleFileWriteExec extends UnaryPhysicalExec {
   private final TableMeta meta;
   private Partitioner partitioner;
   private Map<Integer, HashShuffleAppender> appenderMap = new HashMap<Integer, HashShuffleAppender>();
-  private final int numShuffleOutputs;
-  private final int [] shuffleKeyIds;
   private HashShuffleAppenderManager hashShuffleAppenderManager;
   private int numHashShuffleBufferTuples;
 
@@ -62,9 +60,9 @@ public final class HashShuffleFileWriteExec extends UnaryPhysicalExec {
       this.meta = CatalogUtil.newTableMeta(plan.getStorageType());
     }
     // about the shuffle
-    this.numShuffleOutputs = this.plan.getNumOutputs();
+    int numShuffleOutputs = this.plan.getNumOutputs();
     int i = 0;
-    this.shuffleKeyIds = new int [this.plan.getShuffleKeys().length];
+    int [] shuffleKeyIds = new int [this.plan.getShuffleKeys().length];
     for (Column key : this.plan.getShuffleKeys()) {
       shuffleKeyIds[i] = inSchema.getColumnId(key.getQualifiedName());
       i++;
@@ -118,6 +116,7 @@ public final class HashShuffleFileWriteExec extends UnaryPhysicalExec {
             writtenBytes += appendedSize;
             entry.getValue().clear();
           }
+          partitionTuples.clear();
           tupleCount = 0;
         }
       }
@@ -130,13 +129,12 @@ public final class HashShuffleFileWriteExec extends UnaryPhysicalExec {
         writtenBytes += appendedSize;
         entry.getValue().clear();
       }
+      partitionTuples.clear();
 
       TableStats aggregated = (TableStats) child.getInputStats().clone();
       aggregated.setNumBytes(writtenBytes);
       aggregated.setNumRows(numRows);
       context.setResultStats(aggregated);
-
-      partitionTuples.clear();
 
       return null;
     } catch (RuntimeException e) {
