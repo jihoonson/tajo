@@ -18,6 +18,7 @@
 
 package org.apache.tajo.engine.planner.physical;
 
+import com.gs.collections.impl.map.mutable.UnifiedMap;
 import org.apache.tajo.annotation.Nullable;
 
 import java.util.HashMap;
@@ -29,7 +30,7 @@ import java.util.HashMap;
  *
  * @param <E> value type
  */
-public class TupleMap<E> extends HashMap<KeyTuple, E> {
+public class TupleMap<E> extends UnifiedMap<KeyTuple, E> {
 
   public TupleMap() {
     super();
@@ -37,6 +38,7 @@ public class TupleMap<E> extends HashMap<KeyTuple, E> {
 
   public TupleMap(int initialCapacity) {
     super(initialCapacity);
+//    this();
   }
 
   public TupleMap(TupleMap tupleMap){
@@ -54,7 +56,11 @@ public class TupleMap<E> extends HashMap<KeyTuple, E> {
   @Override
   public E put(@Nullable KeyTuple key, E value) {
     if (key != null) {
-      return super.put(new KeyTuple(key.getValues()), value);
+      try {
+        return super.put(key.clone(), value);
+      } catch (CloneNotSupportedException e) {
+        return null;
+      }
     } else {
       return super.put(null, value);
     }

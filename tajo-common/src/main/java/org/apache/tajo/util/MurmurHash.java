@@ -18,34 +18,38 @@
 
 package org.apache.tajo.util;
 
+import com.google.common.base.Objects;
+
 /**
  * This class is borrowed from the following source code
  * https://github.com/addthis/stream-lib/blob/master/src/main/java/com/clearspring/analytics/hash/MurmurHash.java
  */
 public class MurmurHash {
   public static int hash(Object o) {
-    if (o == null) {
-      return 0;
-    }
-    if (o instanceof Long) {
-      return hashLong((Long) o);
-    }
-    if (o instanceof Integer) {
-      return hashLong((Integer) o);
-    }
-    if (o instanceof Double) {
-      return hashLong(Double.doubleToRawLongBits((Double) o));
-    }
-    if (o instanceof Float) {
-      return hashLong(Float.floatToRawIntBits((Float) o));
-    }
-    if (o instanceof String) {
-      return hash(((String) o).getBytes());
-    }
-    if (o instanceof byte[]) {
-      return hash((byte[]) o);
-    }
-    return hash(o.toString());
+//    if (o == null) {
+//      return 0;
+//    }
+//    if (o instanceof Long) {
+//      return hashLong((Long) o);
+//    }
+//    if (o instanceof Integer) {
+//      return hashLong((Integer) o);
+//    }
+//    if (o instanceof Double) {
+//      return hashLong(Double.doubleToRawLongBits((Double) o));
+//    }
+//    if (o instanceof Float) {
+//      return hashLong(Float.floatToRawIntBits((Float) o));
+//    }
+//    if (o instanceof String) {
+//      return hash(((String) o).getBytes());
+//    }
+//    if (o instanceof byte[]) {
+//      return hash((byte[]) o);
+//    }
+//    return hash(o.toString());
+
+    return Objects.hashCode(o);
   }
 
   public static int hash(byte[] data) {
