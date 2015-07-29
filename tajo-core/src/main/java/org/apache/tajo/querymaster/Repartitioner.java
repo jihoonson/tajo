@@ -1034,8 +1034,9 @@ public class Repartitioner {
     Iterator<FetchGroupMeta> iterator = fetchGroupMetaList.iterator();
     List<FetchImpl> fetches;
 
-    int p = 0;
+    int p;
     while(iterator.hasNext()) {
+      p = 0;
       while (p < num && iterator.hasNext()) {
         FetchGroupMeta fetchGroupMeta = iterator.next();
         assignedVolumes[p] += fetchGroupMeta.getCost();
@@ -1046,7 +1047,7 @@ public class Repartitioner {
       }
 
       p = num - 1;
-      while (p > 0 && iterator.hasNext()) {
+      while (p >= 0 && iterator.hasNext()) {
         FetchGroupMeta fetchGroupMeta = iterator.next();
         assignedVolumes[p] += fetchGroupMeta.getCost();
         fetches = fetchGroupMeta.getFetches();
@@ -1054,7 +1055,7 @@ public class Repartitioner {
         TUtil.putCollectionToNestedList(fetchesArray[p], fetches.get(0).getExecutionBlockId().toString(), fetches);
 
         // While the current one is smaller than next one, it adds additional fetches to current one.
-        while(iterator.hasNext() && assignedVolumes[p - 1] > assignedVolumes[p]) {
+        while(iterator.hasNext() && (p > 0 && assignedVolumes[p - 1] > assignedVolumes[p])) {
           FetchGroupMeta additionalFetchGroup = iterator.next();
           assignedVolumes[p] += additionalFetchGroup.getCost();
           fetches = fetchGroupMeta.getFetches();
