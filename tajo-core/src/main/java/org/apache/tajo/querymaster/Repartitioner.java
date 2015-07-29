@@ -403,11 +403,34 @@ public class Repartitioner {
     }
     Stage.scheduleFragment(stage, fragments[0], rightFragments);
 
-    // Assign partitions to tasks in a round robin manner.
-    for (Entry<Integer, Map<ExecutionBlockId, List<IntermediateEntry>>> entry
-        : hashEntries.entrySet()) {
-      addJoinShuffle(stage, entry.getKey(), entry.getValue());
+    // Make even fetch distribution for join
+    Map<Integer, FetchGroupMeta> finalFetches = new HashMap<Integer, FetchGroupMeta>();
+    DataChannel channel = masterPlan.getIncomingChannels(stage.getBlock().getId()).get(0);
+
+    for (Entry<Integer, Map<ExecutionBlockId, List<IntermediateEntry>>> intermPerPartition : hashEntries.entrySet()) {
+      for (Entry<ExecutionBlockId, List<IntermediateEntry>> intermPerEb : intermPerPartition.getValue().entrySet()) {
+        Map<Task.PullHost, List<IntermediateEntry>> hashedByHost = hashByHost(intermPerEb.getValue());
+        for (Entry<Task.PullHost, List<IntermediateEntry>> e : hashedByHost.entrySet()) {
+
+          if (finalFetches.containsKey(intermPerPartition.getKey())) {
+            finalFetches.get(intermPerPartition.getKey()).addFetch(e.getKey(), channel.getShuffleType(),
+                intermPerEb.getKey(), intermPerPartition.getKey(), e.getValue());
+          } else {
+            finalFetches.put(intermPerPartition.getKey(),
+                new FetchGroupMetaForJoin(e.getKey(), channel.getShuffleType(),
+                    intermPerEb.getKey(), intermPerPartition.getKey(), e.getValue()));
+          }
+        }
+      }
     }
+
+    scheduleFetchesByEvenDistributedVolumes(stage, finalFetches, joinTaskNum);
+
+    // Assign partitions to tasks in a round robin manner.
+//    for (Entry<Integer, Map<ExecutionBlockId, List<IntermediateEntry>>> entry
+//        : hashEntries.entrySet()) {
+//      addJoinShuffle(stage, entry.getKey(), entry.getValue());
+//    }
 
     schedulerContext.setTaskSize((int) Math.ceil((double) bothFetchSize / joinTaskNum));
     schedulerContext.setEstimatedTaskNum(joinTaskNum);
@@ -758,25 +781,125 @@ public class Repartitioner {
   }
 
   @VisibleForTesting
-  public static class FetchGroupMeta {
-    long totalVolume;
-    List<FetchImpl> fetchUrls;
+  public static abstract class FetchGroupMeta {
+    List<FetchImpl> fetches = TUtil.newList();
 
-    public FetchGroupMeta(long volume, FetchImpl fetchUrls) {
-      this.totalVolume = volume;
-      this.fetchUrls = Lists.newArrayList(fetchUrls);
+    public FetchGroupMeta(Task.PullHost host, ShuffleType shuffleType, ExecutionBlockId executionBlockId,
+                          int partitionId, List<Task.IntermediateEntry> intermediateEntryList) {
+      this.addFetch(host, shuffleType, executionBlockId, partitionId, intermediateEntryList);
     }
 
-    public FetchGroupMeta addFetche(FetchImpl fetches) {
-      this.fetchUrls.add(fetches);
+    @VisibleForTesting
+    public FetchGroupMeta(Task.PullHost host, ShuffleType shuffleType, ExecutionBlockId executionBlockId,
+                          int partitionId) {
+      this.addFetch(host, shuffleType, executionBlockId, partitionId);
+    }
+
+    public FetchGroupMeta addFetch(Task.PullHost host, ShuffleType shuffleType, ExecutionBlockId executionBlockId,
+                                   int partitionId, List<Task.IntermediateEntry> intermediateEntryList) {
+      fetches.add(new FetchImpl(host, shuffleType, executionBlockId, partitionId, intermediateEntryList));
       return this;
     }
 
+    @VisibleForTesting
+    public FetchGroupMeta addFetch(Task.PullHost host, ShuffleType shuffleType, ExecutionBlockId executionBlockId,
+                                   int partitionId) {
+      fetches.add(new FetchImpl(host, shuffleType, executionBlockId, partitionId));
+      return this;
+    }
+
+    public List<FetchImpl> getFetches() {
+      return fetches;
+    }
+
+    public abstract long getCost();
+  }
+
+  @VisibleForTesting
+  public static class FetchGroupMetaForJoin extends FetchGroupMeta {
+    Map<ExecutionBlockId, Long> volumeMap = TUtil.newHashMap();
+
+    public FetchGroupMetaForJoin(Task.PullHost host, ShuffleType shuffleType, ExecutionBlockId executionBlockId,
+                                 int partitionId, List<Task.IntermediateEntry> intermediateEntryList) {
+      super(host, shuffleType, executionBlockId, partitionId, intermediateEntryList);
+    }
+
+    @Override
+    public FetchGroupMeta addFetch(Task.PullHost host, ShuffleType shuffleType, ExecutionBlockId executionBlockId,
+                                   int partitionId, List<Task.IntermediateEntry> intermediateEntryList) {
+      super.addFetch(host, shuffleType, executionBlockId, partitionId, intermediateEntryList);
+      increaseVolume(executionBlockId, intermediateEntryList);
+
+      return this;
+    }
+
+    private void increaseVolume(ExecutionBlockId id, List<Task.IntermediateEntry> intermediateEntryList) {
+      long volume = 0;
+      for (IntermediateEntry ie : intermediateEntryList) {
+        volume += ie.getVolume();
+      }
+
+      if (volumeMap == null) {
+        LOG.info("volumeMap is null");
+      }
+      if (id == null) {
+        LOG.info("id is null");
+      }
+      if (volumeMap.containsKey(id)) {
+        volumeMap.put(id, volumeMap.get(id) + volume);
+      } else {
+        volumeMap.put(id, volume);
+      }
+    }
+
+    @Override
+    public long getCost() {
+      long cost = 1;
+      for (Long eachVolume : volumeMap.values()) {
+        cost *= eachVolume;
+      }
+      return cost;
+    }
+  }
+
+  @VisibleForTesting
+  public static class FetchGroupMetaForAggregation extends FetchGroupMeta {
+    long totalVolume;
+
+    public FetchGroupMetaForAggregation(Task.PullHost host, ShuffleType shuffleType, ExecutionBlockId executionBlockId,
+                                        int partitionId, List<Task.IntermediateEntry> intermediateEntryList) {
+      super(host, shuffleType, executionBlockId, partitionId, intermediateEntryList);
+    }
+
+    @VisibleForTesting
+    public FetchGroupMetaForAggregation(Task.PullHost host, ShuffleType shuffleType, ExecutionBlockId executionBlockId,
+                                        int partitionId) {
+      super(host, shuffleType, executionBlockId, partitionId);
+    }
+
+    @Override
+    public FetchGroupMeta addFetch(Task.PullHost host, ShuffleType shuffleType, ExecutionBlockId executionBlockId,
+                                   int partitionId, List<Task.IntermediateEntry> intermediateEntryList) {
+      super.addFetch(host, shuffleType, executionBlockId, partitionId, intermediateEntryList);
+      increaseVolume(intermediateEntryList);
+      return this;
+    }
+
+    private void increaseVolume(List<Task.IntermediateEntry> intermediateEntryList) {
+      long volumeSum = 0;
+      for (IntermediateEntry ie : intermediateEntryList) {
+        volumeSum += ie.getVolume();
+      }
+      increaseVolume(volumeSum);
+    }
+
+    @VisibleForTesting
     public void increaseVolume(long volume) {
       this.totalVolume += volume;
     }
 
-    public long getVolume() {
+    @Override
+    public long getCost() {
       return totalVolume;
     }
 
@@ -817,18 +940,13 @@ public class Repartitioner {
         Map<Task.PullHost, List<IntermediateEntry>> hashedByHost = hashByHost(interm.getValue());
         for (Entry<Task.PullHost, List<IntermediateEntry>> e : hashedByHost.entrySet()) {
 
-          FetchImpl fetch = new FetchImpl(e.getKey(), channel.getShuffleType(),
-              block.getId(), interm.getKey(), e.getValue());
-
-          long volumeSum = 0;
-          for (IntermediateEntry ie : e.getValue()) {
-            volumeSum += ie.getVolume();
-          }
-
           if (finalFetches.containsKey(interm.getKey())) {
-            finalFetches.get(interm.getKey()).addFetche(fetch).increaseVolume(volumeSum);
+            finalFetches.get(interm.getKey()).addFetch(e.getKey(), channel.getShuffleType(),
+                block.getId(), interm.getKey(), e.getValue());
           } else {
-            finalFetches.put(interm.getKey(), new FetchGroupMeta(volumeSum, fetch));
+            finalFetches.put(interm.getKey(),
+                new FetchGroupMetaForAggregation(e.getKey(), channel.getShuffleType(),
+                    block.getId(), interm.getKey(), e.getValue()));
           }
         }
       }
@@ -882,20 +1000,21 @@ public class Repartitioner {
     } else {
       schedulerContext.setEstimatedTaskNum(determinedTaskNum);
       // divide fetch uris into the the proper number of tasks according to volumes
-      scheduleFetchesByEvenDistributedVolumes(stage, finalFetches, scan.getTableName(), determinedTaskNum);
+//      scheduleFetchesByEvenDistributedVolumes(stage, finalFetches, scan.getTableName(), determinedTaskNum);
+      scheduleFetchesByEvenDistributedVolumes(stage, finalFetches, determinedTaskNum);
       LOG.info(stage.getId() + ", DeterminedTaskNum : " + determinedTaskNum);
     }
   }
 
   public static Pair<Long [], Map<String, List<FetchImpl>>[]> makeEvenDistributedFetchImpl(
-      Map<Integer, FetchGroupMeta> partitions, String tableName, int num) {
+      Map<Integer, FetchGroupMeta> partitions, int num) {
 
     // Sort fetchGroupMeta in a descending order of data volumes.
     List<FetchGroupMeta> fetchGroupMetaList = Lists.newArrayList(partitions.values());
     Collections.sort(fetchGroupMetaList, new Comparator<FetchGroupMeta>() {
       @Override
       public int compare(FetchGroupMeta o1, FetchGroupMeta o2) {
-        return o1.getVolume() < o2.getVolume() ? 1 : (o1.getVolume() > o2.getVolume() ? -1 : 0);
+        return o1.getCost() < o2.getCost() ? 1 : (o1.getCost() > o2.getCost() ? -1 : 0);
       }
     });
 
@@ -913,28 +1032,34 @@ public class Repartitioner {
     // In terms of this point, it will show reasonable performance and results. even though it is not an optimal
     // algorithm.
     Iterator<FetchGroupMeta> iterator = fetchGroupMetaList.iterator();
+    List<FetchImpl> fetches;
 
     int p = 0;
     while(iterator.hasNext()) {
       while (p < num && iterator.hasNext()) {
         FetchGroupMeta fetchGroupMeta = iterator.next();
-        assignedVolumes[p] += fetchGroupMeta.getVolume();
+        assignedVolumes[p] += fetchGroupMeta.getCost();
+        fetches = fetchGroupMeta.getFetches();
 
-        TUtil.putCollectionToNestedList(fetchesArray[p], tableName, fetchGroupMeta.fetchUrls);
+        TUtil.putCollectionToNestedList(fetchesArray[p], fetches.get(0).getExecutionBlockId().toString(), fetches);
         p++;
       }
 
       p = num - 1;
       while (p > 0 && iterator.hasNext()) {
         FetchGroupMeta fetchGroupMeta = iterator.next();
-        assignedVolumes[p] += fetchGroupMeta.getVolume();
-        TUtil.putCollectionToNestedList(fetchesArray[p], tableName, fetchGroupMeta.fetchUrls);
+        assignedVolumes[p] += fetchGroupMeta.getCost();
+        fetches = fetchGroupMeta.getFetches();
+
+        TUtil.putCollectionToNestedList(fetchesArray[p], fetches.get(0).getExecutionBlockId().toString(), fetches);
 
         // While the current one is smaller than next one, it adds additional fetches to current one.
         while(iterator.hasNext() && assignedVolumes[p - 1] > assignedVolumes[p]) {
           FetchGroupMeta additionalFetchGroup = iterator.next();
-          assignedVolumes[p] += additionalFetchGroup.getVolume();
-          TUtil.putCollectionToNestedList(fetchesArray[p], tableName, additionalFetchGroup.fetchUrls);
+          assignedVolumes[p] += additionalFetchGroup.getCost();
+          fetches = fetchGroupMeta.getFetches();
+
+          TUtil.putCollectionToNestedList(fetchesArray[p], fetches.get(0).getExecutionBlockId().toString(), fetches);
         }
 
         p--;
@@ -945,8 +1070,8 @@ public class Repartitioner {
   }
 
   public static void scheduleFetchesByEvenDistributedVolumes(Stage stage, Map<Integer, FetchGroupMeta> partitions,
-                                                             String tableName, int num) {
-    Map<String, List<FetchImpl>>[] fetchsArray = makeEvenDistributedFetchImpl(partitions, tableName, num).getSecond();
+                                                             int num) {
+    Map<String, List<FetchImpl>>[] fetchsArray = makeEvenDistributedFetchImpl(partitions, num).getSecond();
     // Schedule FetchImpls
     for (Map<String, List<FetchImpl>> eachFetches : fetchsArray) {
       Stage.scheduleFetches(stage, eachFetches);
