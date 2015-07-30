@@ -782,12 +782,14 @@ public class Repartitioner {
 
   @VisibleForTesting
   public static abstract class FetchGroupMeta {
-    List<FetchImpl> fetches = TUtil.newList();
+    Map<ExecutionBlockId, List<FetchImpl>> fetches = TUtil.newHashMap();
 
-    public FetchGroupMeta(Task.PullHost host, ShuffleType shuffleType, ExecutionBlockId executionBlockId,
-                          int partitionId, List<Task.IntermediateEntry> intermediateEntryList) {
-      this.addFetch(host, shuffleType, executionBlockId, partitionId, intermediateEntryList);
-    }
+//    protected FetchGroupMeta(Task.PullHost host, ShuffleType shuffleType, ExecutionBlockId executionBlockId,
+//                             int partitionId, List<Task.IntermediateEntry> intermediateEntryList) {
+//      this.addFetch(host, shuffleType, executionBlockId, partitionId, intermediateEntryList);
+//    }
+
+    public FetchGroupMeta() {}
 
     @VisibleForTesting
     public FetchGroupMeta(Task.PullHost host, ShuffleType shuffleType, ExecutionBlockId executionBlockId,
@@ -797,18 +799,20 @@ public class Repartitioner {
 
     public FetchGroupMeta addFetch(Task.PullHost host, ShuffleType shuffleType, ExecutionBlockId executionBlockId,
                                    int partitionId, List<Task.IntermediateEntry> intermediateEntryList) {
-      fetches.add(new FetchImpl(host, shuffleType, executionBlockId, partitionId, intermediateEntryList));
+      TUtil.putToNestedList(fetches, executionBlockId,
+          new FetchImpl(host, shuffleType, executionBlockId, partitionId, intermediateEntryList));
       return this;
     }
 
     @VisibleForTesting
     public FetchGroupMeta addFetch(Task.PullHost host, ShuffleType shuffleType, ExecutionBlockId executionBlockId,
                                    int partitionId) {
-      fetches.add(new FetchImpl(host, shuffleType, executionBlockId, partitionId));
+      TUtil.putToNestedList(fetches, executionBlockId,
+          new FetchImpl(host, shuffleType, executionBlockId, partitionId));
       return this;
     }
 
-    public List<FetchImpl> getFetches() {
+    public Map<ExecutionBlockId, List<FetchImpl>> getFetches() {
       return fetches;
     }
 
@@ -821,7 +825,8 @@ public class Repartitioner {
 
     public FetchGroupMetaForJoin(Task.PullHost host, ShuffleType shuffleType, ExecutionBlockId executionBlockId,
                                  int partitionId, List<Task.IntermediateEntry> intermediateEntryList) {
-      super(host, shuffleType, executionBlockId, partitionId, intermediateEntryList);
+//      super(host, shuffleType, executionBlockId, partitionId, intermediateEntryList);
+      this.addFetch(host, shuffleType, executionBlockId, partitionId, intermediateEntryList);
     }
 
     @Override
@@ -839,12 +844,6 @@ public class Repartitioner {
         volume += ie.getVolume();
       }
 
-      if (volumeMap == null) {
-        LOG.info("volumeMap is null");
-      }
-      if (id == null) {
-        LOG.info("id is null");
-      }
       if (volumeMap.containsKey(id)) {
         volumeMap.put(id, volumeMap.get(id) + volume);
       } else {
@@ -868,7 +867,7 @@ public class Repartitioner {
 
     public FetchGroupMetaForAggregation(Task.PullHost host, ShuffleType shuffleType, ExecutionBlockId executionBlockId,
                                         int partitionId, List<Task.IntermediateEntry> intermediateEntryList) {
-      super(host, shuffleType, executionBlockId, partitionId, intermediateEntryList);
+      this.addFetch(host, shuffleType, executionBlockId, partitionId, intermediateEntryList);
     }
 
     @VisibleForTesting
@@ -1032,7 +1031,6 @@ public class Repartitioner {
     // In terms of this point, it will show reasonable performance and results. even though it is not an optimal
     // algorithm.
     Iterator<FetchGroupMeta> iterator = fetchGroupMetaList.iterator();
-    List<FetchImpl> fetches;
 
     int p;
     while(iterator.hasNext()) {
@@ -1040,9 +1038,10 @@ public class Repartitioner {
       while (p < num && iterator.hasNext()) {
         FetchGroupMeta fetchGroupMeta = iterator.next();
         assignedVolumes[p] += fetchGroupMeta.getCost();
-        fetches = fetchGroupMeta.getFetches();
 
-        TUtil.putCollectionToNestedList(fetchesArray[p], fetches.get(0).getExecutionBlockId().toString(), fetches);
+        for (Entry<ExecutionBlockId, List<FetchImpl>> eachEntry : fetchGroupMeta.getFetches().entrySet()) {
+          TUtil.putCollectionToNestedList(fetchesArray[p], eachEntry.getKey().toString(), eachEntry.getValue());
+        }
         p++;
       }
 
@@ -1050,17 +1049,19 @@ public class Repartitioner {
       while (p >= 0 && iterator.hasNext()) {
         FetchGroupMeta fetchGroupMeta = iterator.next();
         assignedVolumes[p] += fetchGroupMeta.getCost();
-        fetches = fetchGroupMeta.getFetches();
 
-        TUtil.putCollectionToNestedList(fetchesArray[p], fetches.get(0).getExecutionBlockId().toString(), fetches);
+        for (Entry<ExecutionBlockId, List<FetchImpl>> eachEntry : fetchGroupMeta.getFetches().entrySet()) {
+          TUtil.putCollectionToNestedList(fetchesArray[p], eachEntry.getKey().toString(), eachEntry.getValue());
+        }
 
         // While the current one is smaller than next one, it adds additional fetches to current one.
         while(iterator.hasNext() && (p > 0 && assignedVolumes[p - 1] > assignedVolumes[p])) {
           FetchGroupMeta additionalFetchGroup = iterator.next();
           assignedVolumes[p] += additionalFetchGroup.getCost();
-          fetches = fetchGroupMeta.getFetches();
 
-          TUtil.putCollectionToNestedList(fetchesArray[p], fetches.get(0).getExecutionBlockId().toString(), fetches);
+          for (Entry<ExecutionBlockId, List<FetchImpl>> eachEntry : fetchGroupMeta.getFetches().entrySet()) {
+            TUtil.putCollectionToNestedList(fetchesArray[p], eachEntry.getKey().toString(), eachEntry.getValue());
+          }
         }
 
         p--;

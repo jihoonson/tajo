@@ -34,7 +34,6 @@ import org.apache.tajo.conf.TajoConf;
 import org.apache.tajo.master.QueryInfo;
 import org.apache.tajo.util.Bytes;
 
-import java.io.EOFException;
 import java.io.IOException;
 import java.text.SimpleDateFormat;
 import java.util.*;
@@ -231,9 +230,7 @@ public class HistoryReader {
 
       return QueryHistory.fromJson(new String(buf, Bytes.UTF8_CHARSET));
     } finally {
-      if (in != null) {
-        in.close();
-      }
+      IOUtils.cleanup(LOG, in);
     }
   }
 
@@ -267,9 +264,7 @@ public class HistoryReader {
 
       return StageHistory.fromJsonTasks(new String(buf, Bytes.UTF8_CHARSET));
     } finally {
-      if (in != null) {
-        in.close();
-      }
+      IOUtils.cleanup(LOG, in);
     }
   }
 
@@ -316,29 +311,25 @@ public class HistoryReader {
         }
 
         FSDataInputStream in = null;
-        TaskHistoryProto.Builder builder = TaskHistoryProto.newBuilder();
         try {
           FileStatus status = fs.getFileStatus(eachFile.getPath());
           LOG.info("Finding TaskHistory from " + status.getLen() + "," + eachFile.getPath());
 
           in = fs.open(eachFile.getPath());
-          while (true) {
+          while (in.getPos() < status.getLen()) {
             int len = in.readInt();
             byte[] buf = new byte[len];
             in.readFully(buf, 0, len);
 
-            builder.clear();
+            TaskHistoryProto.Builder builder = TaskHistoryProto.newBuilder();
             TaskHistoryProto taskHistoryProto = builder.mergeFrom(buf).build();
             TaskAttemptId attemptId = new TaskAttemptId(taskHistoryProto.getTaskAttemptId());
             if (attemptId.toString().equals(taskAttemptId)) {
               return new org.apache.tajo.worker.TaskHistory(taskHistoryProto);
             }
           }
-        } catch (EOFException e) {
         } finally {
-          if (in != null) {
-            in.close();
-          }
+          IOUtils.cleanup(LOG, in);
         }
       }
     }
