@@ -63,7 +63,7 @@ public class HistoryWriter extends AbstractService {
   private final LinkedBlockingQueue<WriterFuture<WriterHolder>>
       historyQueue = new LinkedBlockingQueue<WriterFuture<WriterHolder>>();
   // key: yyyyMMddHH
-  private Map<String, WriterHolder> taskWriters = new HashMap<String, WriterHolder>();
+  private Map<String, WriterHolder> taskWriters = Collections.synchronizedMap(new HashMap<String, WriterHolder>());
 
   // For TajoMaster's query list
   private WriterHolder querySummaryWriter = null;
@@ -538,7 +538,10 @@ public class HistoryWriter extends AbstractService {
      * Sync buffered data to DataNodes or disks (flush to disk devices).
      */
     private void flush() throws IOException {
-      if (out != null) out.hsync();
+      if (out != null) {
+        out.flush();
+        out.hsync();
+      }
     }
   }
 

@@ -324,7 +324,9 @@ public class HistoryReader {
             TaskHistoryProto.Builder builder = TaskHistoryProto.newBuilder();
             TaskHistoryProto taskHistoryProto = builder.mergeFrom(buf).build();
             TaskAttemptId attemptId = new TaskAttemptId(taskHistoryProto.getTaskAttemptId());
+            LOG.info("taskAttemptId: " + taskAttemptId + ", attemptId: " + attemptId);
             if (attemptId.toString().equals(taskAttemptId)) {
+              LOG.info("Found task: " + taskAttemptId + " at " + eachFile.getPath());
               return new org.apache.tajo.worker.TaskHistory(taskHistoryProto);
             }
           }
