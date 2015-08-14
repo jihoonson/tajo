@@ -35,10 +35,10 @@ import java.net.URI;
 
 public class TableDesc implements ProtoObject<TableDescProto>, GsonObject, Cloneable {
 	@Expose protected String tableName;                        // required
-  @Expose protected Schema schema;
+  @Expose protected Schema schema;                           // optional for schemaless
   @Expose protected TableMeta meta;                          // required
   /** uri is set if external flag is TRUE. */
-  @Expose protected URI uri;                                // optional
+  @Expose protected URI uri;                                 // optional
   @Expose	protected TableStats stats;                        // optional
   /** the description of table partition */
   @Expose protected PartitionMethodDesc partitionMethodDesc; // optional
