@@ -1287,10 +1287,16 @@ public class SQLAnalyzer extends SQLParserBaseVisitor<Expr> {
     if (checkIfExist(ctx.EXTERNAL())) {
       createTable.setExternal();
 
-      ColumnDefinition[] elements = getDefinitions(ctx.table_elements());
-      String storageType = ctx.storage_type.getText();
-      createTable.setTableElements(elements);
-      createTable.setStorageType(storageType);
+      if (checkIfExist(ctx.table_elements())) {
+        ColumnDefinition[] elements = getDefinitions(ctx.table_elements());
+        String storageType = ctx.storage_type.getText();
+        createTable.setTableElements(elements);
+        createTable.setStorageType(storageType);
+      } else {
+        if (checkIfExist(ctx.USING())) {
+          createTable.setStorageType("JSON");
+        }
+      }
 
       if (checkIfExist(ctx.LOCATION())) {
         String uri = stripQuote(ctx.uri.getText());
@@ -1308,7 +1314,12 @@ public class SQLAnalyzer extends SQLParserBaseVisitor<Expr> {
       }
 
       if (checkIfExist(ctx.USING())) {
-        String fileType = ctx.storage_type.getText();
+        String fileType;
+        if (checkIfExist(ctx.storage_type)) {
+          fileType = ctx.storage_type.getText();
+        } else {
+          fileType = "JSON";
+        }
         createTable.setStorageType(fileType);
       }
 
