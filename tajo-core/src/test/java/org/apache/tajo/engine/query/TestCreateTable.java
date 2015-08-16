@@ -640,4 +640,16 @@ public class TestCreateTable extends QueryTestCaseBase {
     executeString("DROP TABLE D9.nested_table2");
     executeString("DROP DATABASE D9").close();
   }
+
+  @Test
+  public final void testSchemaless1() throws Exception {
+    executeString("create database d9;").close();
+
+    String sql = "create table d9.schemaless using json with ('compression.codec'='none') partition by column (id int8)";
+    executeString(sql).close();
+    assertTableExists("d9.schemaless");
+
+    executeString("drop table d9.schemaless").close();
+    executeString("drop database d9").close();
+  }
 }

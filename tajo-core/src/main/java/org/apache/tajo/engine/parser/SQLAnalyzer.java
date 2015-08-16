@@ -1295,6 +1295,7 @@ public class SQLAnalyzer extends SQLParserBaseVisitor<Expr> {
       } else {
         if (checkIfExist(ctx.USING())) {
           createTable.setStorageType("JSON");
+          createTable.setSchemaless();
         }
       }
 
@@ -1319,6 +1320,10 @@ public class SQLAnalyzer extends SQLParserBaseVisitor<Expr> {
           fileType = ctx.storage_type.getText();
         } else {
           fileType = "JSON";
+          if (!checkIfExist(ctx.table_elements())) {
+            // If table elements are not defined and the file type is JSON, this table is schemaless.
+            createTable.setSchemaless();
+          }
         }
         createTable.setStorageType(fileType);
       }

@@ -22,6 +22,7 @@ import com.google.common.base.Objects;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.annotations.Expose;
+import org.apache.tajo.annotation.Nullable;
 import org.apache.tajo.catalog.json.CatalogGsonHelper;
 import org.apache.tajo.catalog.partition.PartitionMethodDesc;
 import org.apache.tajo.catalog.proto.CatalogProtos.TableDescProto;
@@ -48,8 +49,8 @@ public class TableDesc implements ProtoObject<TableDescProto>, GsonObject, Clone
 	public TableDesc() {
 	}
 
-  public TableDesc(String tableName, Schema schema, TableMeta meta,
-                   URI uri, boolean external) {
+  public TableDesc(String tableName, @Nullable Schema schema, TableMeta meta,
+                   @Nullable URI uri, boolean external) {
     this();
     this.tableName = tableName;
     this.schema = schema;
@@ -58,11 +59,12 @@ public class TableDesc implements ProtoObject<TableDescProto>, GsonObject, Clone
     this.external = external;
   }
 
-	public TableDesc(String tableName, Schema schema, TableMeta meta, URI path) {
+	public TableDesc(String tableName, @Nullable Schema schema, TableMeta meta, @Nullable URI path) {
 		this(tableName, schema, meta, path, true);
 	}
 	
-	public TableDesc(String tableName, Schema schema, String storeType, KeyValueSet options, URI path) {
+	public TableDesc(String tableName, @Nullable Schema schema, String storeType, KeyValueSet options,
+                   @Nullable URI path) {
 	  this(tableName, schema, new TableMeta(storeType, options), path);
 	}
 	
@@ -104,6 +106,10 @@ public class TableDesc implements ProtoObject<TableDescProto>, GsonObject, Clone
 	public TableMeta getMeta() {
 	  return this.meta;
 	}
+
+  public boolean hasSchema() {
+    return schema != null;
+  }
 
   public void setSchema(Schema schem) {
     this.schema = schem;
@@ -206,6 +212,9 @@ public class TableDesc implements ProtoObject<TableDescProto>, GsonObject, Clone
     }
     if (this.schema != null) {
       builder.setSchema(schema.getProto());
+      builder.setIsSchemaPredefined(true);
+    } else {
+      builder.setIsSchemaPredefined(false);
     }
     if (this.meta != null) {
       builder.setMeta(meta.getProto());
