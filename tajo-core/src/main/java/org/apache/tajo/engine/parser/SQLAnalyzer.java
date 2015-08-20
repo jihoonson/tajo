@@ -1290,15 +1290,12 @@ public class SQLAnalyzer extends SQLParserBaseVisitor<Expr> {
 
       if (checkIfExist(ctx.table_elements())) {
         ColumnDefinition[] elements = getDefinitions(ctx.table_elements());
-        String storageType = ctx.storage_type.getText();
         createTable.setTableElements(elements);
-        createTable.setStorageType(storageType);
       } else {
-        if (checkIfExist(ctx.USING())) {
-          createTable.setStorageType("JSON");
-          createTable.setSchemaless();
-        }
+        createTable.setSchemaless();
       }
+      String storageType = ctx.storage_type.getText();
+      createTable.setStorageType(storageType);
 
       if (checkIfExist(ctx.LOCATION())) {
         String uri = stripQuote(ctx.uri.getText());
@@ -1308,6 +1305,8 @@ public class SQLAnalyzer extends SQLParserBaseVisitor<Expr> {
       if (checkIfExist(ctx.table_elements())) {
         ColumnDefinition[] elements = getDefinitions(ctx.table_elements());
         createTable.setTableElements(elements);
+      } else {
+        createTable.setSchemaless();
       }
 
       if (checkIfExist(ctx.TABLESPACE())) {
@@ -1316,16 +1315,7 @@ public class SQLAnalyzer extends SQLParserBaseVisitor<Expr> {
       }
 
       if (checkIfExist(ctx.USING())) {
-        String fileType;
-        if (checkIfExist(ctx.storage_type)) {
-          fileType = ctx.storage_type.getText();
-        } else {
-          fileType = "JSON";
-          if (!checkIfExist(ctx.table_elements())) {
-            // If table elements are not defined and the file type is JSON, this table is schemaless.
-            createTable.setSchemaless();
-          }
-        }
+        String fileType = ctx.storage_type.getText();
         createTable.setStorageType(fileType);
       }
 

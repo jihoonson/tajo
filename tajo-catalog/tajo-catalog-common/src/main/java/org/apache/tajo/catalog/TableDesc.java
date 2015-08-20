@@ -45,6 +45,8 @@ public class TableDesc implements ProtoObject<TableDescProto>, GsonObject, Clone
   @Expose protected PartitionMethodDesc partitionMethodDesc; // optional
   /** True if it is an external table. False if it is a managed table. */
   @Expose protected Boolean external;                        // optional
+  /** True if it has a predifined schema. False if it is schemaless. */
+  @Expose protected Boolean hasPredifinedSchema = true;             // optional
 
 	public TableDesc() {
 	}
@@ -76,6 +78,9 @@ public class TableDesc implements ProtoObject<TableDescProto>, GsonObject, Clone
     }
     if (proto.hasPartition()) {
       this.partitionMethodDesc = new PartitionMethodDesc(proto.getPartition());
+    }
+    if (proto.hasIsSchemaPredefined()) {
+      this.hasPredifinedSchema = proto.getIsSchemaPredefined();
     }
 	}
 	
@@ -162,8 +167,16 @@ public class TableDesc implements ProtoObject<TableDescProto>, GsonObject, Clone
     return external;
   }
 
+  public void setHasPredifinedSchema(boolean hasPredifinedSchema) {
+    this.hasPredifinedSchema = hasPredifinedSchema;
+  }
+
+  public boolean hasPredifinedSchema() {
+    return hasPredifinedSchema;
+  }
+
   public int hashCode() {
-    return Objects.hashCode(tableName, schema, meta, uri, stats, partitionMethodDesc);
+    return Objects.hashCode(tableName, schema, meta, uri, stats, partitionMethodDesc, hasPredifinedSchema);
   }
 
   public boolean equals(Object object) {
@@ -176,7 +189,8 @@ public class TableDesc implements ProtoObject<TableDescProto>, GsonObject, Clone
       eq = eq && TUtil.checkEquals(uri, other.uri);
       eq = eq && TUtil.checkEquals(partitionMethodDesc, other.partitionMethodDesc);
       eq = eq && TUtil.checkEquals(external, other.external);
-      return eq && TUtil.checkEquals(stats, other.stats);
+      eq = eq && TUtil.checkEquals(stats, other.stats);
+      return eq && TUtil.checkEquals(hasPredifinedSchema, other.hasPredifinedSchema);
     }
     
     return false;   
@@ -191,6 +205,7 @@ public class TableDesc implements ProtoObject<TableDescProto>, GsonObject, Clone
     desc.stats = stats != null ? (TableStats) stats.clone() : null;
     desc.partitionMethodDesc = partitionMethodDesc != null ? (PartitionMethodDesc) partitionMethodDesc.clone() : null;
     desc.external = external != null ? external : null;
+    desc.hasPredifinedSchema = hasPredifinedSchema != null ? hasPredifinedSchema : null;
 	  return desc;
 	}
 
@@ -230,6 +245,9 @@ public class TableDesc implements ProtoObject<TableDescProto>, GsonObject, Clone
     }
     if (this.external != null) {
       builder.setIsExternal(external);
+    }
+    if (this.hasPredifinedSchema != null) {
+      builder.setIsSchemaPredefined(hasPredifinedSchema);
     }
 
     return builder.build();

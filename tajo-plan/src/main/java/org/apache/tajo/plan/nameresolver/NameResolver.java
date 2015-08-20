@@ -26,10 +26,12 @@ import org.apache.tajo.catalog.CatalogUtil;
 import org.apache.tajo.catalog.Column;
 import org.apache.tajo.catalog.NestedPathUtil;
 import org.apache.tajo.catalog.Schema;
+import org.apache.tajo.common.TajoDataTypes.Type;
 import org.apache.tajo.exception.*;
 import org.apache.tajo.plan.LogicalPlan;
 import org.apache.tajo.plan.PlanningException;
 import org.apache.tajo.plan.logical.RelationNode;
+import org.apache.tajo.plan.logical.ScanNode;
 import org.apache.tajo.util.Pair;
 import org.apache.tajo.util.StringUtils;
 import org.apache.tajo.util.TUtil;
@@ -181,18 +183,25 @@ public abstract class NameResolver {
         throw new UndefinedTableException(qualifier);
       }
 
-      // Please consider a query case:
-      // select lineitem.l_orderkey from lineitem a order by lineitem.l_orderkey;
-      //
-      // The relation lineitem is already renamed to "a", but lineitem.l_orderkey still should be available.
-      // The below code makes it possible. Otherwise, it cannot find any match in the relation schema.
-      if (block.isAlreadyRenamedTableName(CatalogUtil.extractQualifier(canonicalName))) {
-        canonicalName =
-            CatalogUtil.buildFQName(relationOp.getCanonicalName(), CatalogUtil.extractSimpleName(canonicalName));
-      }
+      Column column;
+      if (isSchemaless(relationOp)) {
+        // TODO: other data types must be supported.
+        column = new Column(CatalogUtil.buildFQName(normalized.getFirst(), normalized.getSecond()), Type.TEXT);
 
-      Schema schema = relationOp.getLogicalSchema();
-      Column column = schema.getColumn(canonicalName);
+      } else {
+        // Please consider a query case:
+        // select lineitem.l_orderkey from lineitem a order by lineitem.l_orderkey;
+        //
+        // The relation lineitem is already renamed to "a", but lineitem.l_orderkey still should be available.
+        // The below code makes it possible. Otherwise, it cannot find any match in the relation schema.
+        if (block.isAlreadyRenamedTableName(CatalogUtil.extractQualifier(canonicalName))) {
+          canonicalName =
+              CatalogUtil.buildFQName(relationOp.getCanonicalName(), CatalogUtil.extractSimpleName(canonicalName));
+        }
+
+        Schema schema = relationOp.getLogicalSchema();
+        column = schema.getColumn(canonicalName);
+      }
 
       return column;
     } else {
@@ -251,8 +260,26 @@ public abstract class NameResolver {
     if (!candidates.isEmpty()) {
       return ensureUniqueColumn(candidates);
     } else {
+      List<RelationNode> candidateRels = TUtil.newList();
+      for (RelationNode rel : block.getRelations()) {
+        if (isSchemaless(rel)) {
+          candidateRels.add(rel);
+        }
+      }
+      if (candidateRels.size() == 1) {
+        // TODO: other data types must be supported.
+        return new Column(CatalogUtil.buildFQName(candidateRels.get(0).getCanonicalName(), columnName), Type.TEXT);
+      } else if (candidateRels.size() > 1) {
+        // TODO: TooManySchemalessRelationsException
+        throw new AmbiguousColumnException(columnName);
+      }
+
       return null;
     }
+  }
+
+  static boolean isSchemaless(RelationNode relationNode) {
+    return relationNode instanceof ScanNode && !((ScanNode) relationNode).getTableDesc().hasPredifinedSchema();
   }
 
   /**
@@ -378,6 +405,19 @@ public abstract class NameResolver {
 
     // throw exception if no column cannot be founded or two or more than columns are founded
     if (guessedRelations.size() == 0) {
+      // check schemaless relations
+      for (RelationNode rel : block.getRelations()) {
+        if (rel instanceof ScanNode) {
+          if (!((ScanNode) rel).getTableDesc().hasPredifinedSchema()) {
+            guessedRelations.add(rel);
+          }
+        }
+      }
+
+      if (guessedRelations.size() > 1) {
+        throw new AmbiguousColumnException(columnRef.getCanonicalName());
+      }
+
       throw new UndefinedColumnException(columnRef.getCanonicalName());
     } else if (guessedRelations.size() > 1) {
       throw new AmbiguousColumnException(columnRef.getCanonicalName());
