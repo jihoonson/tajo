@@ -815,4 +815,22 @@ public class TestSQLAnalyzer {
     Expr expr = parseQuery(sql);
     System.out.println(expr);
   }
+
+  @Test
+  public void testCreateTableWithMapType1() throws IOException {
+    // primitive key value map
+    assertParseResult("create_table_maptype_1.sql", "create_table_maptype_1.result");
+  }
+
+  @Test
+  public void testCreateTableWithMapType2() throws IOException {
+    // primitive key and record value map
+    assertParseResult("create_table_maptype_2.sql", "create_table_maptype_2.result");
+  }
+
+  @Test
+  public void testCreateTableWithMapType3() throws IOException {
+    // primitive key and nexted record value map
+    assertParseResult("create_table_maptype_3.sql", "create_table_maptype_3.result");
+  }
 }

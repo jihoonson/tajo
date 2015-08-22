@@ -29,7 +29,6 @@ import org.apache.tajo.catalog.Schema;
 import org.apache.tajo.common.TajoDataTypes.Type;
 import org.apache.tajo.exception.*;
 import org.apache.tajo.plan.LogicalPlan;
-import org.apache.tajo.plan.PlanningException;
 import org.apache.tajo.plan.logical.RelationNode;
 import org.apache.tajo.plan.logical.ScanNode;
 import org.apache.tajo.util.Pair;
@@ -86,7 +85,6 @@ public abstract class NameResolver {
    * @param block the current block
    * @param tableName The table name which can be either qualified or not.
    * @return A corresponding relation
-   * @throws PlanningException
    */
   public static RelationNode lookupTable(LogicalPlan.QueryBlock block, String tableName)
       throws AmbiguousTableException {
@@ -145,7 +143,6 @@ public abstract class NameResolver {
    * @param block The current query block
    * @param columnRef The column reference to be found
    * @return The found column
-   * @throws PlanningException
    */
   static Column resolveFromRelsWithinBlock(LogicalPlan plan, LogicalPlan.QueryBlock block,
                                            ColumnReferenceExpr columnRef)
@@ -185,8 +182,7 @@ public abstract class NameResolver {
 
       Column column;
       if (isSchemaless(relationOp)) {
-        // TODO: other data types must be supported.
-        column = new Column(CatalogUtil.buildFQName(normalized.getFirst(), normalized.getSecond()), Type.TEXT);
+        column = getSchemalessColumn(CatalogUtil.buildFQName(normalized.getFirst(), normalized.getSecond()));
 
       } else {
         // Please consider a query case:
@@ -267,8 +263,7 @@ public abstract class NameResolver {
         }
       }
       if (candidateRels.size() == 1) {
-        // TODO: other data types must be supported.
-        return new Column(CatalogUtil.buildFQName(candidateRels.get(0).getCanonicalName(), columnName), Type.TEXT);
+        return getSchemalessColumn(CatalogUtil.buildFQName(candidateRels.get(0).getCanonicalName(), columnName));
       } else if (candidateRels.size() > 1) {
         // TODO: TooManySchemalessRelationsException
         throw new AmbiguousColumnException(columnName);
@@ -280,6 +275,11 @@ public abstract class NameResolver {
 
   static boolean isSchemaless(RelationNode relationNode) {
     return relationNode instanceof ScanNode && !((ScanNode) relationNode).getTableDesc().hasPredifinedSchema();
+  }
+
+  static Column getSchemalessColumn(String qualifiedName) {
+    // TODO: other data types must be supported.
+    return new Column(qualifiedName, Type.TEXT);
   }
 
   /**
@@ -301,6 +301,31 @@ public abstract class NameResolver {
         Column found = rel.getLogicalSchema().getColumn(columnRef.getName());
         if (found != null) {
           candidates.add(found);
+        }
+      }
+    }
+
+    if (!candidates.isEmpty()) {
+      return NameResolver.ensureUniqueColumn(candidates);
+    } else {
+      return null;
+    }
+  }
+
+
+
+  static Column resolveFromAllSchemalessReslInAllBlocks(LogicalPlan plan, ColumnReferenceExpr columnRef)
+      throws AmbiguousColumnException{
+    List<Column> candidates = Lists.newArrayList();
+
+    // from all relations of all query blocks
+    for (LogicalPlan.QueryBlock eachBlock : plan.getQueryBlocks()) {
+
+      for (RelationNode rel : eachBlock.getRelations()) {
+        if (isSchemaless(rel)) {
+          Column col = getSchemalessColumn(CatalogUtil.buildFQName(rel.getCanonicalName(),
+              columnRef.getCanonicalName()));
+          candidates.add(col);
         }
       }
     }
@@ -347,7 +372,6 @@ public abstract class NameResolver {
    * @param block The current block
    * @param columnRef The column name
    * @return A pair of normalized qualifier and column name
-   * @throws PlanningException
    */
   static Pair<String, String> lookupQualifierAndCanonicalName(LogicalPlan.QueryBlock block,
                                                               ColumnReferenceExpr columnRef)
@@ -407,10 +431,8 @@ public abstract class NameResolver {
     if (guessedRelations.size() == 0) {
       // check schemaless relations
       for (RelationNode rel : block.getRelations()) {
-        if (rel instanceof ScanNode) {
-          if (!((ScanNode) rel).getTableDesc().hasPredifinedSchema()) {
-            guessedRelations.add(rel);
-          }
+        if (isSchemaless(rel)) {
+          guessedRelations.add(rel);
         }
       }
 
@@ -424,7 +446,7 @@ public abstract class NameResolver {
     }
 
     String qualifier = guessedRelations.iterator().next().getCanonicalName();
-    String columnName = "";
+    String columnName;
 
     if (columnNamePosition >= qualifierParts.length) { // if there is no column in qualifierParts
       columnName = columnRef.getName();
@@ -442,7 +464,7 @@ public abstract class NameResolver {
       columnName += NestedPathUtil.PATH_DELIMITER + columnRef.getName();
     }
 
-    return new Pair<String, String>(qualifier, columnName);
+    return new Pair<>(qualifier, columnName);
   }
 
   static Column ensureUniqueColumn(List<Column> candidates) throws AmbiguousColumnException {

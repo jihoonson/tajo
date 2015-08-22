@@ -18,7 +18,6 @@
 
 package org.apache.tajo.benchmark;
 
-import com.google.protobuf.ServiceException;
 import org.apache.hadoop.net.NetUtils;
 import org.apache.tajo.catalog.CatalogConstants;
 import org.apache.tajo.catalog.Schema;

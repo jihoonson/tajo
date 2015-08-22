@@ -39,6 +39,11 @@ import static org.junit.Assert.*;
 public class TestCreateTable extends QueryTestCaseBase {
 
   @Test
+  public final void testNegatives() throws Exception {
+    runNegativeTests();
+  }
+
+  @Test
   public final void testVariousTypes() throws Exception {
     List<String> createdNames;
     if (testingCluster.isHiveCatalogStoreRunning()) {
@@ -651,5 +656,20 @@ public class TestCreateTable extends QueryTestCaseBase {
 
     executeString("drop table d9.schemaless").close();
     executeString("drop database d9").close();
+  }
+
+  @Test
+  public final void testSchemaless2() throws Exception {
+    executeString("create database d10;").close();
+
+    String className = getClass().getSimpleName();
+    Path currentDatasetPath = new Path(datasetBasePath, className);
+    Path filePath = StorageUtil.concatPath(currentDatasetPath, "table1");
+    String sql = "create external table d10.schemaless using json with ('compression.codec'='none') location '" + filePath.toString() + "'";
+    executeString(sql).close();
+    assertTableExists("d10.schemaless");
+
+    executeString("drop table d10.schemaless").close();
+    executeString("drop database d10").close();
   }
 }

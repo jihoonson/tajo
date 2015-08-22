@@ -790,7 +790,7 @@ public abstract class AbstractDBStore extends CatalogConstants implements Catalo
       conn.setAutoCommit(false);
 
       String sql = "INSERT INTO TABLES (DB_ID, " + COL_TABLES_NAME +
-          ", TABLE_TYPE, PATH, STORE_TYPE) VALUES(?, ?, ?, ?, ?) ";
+          ", TABLE_TYPE, PATH, STORE_TYPE) VALUES(?, ?, ?, ?, ?, ?) ";
 
       if (LOG.isDebugEnabled()) {
         LOG.debug(sql);
