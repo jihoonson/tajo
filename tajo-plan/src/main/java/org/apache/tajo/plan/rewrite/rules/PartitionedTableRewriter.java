@@ -373,9 +373,15 @@ public class PartitionedTableRewriter implements LogicalPlanRewriteRule {
       if (parts.length != 2) {
         return null;
       }
-      int columnId = partitionColumnSchema.getColumnIdByName(parts[0]);
-      Column keyColumn = partitionColumnSchema.getColumn(columnId);
-      tuple.put(columnId, DatumFactory.createFromString(keyColumn.getDataType(), StringUtils.unescapePathName(parts[1])));
+      try {
+        int columnId = partitionColumnSchema.getColumnIdByName(parts[0]);
+        Column keyColumn = partitionColumnSchema.getColumn(columnId);
+        tuple.put(columnId, DatumFactory.createFromString(keyColumn.getDataType(),
+            StringUtils.unescapePathName(parts[1])));
+      } catch (Exception e) {
+        LOG.warn(columnValues[i] + " is wrong partition.");
+        return null;
+      }
     }
     for (; i < partitionColumnSchema.size(); i++) {
       tuple.put(i, NullDatum.get());
