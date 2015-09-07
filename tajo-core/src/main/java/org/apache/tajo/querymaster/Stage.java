@@ -21,6 +21,7 @@ package org.apache.tajo.querymaster;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.yarn.event.Event;
@@ -31,7 +32,6 @@ import org.apache.tajo.catalog.CatalogUtil;
 import org.apache.tajo.catalog.Schema;
 import org.apache.tajo.catalog.TableDesc;
 import org.apache.tajo.catalog.TableMeta;
-import org.apache.tajo.catalog.proto.CatalogProtos;
 import org.apache.tajo.catalog.proto.CatalogProtos.PartitionDescProto;
 import org.apache.tajo.catalog.statistics.ColumnStats;
 import org.apache.tajo.catalog.statistics.StatisticsUtil;
@@ -44,12 +44,12 @@ import org.apache.tajo.engine.planner.global.ExecutionBlock;
 import org.apache.tajo.engine.planner.global.MasterPlan;
 import org.apache.tajo.exception.TajoException;
 import org.apache.tajo.ipc.TajoWorkerProtocol;
-import org.apache.tajo.plan.serder.PlanProto.DistinctGroupbyEnforcer.MultipleAggregationStage;
-import org.apache.tajo.plan.serder.PlanProto.EnforceProperty;
 import org.apache.tajo.master.TaskState;
 import org.apache.tajo.master.event.*;
 import org.apache.tajo.master.event.TaskAttemptToSchedulerEvent.TaskAttemptScheduleContext;
 import org.apache.tajo.plan.logical.*;
+import org.apache.tajo.plan.serder.PlanProto.DistinctGroupbyEnforcer.MultipleAggregationStage;
+import org.apache.tajo.plan.serder.PlanProto.EnforceProperty;
 import org.apache.tajo.plan.util.PlannerUtil;
 import org.apache.tajo.querymaster.Task.IntermediateEntry;
 import org.apache.tajo.rpc.AsyncRpcClient;
@@ -57,8 +57,8 @@ import org.apache.tajo.rpc.NullCallback;
 import org.apache.tajo.rpc.RpcClientManager;
 import org.apache.tajo.rpc.protocolrecords.PrimitiveProtos;
 import org.apache.tajo.storage.FileTablespace;
-import org.apache.tajo.storage.TablespaceManager;
 import org.apache.tajo.storage.Tablespace;
+import org.apache.tajo.storage.TablespaceManager;
 import org.apache.tajo.storage.fragment.Fragment;
 import org.apache.tajo.unit.StorageUnit;
 import org.apache.tajo.util.KeyValueSet;
@@ -76,9 +76,9 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
+import static org.apache.tajo.ResourceProtos.*;
 import static org.apache.tajo.conf.TajoConf.ConfVars;
 import static org.apache.tajo.plan.serder.PlanProto.ShuffleType;
-import static org.apache.tajo.ResourceProtos.*;
 
 
 /**
@@ -459,9 +459,8 @@ public class Stage implements EventHandler<StageEvent> {
     long totalReadRows = 0;
     long totalWriteBytes = 0;
     long totalWriteRows = 0;
-    int numShuffles = 0;
+
     for(Task eachTask : getTasks()) {
-      numShuffles = eachTask.getShuffleOutpuNum();
       if (eachTask.getLastAttempt() != null) {
         TableStats inputStats = eachTask.getLastAttempt().getInputStats();
         if (inputStats != null) {
@@ -477,19 +476,23 @@ public class Stage implements EventHandler<StageEvent> {
       }
     }
 
+    Set<Integer> partitions = Sets.newHashSet();
+    for (IntermediateEntry entry : getHashShuffleIntermediateEntries()) {
+       partitions.add(entry.getPartId());
+    }
+
     stageHistory.setTotalInputBytes(totalInputBytes);
     stageHistory.setTotalReadBytes(totalReadBytes);
     stageHistory.setTotalReadRows(totalReadRows);
     stageHistory.setTotalWriteBytes(totalWriteBytes);
     stageHistory.setTotalWriteRows(totalWriteRows);
-    stageHistory.setNumShuffles(numShuffles);
+    stageHistory.setNumShuffles(partitions.size());
     stageHistory.setProgress(getProgress());
     return stageHistory;
   }
 
-  public List<PartitionDescProto> getPartitions() {
-    List<PartitionDescProto> partitions = TUtil.newList();
-
+  public Set<PartitionDescProto> getPartitions() {
+    Set<PartitionDescProto> partitions = TUtil.newHashSet();
     for(Task eachTask : getTasks()) {
       if (eachTask.getLastAttempt() != null && !eachTask.getLastAttempt().getPartitions().isEmpty()) {
         partitions.addAll(eachTask.getLastAttempt().getPartitions());
@@ -497,6 +500,14 @@ public class Stage implements EventHandler<StageEvent> {
     }
 
     return partitions;
+  }
+
+  public void clearPartitions() {
+    for(Task eachTask : getTasks()) {
+      if (eachTask.getLastAttempt() != null && !eachTask.getLastAttempt().getPartitions().isEmpty()) {
+        eachTask.getLastAttempt().getPartitions().clear();
+      }
+    }
   }
 
   /**
@@ -1037,26 +1048,58 @@ public class Stage implements EventHandler<StageEvent> {
      * @return
      */
     public static int getNonLeafTaskNum(Stage stage) {
+      // This method is assumed to be called only for aggregation or sort.
+      LogicalNode plan = stage.getBlock().getPlan();
+      LogicalNode sortNode = PlannerUtil.findTopNode(plan, NodeType.SORT);
+      LogicalNode groupbyNode = PlannerUtil.findTopNode(plan, NodeType.GROUP_BY);
+
+      // Task volume is assumed to be 64 MB by default.
+      long taskVolume = 64;
+
+      if (groupbyNode != null && sortNode == null) {
+        // aggregation plan
+        taskVolume = stage.getContext().getQueryContext().getLong(SessionVars.GROUPBY_TASK_INPUT_SIZE);
+      } else if (sortNode != null && groupbyNode == null) {
+        // sort plan
+        taskVolume = stage.getContext().getQueryContext().getLong(SessionVars.SORT_TASK_INPUT_SIZE);
+      } else if (sortNode != null /* && groupbyNode != null */) {
+        // NOTE: when the plan includes both aggregation and sort, usually aggregation is executed first.
+        // If not, we need to check the query plan is valid.
+        LogicalNode aggChildOfSort = PlannerUtil.findTopNode(sortNode, NodeType.GROUP_BY);
+        boolean aggFirst = aggChildOfSort != null && aggChildOfSort.equals(groupbyNode);
+        // Set task volume according to the operator which will be executed first.
+        if (aggFirst) {
+          // choose aggregation task volume
+          taskVolume = stage.getContext().getQueryContext().getLong(SessionVars.GROUPBY_TASK_INPUT_SIZE);
+        } else {
+          // choose sort task volume
+          LOG.warn("Sort is executed before aggregation.");
+          taskVolume = stage.getContext().getQueryContext().getLong(SessionVars.SORT_TASK_INPUT_SIZE);
+        }
+      } else {
+        LOG.warn("Task volume is chosen as " + taskVolume + " in unexpected case.");
+      }
+
       // Getting intermediate data size
       long volume = getInputVolume(stage.getMasterPlan(), stage.context, stage.getBlock());
 
-      int mb = (int) Math.ceil((double)volume / 1048576);
+      int mb = (int) Math.ceil((double)volume / (double)StorageUnit.MB);
       LOG.info(stage.getId() + ", Table's volume is approximately " + mb + " MB");
-      // determine the number of task per 64MB
-      int minTaskNum = Math.max(1, stage.getContext().getQueryMasterContext().getConf().getInt(ConfVars.$TEST_MIN_TASK_NUM.varname, 1));
-      int maxTaskNum = Math.max(minTaskNum, (int) Math.ceil((double)mb / 64));
+      // determine the number of task
+      int minTaskNum = Math.max(1, stage.getContext().getQueryMasterContext().getConf().
+          getInt(ConfVars.$TEST_MIN_TASK_NUM.varname, 1));
+      int maxTaskNum = Math.max(minTaskNum, (int) Math.ceil((double)mb / taskVolume));
       LOG.info(stage.getId() + ", The determined number of non-leaf tasks is " + maxTaskNum);
       return maxTaskNum;
     }
 
     public static long getInputVolume(MasterPlan masterPlan, QueryMasterTask.QueryMasterTaskContext context,
                                       ExecutionBlock execBlock) {
-      Map<String, TableDesc> tableMap = context.getTableDescMap();
       if (masterPlan.isLeaf(execBlock)) {
         ScanNode[] outerScans = execBlock.getScanNodes();
         long maxVolume = 0;
         for (ScanNode eachScanNode: outerScans) {
-          TableStats stat = tableMap.get(eachScanNode.getCanonicalName()).getStats();
+          TableStats stat = context.getTableDesc(eachScanNode).getStats();
           if (stat.getNumBytes() > maxVolume) {
             maxVolume = stat.getNumBytes();
           }
@@ -1082,7 +1125,7 @@ public class Stage implements EventHandler<StageEvent> {
       ScanNode[] scans = execBlock.getScanNodes();
       Preconditions.checkArgument(scans.length == 1, "Must be Scan Query");
       ScanNode scan = scans[0];
-      TableDesc table = stage.context.getTableDescMap().get(scan.getCanonicalName());
+      TableDesc table = stage.context.getTableDesc(scan);
 
       Collection<Fragment> fragments;
       Tablespace tablespace = TablespaceManager.get(scan.getTableDesc().getUri()).get();

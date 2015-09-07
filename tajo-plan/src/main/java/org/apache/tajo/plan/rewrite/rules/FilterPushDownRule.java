@@ -39,7 +39,6 @@ import org.apache.tajo.plan.rewrite.LogicalPlanRewriteRule;
 import org.apache.tajo.plan.rewrite.LogicalPlanRewriteRuleContext;
 import org.apache.tajo.plan.rewrite.rules.FilterPushDownRule.FilterPushDownContext;
 import org.apache.tajo.plan.rewrite.rules.IndexScanInfo.SimplePredicate;
-import org.apache.tajo.plan.util.IndexUtil;
 import org.apache.tajo.plan.util.PlannerUtil;
 import org.apache.tajo.plan.visitor.BasicLogicalPlanVisitor;
 import org.apache.tajo.util.TUtil;
@@ -802,6 +801,9 @@ public class FilterPushDownRule extends BasicLogicalPlanVisitor<FilterPushDownCo
           break;
         }
       }
+      if (groupByNode.getInSchema().containsAll(EvalTreeUtil.findUniqueColumns(copy))) {
+        isEvalAggrFunction = true;
+      }
       if (isEvalAggrFunction) {
         aggrEvals.add(copy);
         aggrEvalOrigins.add(eval);
@@ -813,7 +815,6 @@ public class FilterPushDownRule extends BasicLogicalPlanVisitor<FilterPushDownCo
     }
 
     // transform
-
     HavingNode workingHavingNode;
     if (havingNode != null) {
       workingHavingNode = havingNode;
@@ -965,7 +966,7 @@ public class FilterPushDownRule extends BasicLogicalPlanVisitor<FilterPushDownCo
       databaseName = CatalogUtil.extractQualifier(table.getName());
       tableName = CatalogUtil.extractSimpleName(table.getName());
       Set<Predicate> predicates = TUtil.newHashSet();
-      for (EvalNode eval : IndexUtil.getAllEqualEvals(qual)) {
+      for (EvalNode eval : PlannerUtil.getAllEqualEvals(qual)) {
         BinaryEval binaryEval = (BinaryEval) eval;
         // TODO: consider more complex predicates
         if (binaryEval.getLeftExpr().getType() == EvalType.FIELD &&
@@ -1028,14 +1029,6 @@ public class FilterPushDownRule extends BasicLogicalPlanVisitor<FilterPushDownCo
           colToValue.get(keySortSpecs[i].getSortKey()));
     }
     return simplePredicates;
-  }
-
-  private static Datum[] extractPredicateValues(List<Predicate> predicates) {
-    Datum[] values = new Datum[predicates.size()];
-    for (int i = 0; i < values.length; i++) {
-      values[i] = predicates.get(i).value;
-    }
-    return values;
   }
 
   private static Column[] extractColumns(Set<Predicate> predicates) {

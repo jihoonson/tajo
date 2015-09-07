@@ -41,6 +41,8 @@ import org.apache.tajo.engine.parser.SQLAnalyzer;
 import org.apache.tajo.engine.query.QueryContext;
 import org.apache.tajo.exception.TajoException;
 import org.apache.tajo.exception.UndefinedTableException;
+import org.apache.tajo.jdbc.FetchResultSet;
+import org.apache.tajo.jdbc.TajoMemoryResultSet;
 import org.apache.tajo.master.GlobalEngine;
 import org.apache.tajo.plan.LogicalOptimizer;
 import org.apache.tajo.plan.LogicalPlan;
@@ -578,8 +580,8 @@ public class QueryTestCaseBase {
 
         // plan test
         if (prefix.length() > 0) {
-          String planResultName = methodName + (fromFile ? "" : "" + (i + 1)) +
-              ((option.parameterized() && testParameter != null) ? "" + testParameter : "") + ".plan";
+          String planResultName = methodName + (fromFile ? "" : "." + (i + 1)) +
+              ((option.parameterized() && testParameter != null) ? "." + testParameter : "") + ".plan";
           Path resultPath = StorageUtil.concatPath(currentResultPath, planResultName);
           if (currentResultFS.exists(resultPath)) {
             assertEquals("Plan Verification for: " + (i + 1) + " th test",
@@ -596,7 +598,7 @@ public class QueryTestCaseBase {
         ResultSet result = client.executeQueryAndGetResult(spec.value());
 
         // result test
-        String fileName = methodName + (fromFile ? "" : "" + (i + 1)) + ".result";
+        String fileName = methodName + (fromFile ? "" : "." + (i + 1)) + ".result";
         Path resultPath = StorageUtil.concatPath(currentResultPath, fileName);
         if (currentResultFS.exists(resultPath)) {
           assertEquals("Result Verification for: " + (i + 1) + " th test",
@@ -977,7 +979,8 @@ public class QueryTestCaseBase {
       if (expr.getType() == OpType.CreateTable) {
         CreateTable createTable = (CreateTable) expr;
         String tableName = createTable.getTableName();
-        assertTrue("Table [" + tableName + "] creation is failed.", client.updateQuery(parsedResult.getHistoryStatement()));
+        assertTrue("Table [" + tableName + "] creation is failed.",
+            client.updateQuery(parsedResult.getHistoryStatement()));
 
         TableDesc createdTable = client.getTableDesc(tableName);
         String createdTableName = createdTable.getName();
@@ -1126,5 +1129,15 @@ public class QueryTestCaseBase {
       }
     }
     return result;
+  }
+
+  public static QueryId getQueryId(ResultSet resultSet) {
+    if (resultSet instanceof TajoMemoryResultSet) {
+      return ((TajoMemoryResultSet) resultSet).getQueryId();
+    } else if (resultSet instanceof FetchResultSet) {
+      return ((FetchResultSet) resultSet).getQueryId();
+    } else {
+      throw new IllegalArgumentException(resultSet.toString());
+    }
   }
 }
