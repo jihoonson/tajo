@@ -18,12 +18,27 @@
 
 package org.apache.tajo.catalog;
 
+import org.apache.hadoop.fs.Path;
 import org.apache.tajo.annotation.NotNull;
 import org.apache.tajo.annotation.Nullable;
+import org.apache.tajo.catalog.partition.PartitionDesc;
+import org.apache.tajo.catalog.partition.PartitionMethodDesc;
+import org.apache.tajo.catalog.proto.CatalogProtos;
+import org.apache.tajo.catalog.proto.CatalogProtos.PartitionKeyProto;
 import org.apache.tajo.catalog.store.*;
+import org.apache.tajo.common.TajoDataTypes.Type;
 import org.apache.tajo.conf.TajoConf;
 import org.apache.tajo.conf.TajoConf.ConfVars;
 import org.apache.tajo.exception.UnsupportedCatalogStore;
+import org.apache.tajo.util.CommonTestingUtil;
+import org.apache.tajo.util.KeyValueSet;
+
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+
+import static org.apache.tajo.TajoConstants.DEFAULT_DATABASE_NAME;
 
 public class CatalogTestingUtil {
 
@@ -116,5 +131,79 @@ public class CatalogTestingUtil {
     } else {
       throw new UnsupportedCatalogStore(clazz.getCanonicalName());
     }
+  }
+
+  public static PartitionDesc buildPartitionDesc(String partitionName) {
+    PartitionDesc partitionDesc = new PartitionDesc();
+    partitionDesc.setPartitionName(partitionName);
+
+    String[] partitionNames = partitionName.split("/");
+
+    List<PartitionKeyProto> partitionKeyList = new ArrayList<PartitionKeyProto>();
+    for(int i = 0; i < partitionNames.length; i++) {
+      String columnName = partitionNames[i].split("=")[0];
+      String partitionValue = partitionNames[i].split("=")[1];
+
+      PartitionKeyProto.Builder builder = PartitionKeyProto.newBuilder();
+      builder.setColumnName(partitionValue);
+      builder.setPartitionValue(columnName);
+      partitionKeyList.add(builder.build());
+    }
+
+    partitionDesc.setPartitionKeys(partitionKeyList);
+
+    partitionDesc.setPath("hdfs://xxx.com/warehouse/" + partitionName);
+    return partitionDesc;
+  }
+
+  public static void prepareBaseData(CatalogService catalog, String testDir) throws Exception {
+    catalog.createTablespace("space1", "hdfs://xxx.com/warehouse");
+    catalog.createTablespace("SpAcE1", "hdfs://xxx.com/warehouse");
+
+    catalog.createDatabase("TestDatabase1", "space1");
+    catalog.createDatabase("testDatabase1", "SpAcE1");
+
+    catalog.createTable(buildTableDesc("TestDatabase1", "TestTable1", testDir));
+    catalog.createTable(buildTableDesc("TestDatabase1", "testTable1", testDir));
+    catalog.createTable(buildPartitionTableDesc("TestDatabase1", "TestPartition1", testDir));
+    catalog.createTable(buildPartitionTableDesc("TestDatabase1", "testPartition1", testDir));
+  }
+
+  public static void cleanupBaseData(CatalogService catalog) throws Exception {
+    catalog.dropTable(CatalogUtil.buildFQName("TestDatabase1", "testPartition1"));
+    catalog.dropTable(CatalogUtil.buildFQName("TestDatabase1", "TestPartition1"));
+    catalog.dropTable(CatalogUtil.buildFQName("TestDatabase1", "TestTable1"));
+    catalog.dropTable(CatalogUtil.buildFQName("TestDatabase1", "testTable1"));
+
+    catalog.dropDatabase("TestDatabase1");
+    catalog.dropDatabase("testDatabase1");
+
+    catalog.dropTablespace("space1");
+    catalog.dropTablespace("SpAcE1");
+  }
+
+  public static TableDesc buildTableDesc(String databaseName, String tableName, String testDir) throws IOException {
+    Schema schema = new Schema();
+    schema.addColumn("Column", Type.BLOB);
+    schema.addColumn("column", Type.INT4);
+    schema.addColumn("cOlumn", Type.INT8);
+    Path path = new Path(testDir + "/" + UUID.randomUUID().toString(), tableName);
+    return new TableDesc(
+        CatalogUtil.buildFQName(databaseName, tableName),
+        schema,
+        new TableMeta("TEXT", new KeyValueSet()),
+        path.toUri(), true);
+  }
+
+  public static TableDesc buildPartitionTableDesc(String databaseName, String tableName, String testDir) throws Exception {
+    Schema partSchema = new Schema();
+    partSchema.addColumn("DaTe", Type.TEXT);
+    partSchema.addColumn("dAtE", Type.TEXT);
+    PartitionMethodDesc partitionMethodDesc =
+        new PartitionMethodDesc(DEFAULT_DATABASE_NAME, tableName,
+            CatalogProtos.PartitionType.COLUMN, "id,name", partSchema);
+    TableDesc desc = buildTableDesc(databaseName, tableName, testDir);
+    desc.setPartitionMethod(partitionMethodDesc);
+    return desc;
   }
 }

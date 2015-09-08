@@ -270,7 +270,7 @@ public class CatalogServer extends AbstractService {
         return StringListResponse.newBuilder()
             .setState(OK)
             .addAllValues(linkedMetadataManager.getTablespaceNames())
-            .addAllValues(store.getAllDatabaseNames())
+            .addAllValues(store.getAllTablespaceNames())
             .build();
 
       } catch (Throwable t) {

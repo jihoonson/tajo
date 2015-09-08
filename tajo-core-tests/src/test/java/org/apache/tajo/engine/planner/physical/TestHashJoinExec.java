@@ -73,7 +73,7 @@ public class TestHashJoinExec {
   public void setUp() throws Exception {
     util = new TajoTestingCluster();
     util.initTestDir();
-    catalog = util.startCatalogCluster().getCatalog();
+    catalog = util.getCatalogService();
     testDir = CommonTestingUtil.getTestDir(TEST_PATH);
     catalog.createTablespace(DEFAULT_TABLESPACE_NAME, testDir.toUri().toString());
     catalog.createDatabase(TajoConstants.DEFAULT_DATABASE_NAME, DEFAULT_TABLESPACE_NAME);
