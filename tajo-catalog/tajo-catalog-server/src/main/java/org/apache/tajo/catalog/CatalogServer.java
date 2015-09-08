@@ -812,6 +812,7 @@ public class CatalogServer extends AbstractService {
       try {
         return GetColumnsResponse
             .newBuilder()
+            .setState(OK)
             .addAllColumn(store.getAllColumns())
             .build();
 
@@ -1275,7 +1276,7 @@ public class CatalogServer extends AbstractService {
     public IndexListResponse getAllIndexes(RpcController controller, NullProto request) throws ServiceException {
       rlock.lock();
       try {
-        return IndexListResponse.newBuilder().addAllIndexDesc(store.getAllIndexes()).build();
+        return IndexListResponse.newBuilder().setState(OK).addAllIndexDesc(store.getAllIndexes()).build();
 
       } catch (Throwable t) {
         printStackTraceIfError(LOG, t);

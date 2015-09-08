@@ -18,22 +18,26 @@
 
 package org.apache.tajo.catalog;
 
+import com.google.common.base.Preconditions;
 import org.apache.hadoop.fs.Path;
 import org.apache.tajo.annotation.NotNull;
 import org.apache.tajo.annotation.Nullable;
 import org.apache.tajo.catalog.partition.PartitionDesc;
 import org.apache.tajo.catalog.partition.PartitionMethodDesc;
 import org.apache.tajo.catalog.proto.CatalogProtos;
+import org.apache.tajo.catalog.proto.CatalogProtos.IndexMethod;
 import org.apache.tajo.catalog.proto.CatalogProtos.PartitionKeyProto;
+import org.apache.tajo.catalog.statistics.TableStats;
 import org.apache.tajo.catalog.store.*;
 import org.apache.tajo.common.TajoDataTypes.Type;
 import org.apache.tajo.conf.TajoConf;
 import org.apache.tajo.conf.TajoConf.ConfVars;
 import org.apache.tajo.exception.UnsupportedCatalogStore;
-import org.apache.tajo.util.CommonTestingUtil;
 import org.apache.tajo.util.KeyValueSet;
 
 import java.io.IOException;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -184,26 +188,62 @@ public class CatalogTestingUtil {
 
   public static TableDesc buildTableDesc(String databaseName, String tableName, String testDir) throws IOException {
     Schema schema = new Schema();
-    schema.addColumn("Column", Type.BLOB);
-    schema.addColumn("column", Type.INT4);
-    schema.addColumn("cOlumn", Type.INT8);
+    schema.addColumn(CatalogUtil.buildFQName(tableName, "Column"), Type.BLOB);
+    schema.addColumn(CatalogUtil.buildFQName(tableName, "column"), Type.INT4);
+    schema.addColumn(CatalogUtil.buildFQName(tableName, "cOlumn"), Type.INT8);
     Path path = new Path(testDir + "/" + UUID.randomUUID().toString(), tableName);
-    return new TableDesc(
+    TableDesc desc = new TableDesc(
         CatalogUtil.buildFQName(databaseName, tableName),
         schema,
         new TableMeta("TEXT", new KeyValueSet()),
         path.toUri(), true);
+    desc.setStats(buildTableStats());
+    desc.getMeta().setOptions(buildOptions());
+    return desc;
   }
 
   public static TableDesc buildPartitionTableDesc(String databaseName, String tableName, String testDir) throws Exception {
     Schema partSchema = new Schema();
-    partSchema.addColumn("DaTe", Type.TEXT);
-    partSchema.addColumn("dAtE", Type.TEXT);
+    partSchema.addColumn(CatalogUtil.buildFQName(tableName, "DaTe"), Type.TEXT);
+    partSchema.addColumn(CatalogUtil.buildFQName(tableName, "dAtE"), Type.TEXT);
     PartitionMethodDesc partitionMethodDesc =
         new PartitionMethodDesc(DEFAULT_DATABASE_NAME, tableName,
             CatalogProtos.PartitionType.COLUMN, "id,name", partSchema);
     TableDesc desc = buildTableDesc(databaseName, tableName, testDir);
     desc.setPartitionMethod(partitionMethodDesc);
     return desc;
+  }
+
+  public static TableStats buildTableStats() {
+    TableStats stats = new TableStats();
+    stats.setAvgRows(1000);
+    stats.setNumBlocks(100);
+    stats.setNumBytes(10000);
+    stats.setNumRows(5000);
+    stats.setNumShuffleOutputs(40);
+    stats.setReadBytes(200);
+    return stats;
+  }
+
+  public static KeyValueSet buildOptions() {
+    KeyValueSet options = new KeyValueSet();
+    options.set("testString", "ThisIsTest");
+    options.setBool("testBool", true);
+    options.setFloat("testFloat", 0.2f);
+    options.setInt("testInt", 60);
+    options.setLong("testLong", 800l);
+    return options;
+  }
+
+  public static IndexDesc buildIndexDescs(String databaseName, String indexName, TableDesc table, Column... cols)
+      throws IOException, URISyntaxException {
+    Preconditions.checkArgument(cols.length > 0);
+    SortSpec[] colSpecs = new SortSpec[cols.length];
+    for (int i = 0; i < cols.length; i++) {
+      colSpecs[i] = new SortSpec(cols[i], true, false);
+    }
+    return new IndexDesc(databaseName, CatalogUtil.extractSimpleName(table.getName()),
+        indexName, new URI("idx_test"), colSpecs,
+        IndexMethod.TWO_LEVEL_BIN_TREE, true, true, table.getSchema());
   }
 }
