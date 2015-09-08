@@ -32,9 +32,36 @@ public class CatalogTestingUtil {
     String driverClassName = System.getProperty(CatalogConstants.STORE_CLASS);
     final boolean useDefaultCatalog = driverClassName == null;
 
-    conf = initializeDerbyStore(conf, testDirPath);
+    if (useDefaultCatalog) {
+      conf = initializeDerbyStore(conf, testDirPath);
 
-    // TODO: if useDefaultCatalog is false, use external database as catalog
+    } else {
+      Class clazz;
+      try {
+        clazz = Class.forName(driverClassName);
+      } catch (ClassNotFoundException e) {
+        throw new UnsupportedCatalogStore(driverClassName);
+      }
+      Class<? extends CatalogStore> catalogClass = clazz;
+
+      String catalogURI = System.getProperty(CatalogConstants.CATALOG_URI);
+      if (catalogURI == null) {
+        catalogURI = getCatalogURI(catalogClass, null, testDirPath);
+      }
+
+      configureCatalogClassAndUri(conf, catalogClass, catalogURI);
+
+      if (requireAuth(catalogClass)) {
+        String connectionId = System.getProperty(CatalogConstants.CONNECTION_ID);
+        String connectionPasswd = System.getProperty(CatalogConstants.CONNECTION_PASSWORD);
+
+        assert connectionId != null;
+        conf.set(CatalogConstants.CONNECTION_ID, connectionId);
+        if (connectionPasswd != null) {
+          conf.set(CatalogConstants.CONNECTION_PASSWORD, connectionPasswd);
+        }
+      }
+    }
     return conf;
   }
 

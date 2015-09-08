@@ -127,6 +127,14 @@
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-surefire-report-plugin</artifactId>
       </plugin>
+      <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-surefire-plugin</artifactId><configuration>
+        <systemProperties>
+          <tajo.test>TRUE</tajo.test>
+        </systemProperties>
+        <additionalClasspathElements>
+          <additionalClasspathElement>/Users/jihoonson/Downloads/postgresql-9.4-1202.jdbc4.jar</additionalClasspathElement>
+        </additionalClasspathElements>
+      </configuration></plugin>
     </plugins>
   </build>
 
