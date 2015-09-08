@@ -302,7 +302,7 @@ public abstract class AbstractDBStore extends CatalogConstants implements Catalo
   }
 
   @Override
-  public void createTablespace(String spaceName, String spaceUri) {
+  public void createTablespace(String spaceName, String spaceUri) throws DuplicateTablespaceException {
     Connection conn = null;
     PreparedStatement pstmt = null;
     ResultSet res = null;
@@ -310,7 +310,18 @@ public abstract class AbstractDBStore extends CatalogConstants implements Catalo
     try {
       conn = getConnection();
       conn.setAutoCommit(false);
-      String sql = String.format("INSERT INTO %s (SPACE_NAME, SPACE_URI) VALUES (?, ?)", TB_SPACES);
+
+      String sql = String.format("SELECT SPACE_ID FROM %s WHERE SPACE_NAME=(?)", TB_SPACES);
+      pstmt = conn.prepareStatement(sql);
+      pstmt.setString(1, spaceName);
+      res = pstmt.executeQuery();
+      if (res.next()) {
+        throw new DuplicateTablespaceException(spaceName);
+      }
+      res.close();
+      pstmt.close();
+
+      sql = String.format("INSERT INTO %s (SPACE_NAME, SPACE_URI) VALUES (?, ?)", TB_SPACES);
 
       if (LOG.isDebugEnabled()) {
         LOG.debug(sql);

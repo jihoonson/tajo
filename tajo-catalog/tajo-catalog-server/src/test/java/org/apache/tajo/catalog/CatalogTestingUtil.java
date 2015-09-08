@@ -143,10 +143,20 @@ public class CatalogTestingUtil {
 
     String[] partitionNames = partitionName.split("/");
 
-    List<PartitionKeyProto> partitionKeyList = new ArrayList<PartitionKeyProto>();
+    List<PartitionKeyProto> partitionKeyList = new ArrayList<>();
     for(int i = 0; i < partitionNames.length; i++) {
-      String columnName = partitionNames[i].split("=")[0];
-      String partitionValue = partitionNames[i].split("=")[1];
+      String [] splits = partitionNames[i].split("=");
+      String columnName = "", partitionValue = "";
+      if (splits.length == 2) {
+        columnName = splits[0];
+        partitionValue = splits[1];
+      } else if (splits.length == 1) {
+        if (partitionNames[i].charAt(0) == '=') {
+          partitionValue = splits[0];
+        } else {
+          columnName = "";
+        }
+      }
 
       PartitionKeyProto.Builder builder = PartitionKeyProto.newBuilder();
       builder.setColumnName(partitionValue);
