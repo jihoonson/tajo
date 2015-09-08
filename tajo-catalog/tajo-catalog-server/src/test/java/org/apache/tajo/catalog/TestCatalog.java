@@ -73,8 +73,6 @@ public class TestCatalog {
 	@BeforeClass
 	public static void setUp() throws Exception {
 
-
-    Path defaultTableSpace = CommonTestingUtil.getTestDir();
     Pair<TajoConf, String> confAndTestDir = newTajoConfForCatalogTest();
     testDir = confAndTestDir.getSecond();
 
@@ -83,7 +81,7 @@ public class TestCatalog {
     server.start();
     catalog = new LocalCatalogWrapper(server);
     if (!catalog.existTablespace(TajoConstants.DEFAULT_TABLESPACE_NAME)) {
-      catalog.createTablespace(TajoConstants.DEFAULT_TABLESPACE_NAME, defaultTableSpace.toUri().toString());
+      catalog.createTablespace(TajoConstants.DEFAULT_TABLESPACE_NAME, testDir.toString());
     }
     if (!catalog.existDatabase(DEFAULT_DATABASE_NAME)) {
       catalog.createDatabase(DEFAULT_DATABASE_NAME, TajoConstants.DEFAULT_TABLESPACE_NAME);
