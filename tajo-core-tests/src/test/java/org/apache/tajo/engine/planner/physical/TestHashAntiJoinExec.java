@@ -71,6 +71,7 @@ public class TestHashAntiJoinExec {
   public void setUp() throws Exception {
     util = new TajoTestingCluster();
     util.initTestDir();
+    util.startCatalogCluster();
     catalog = util.getCatalogService();
     testDir = CommonTestingUtil.getTestDir(TEST_PATH);
     catalog.createTablespace(DEFAULT_TABLESPACE_NAME, testDir.toUri().toString());

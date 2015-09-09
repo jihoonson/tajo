@@ -132,7 +132,8 @@
           <tajo.test>TRUE</tajo.test>
         </systemProperties>
         <additionalClasspathElements>
-          <additionalClasspathElement>/Users/jihoonson/Downloads/postgresql-9.4-1202.jdbc4.jar</additionalClasspathElement>
+          <additionalClasspathElement>/home/jihoon/다운로드/postgresql-9.4-1201.jdbc4.jar</additionalClasspathElement>
+          <additionalClasspathElement>/home/jihoon/다운로드/mariadb-java-client-1.1.8.jar</additionalClasspathElement>
         </additionalClasspathElements>
       </configuration></plugin>
     </plugins>

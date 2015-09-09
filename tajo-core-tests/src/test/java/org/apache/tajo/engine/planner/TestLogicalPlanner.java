@@ -77,6 +77,7 @@ public class TestLogicalPlanner {
   @BeforeClass
   public static void setUp() throws Exception {
     util = new TajoTestingCluster();
+    util.startCatalogCluster();
     catalog = util.getCatalogService();
     catalog.createTablespace(DEFAULT_TABLESPACE_NAME, "hdfs://localhost:1234");
     catalog.createDatabase(DEFAULT_DATABASE_NAME, DEFAULT_TABLESPACE_NAME);

@@ -473,6 +473,10 @@ public class CatalogServer extends AbstractService {
         return errInsufficientPrivilege("drop a table in database '" + databaseName + "'");
       }
 
+      if (databaseName.equals(TajoConstants.DEFAULT_DATABASE_NAME)) {
+        return errInsufficientPrivilege("drop a table in database '" + databaseName + "'");
+      }
+
       wlock.lock();
       try {
         store.dropDatabase(databaseName);

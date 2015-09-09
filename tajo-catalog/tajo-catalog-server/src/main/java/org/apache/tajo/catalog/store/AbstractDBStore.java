@@ -518,9 +518,25 @@ public abstract class AbstractDBStore extends CatalogConstants implements Catalo
   }
 
   @Override
-  public void alterTablespace(AlterTablespaceProto alterProto) {
+  public void alterTablespace(AlterTablespaceProto alterProto) throws UndefinedTablespaceException {
     Connection conn;
     PreparedStatement pstmt = null;
+    ResultSet res = null;
+
+    try {
+      conn = getConnection();
+      String sql = String.format("SELECT SPACE_NAME FROM %s WHERE SPACE_NAME=?", TB_SPACES);
+      pstmt = conn.prepareStatement(sql);
+      pstmt.setString(1, alterProto.getSpaceName());
+      res = pstmt.executeQuery();
+      if (!res.next()) {
+        throw new UndefinedTablespaceException(alterProto.getSpaceName());
+      }
+    } catch (SQLException e) {
+      throw new TajoInternalError(e);
+    } finally {
+      CatalogUtil.closeQuietly(pstmt, res);
+    }
 
     if (alterProto.getCommandList().size() == 1) {
       AlterTablespaceCommand command = alterProto.getCommand(0);
@@ -529,7 +545,6 @@ public abstract class AbstractDBStore extends CatalogConstants implements Catalo
         try {
           String sql = "UPDATE " + TB_SPACES + " SET SPACE_URI=? WHERE SPACE_NAME=?";
 
-          conn = getConnection();
           pstmt = conn.prepareStatement(sql);
           pstmt.setString(1, setLocation.getUri());
           pstmt.setString(2, alterProto.getSpaceName());
@@ -1292,7 +1307,14 @@ public abstract class AbstractDBStore extends CatalogConstants implements Catalo
     }
   }
 
-  private void addNewColumn(int tableId, CatalogProtos.ColumnProto columnProto) {
+  private void addNewColumn(int tableId, CatalogProtos.ColumnProto columnProto) throws DuplicateColumnException {
+
+    Connection conn;
+    PreparedStatement pstmt = null;
+    ResultSet resultSet = null;
+
+    final String existColumnSql =
+        String.format("SELECT COLUMN_NAME FROM %s WHERE TID=? AND COLUMN_NAME=?", TB_COLUMNS);
 
     final String insertNewColumnSql =
         "INSERT INTO " + TB_COLUMNS +
@@ -1300,17 +1322,19 @@ public abstract class AbstractDBStore extends CatalogConstants implements Catalo
     final String columnCountSql =
         "SELECT MAX(ORDINAL_POSITION) AS POSITION FROM " + TB_COLUMNS + " WHERE TID = ?";
 
-    if (LOG.isDebugEnabled()) {
-      LOG.debug(insertNewColumnSql);
-      LOG.debug(columnCountSql);
-    }
-
-    Connection conn;
-    PreparedStatement pstmt = null;
-    ResultSet resultSet = null;
-
     try {
       conn = getConnection();
+      pstmt = conn.prepareStatement(existColumnSql);
+      pstmt.setInt(1, tableId);
+      pstmt.setString(2, CatalogUtil.extractSimpleName(columnProto.getName()));
+      resultSet =  pstmt.executeQuery();
+
+      if (resultSet.next()) {
+        throw new DuplicateColumnException(columnProto.getName());
+      }
+      pstmt.close();
+      resultSet.close();
+
       pstmt = conn.prepareStatement(columnCountSql);
       pstmt.setInt(1 , tableId);
       resultSet =  pstmt.executeQuery();
@@ -2351,7 +2375,8 @@ public abstract class AbstractDBStore extends CatalogConstants implements Catalo
   }
 
   @Override
-  public void createIndex(final IndexDescProto proto) throws UndefinedDatabaseException, UndefinedTableException {
+  public void createIndex(final IndexDescProto proto)
+      throws UndefinedDatabaseException, UndefinedTableException, DuplicateIndexException {
     Connection conn = null;
     PreparedStatement pstmt = null;
 
@@ -2359,11 +2384,27 @@ public abstract class AbstractDBStore extends CatalogConstants implements Catalo
     final String tableName = CatalogUtil.extractSimpleName(proto.getTableIdentifier().getTableName());
 
     try {
+
       // indexes table
       int databaseId = getDatabaseId(databaseName);
       int tableId = getTableId(databaseId, databaseName, tableName);
 
-      String sql = "INSERT INTO " + TB_INDEXES +
+      String sql = String.format("SELECT INDEX_NAME FROM %s WHERE DB_ID=? AND INDEX_NAME=?", TB_INDEXES);
+
+      conn = getConnection();
+      conn.setAutoCommit(false);
+
+      pstmt = conn.prepareStatement(sql);
+      pstmt.setInt(1, databaseId);
+      pstmt.setString(2, proto.getIndexName());
+      ResultSet res = pstmt.executeQuery();
+      if (res.next()) {
+        throw new DuplicateIndexException(proto.getIndexName());
+      }
+      pstmt.close();
+      res.close();
+
+      sql = "INSERT INTO " + TB_INDEXES +
           " (" + COL_DATABASES_PK + ", " + COL_TABLES_PK + ", INDEX_NAME, " +
           "INDEX_TYPE, PATH, COLUMN_NAMES, DATA_TYPES, ORDERS, NULL_ORDERS, IS_UNIQUE, IS_CLUSTERED) " +
           "VALUES (?,?,?,?,?,?,?,?,?,?,?)";
@@ -2391,11 +2432,8 @@ public abstract class AbstractDBStore extends CatalogConstants implements Catalo
       }
       columnNamesBuilder.deleteCharAt(columnNamesBuilder.length()-1);
       dataTypesBuilder.deleteCharAt(dataTypesBuilder.length()-1);
-      ordersBuilder.deleteCharAt(ordersBuilder.length()-1);
+      ordersBuilder.deleteCharAt(ordersBuilder.length() - 1);
       nullOrdersBuilder.deleteCharAt(nullOrdersBuilder.length()-1);
-
-      conn = getConnection();
-      conn.setAutoCommit(false);
 
       pstmt = conn.prepareStatement(sql);
       pstmt.setInt(1, databaseId);
@@ -2419,19 +2457,34 @@ public abstract class AbstractDBStore extends CatalogConstants implements Catalo
   }
 
   @Override
-  public void dropIndex(String databaseName, final String indexName) throws UndefinedDatabaseException {
-    Connection conn = null;
+  public void dropIndex(String databaseName, final String indexName)
+      throws UndefinedDatabaseException, UndefinedIndexException {
+    Connection conn;
     PreparedStatement pstmt = null;
 
     try {
       int databaseId = getDatabaseId(databaseName);
-      String sql = "DELETE FROM " + TB_INDEXES + " WHERE " + COL_DATABASES_PK + "=? AND INDEX_NAME=?";
+
+      String sql = String.format("SELECT INDEX_NAME FROM %s WHERE %s=? AND INDEX_NAME=?", TB_INDEXES, COL_DATABASES_PK);
+
+      conn = getConnection();
+      pstmt = conn.prepareStatement(sql);
+      pstmt.setInt(1, databaseId);
+      pstmt.setString(2, indexName);
+      ResultSet res = pstmt.executeQuery();
+      if (!res.next()) {
+        throw new UndefinedIndexException(CatalogUtil.buildFQName(databaseName, indexName));
+      }
+      pstmt.close();
+      res.close();
+
+      sql = "DELETE FROM " + TB_INDEXES + " WHERE " + COL_DATABASES_PK + "=? AND INDEX_NAME=?";
 
       if (LOG.isDebugEnabled()) {
         LOG.debug(sql);
       }
 
-      conn = getConnection();
+
       pstmt = conn.prepareStatement(sql);
       pstmt.setInt(1, databaseId);
       pstmt.setString(2, indexName);

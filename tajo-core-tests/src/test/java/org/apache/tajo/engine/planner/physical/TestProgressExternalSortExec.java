@@ -75,6 +75,7 @@ public class TestProgressExternalSortExec {
   public void setUp() throws Exception {
     this.conf = new TajoConf();
     util = new TajoTestingCluster();
+    util.startCatalogCluster();
     catalog = util.getCatalogService();
     testDir = CommonTestingUtil.getTestDir(TEST_PATH);
     catalog.createTablespace(DEFAULT_TABLESPACE_NAME, testDir.toUri().toString());
