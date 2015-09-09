@@ -144,39 +144,18 @@ public class TestLinkedMetadataManager {
 
   static CatalogServer server;
   static CatalogService catalog;
-//  static String testDir;
 
   @BeforeClass
   public static void setUp() throws IOException, DuplicateTablespaceException, DuplicateDatabaseException,
       UnsupportedCatalogStore {
-//    TajoConf conf = new TajoConf();
-//    conf.setVar(TajoConf.ConfVars.CATALOG_ADDRESS, "127.0.0.1:0");
-//
-//    Pair<TajoConf, String> confAndTestDir = TestCatalog.newTajoConfForCatalogTest();
-//    testDir = confAndTestDir.getSecond();
-//
-//    server = new CatalogServer(
-//        Sets.newHashSet(new MockupMetadataProvider1(), new MockupMetadataProvider2()), Collections.EMPTY_LIST);
-//    server.init(confAndTestDir.getFirst());
-//    server.start();
     server = new MiniCatalogServer(
         Sets.newHashSet(new MockupMetadataProvider1(), new MockupMetadataProvider2()), Collections.EMPTY_LIST);
     catalog = new LocalCatalogWrapper(server);
-
-//    Path defaultTableSpace = CommonTestingUtil.getTestDir();
-
-//    if (!catalog.existTablespace(TajoConstants.DEFAULT_TABLESPACE_NAME)) {
-//      catalog.createTablespace(TajoConstants.DEFAULT_TABLESPACE_NAME, defaultTableSpace.toUri().toString());
-//    }
-//    if (!catalog.existDatabase(DEFAULT_DATABASE_NAME)) {
-//      catalog.createDatabase(DEFAULT_DATABASE_NAME, TajoConstants.DEFAULT_TABLESPACE_NAME);
-//    }
   }
 
   @AfterClass
   public static void tearDown() throws IOException {
     server.stop();
-//    CommonTestingUtil.cleanupTestDir(testDir);
   }
 
   @Test

@@ -55,10 +55,10 @@
 				)]]>
 				</tns:sql>
 			</tns:Object>
-			<tns:Object order="4" type="index" name="IDX_DATABASE_DB_NAME" dependsOn="DATABASES_">
+			<tns:Object order="3" type="index" name="IDX_DATABASE_DB_NAME" dependsOn="DATABASES_">
 				<tns:sql><![CDATA[CREATE UNIQUE INDEX idx_database_db_id on DATABASES_ (DB_NAME)]]></tns:sql>
 			</tns:Object>
-			<tns:Object order="5" type="table" name="TABLES">
+			<tns:Object order="4" type="table" name="TABLES">
 				<tns:sql><![CDATA[
 				CREATE TABLE TABLES (
   				TID int NOT NULL GENERATED ALWAYS AS IDENTITY (START WITH 1, INCREMENT BY 1),
@@ -72,13 +72,13 @@
 				)]]>
 				</tns:sql>
 			</tns:Object>
-			<tns:Object order="6" type="index" name="IDX_TABLES_TID" dependsOn="TABLES">
+			<tns:Object order="5" type="index" name="IDX_TABLES_TID" dependsOn="TABLES">
 				<tns:sql><![CDATA[CREATE UNIQUE INDEX idx_tables_tid on TABLES (TID)]]></tns:sql>
 			</tns:Object>
-			<!--<tns:Object order="6" type="index" name="IDX_TABLES_NAME" dependsOn="TABLES">-->
-				<!--<tns:sql><![CDATA[CREATE UNIQUE INDEX idx_tables_name on TABLES (DB_ID, TABLE_NAME)]]></tns:sql>-->
-			<!--</tns:Object>-->
-			<tns:Object order="8" type="table" name="COLUMNS">
+			<tns:Object order="6" type="index" name="IDX_TABLES_NAME" dependsOn="TABLES">
+				<tns:sql><![CDATA[CREATE UNIQUE INDEX idx_tables_name on TABLES (DB_ID, TABLE_NAME)]]></tns:sql>
+			</tns:Object>
+			<tns:Object order="7" type="table" name="COLUMNS">
 				<tns:sql><![CDATA[
 				CREATE TABLE COLUMNS (
   				TID INT NOT NULL REFERENCES TABLES (TID) ON DELETE CASCADE,
@@ -96,10 +96,10 @@
 					into 'schema' which has a functionality of checking duplicated column names.
 				-->
 			</tns:Object>
-			<!--<tns:Object order="9" type="index" name="IDX_FK_COLUMNS_TABLE_NAME" dependsOn="COLUMNS">-->
-				<!--<tns:sql><![CDATA[CREATE UNIQUE INDEX idx_fk_columns_table_name on COLUMNS (TID, ORDINAL_POSITION)]]></tns:sql>-->
-			<!--</tns:Object>-->
-			<tns:Object order="10" type="table" name="OPTIONS">
+			<tns:Object order="8" type="index" name="IDX_FK_COLUMNS_TABLE_NAME" dependsOn="COLUMNS">
+				<tns:sql><![CDATA[CREATE UNIQUE INDEX idx_fk_columns_table_name on COLUMNS (TID, ORDINAL_POSITION)]]></tns:sql>
+			</tns:Object>
+			<tns:Object order="9" type="table" name="OPTIONS">
 				<tns:sql><![CDATA[
 				CREATE TABLE OPTIONS (
   				TID INT NOT NULL REFERENCES TABLES (TID) ON DELETE CASCADE,
@@ -109,10 +109,10 @@
 				)]]>
 				</tns:sql>
 			</tns:Object>
-			<tns:Object order="11" type="index" name="IDX_OPTIONS_KEY" dependsOn="OPTIONS">
+			<tns:Object order="10" type="index" name="IDX_OPTIONS_KEY" dependsOn="OPTIONS">
 				<tns:sql><![CDATA[CREATE INDEX idx_options_key on OPTIONS (TID)]]></tns:sql>
 			</tns:Object>
-			<tns:Object order="12" type="table" name="INDEXES">
+			<tns:Object order="11" type="table" name="INDEXES">
 				<tns:sql><![CDATA[
 				CREATE TABLE INDEXES (
 					INDEX_ID INT NOT NULL GENERATED ALWAYS AS IDENTITY (START WITH 1, INCREMENT BY 1),
@@ -134,13 +134,13 @@
 				)]]>
 				</tns:sql>
 			</tns:Object>
-			<tns:Object order="13" type="index" name="IDX_INDEXES_PK" dependsOn="INDEXES">
+			<tns:Object order="12" type="index" name="IDX_INDEXES_PK" dependsOn="INDEXES">
 				<tns:sql><![CDATA[CREATE UNIQUE INDEX idx_indexes_pk ON INDEXES (DB_ID,index_name)]]></tns:sql>
 			</tns:Object>
-			<tns:Object order="14" type="index" name="IDX_INDEXES_COLUMNS" dependsOn="INDEXES">
+			<tns:Object order="13" type="index" name="IDX_INDEXES_COLUMNS" dependsOn="INDEXES">
 				<tns:sql><![CDATA[CREATE INDEX idx_col_names ON INDEXES (DB_ID,TID,column_names)]]></tns:sql>
 			</tns:Object>
-			<tns:Object order="15" type="table" name="STATS">
+			<tns:Object order="14" type="table" name="STATS">
 				<tns:sql><![CDATA[
 				CREATE TABLE STATS (
   				TID INT NOT NULL PRIMARY KEY,
@@ -150,10 +150,10 @@
 				)]]>
 				</tns:sql>
 			</tns:Object>
-			<!--<tns:Object order="16" type="index" name="IDX_STATS_TABLE_NAME" dependsOn="STATS">-->
-				<!--<tns:sql><![CDATA[CREATE UNIQUE INDEX IDX_STATS_TABLE_NAME ON STATS (TID)]]></tns:sql>-->
-			<!--</tns:Object>-->
-			<tns:Object order="17" type="table" name="PARTITION_METHODS">
+			<tns:Object order="15" type="index" name="IDX_STATS_TABLE_NAME" dependsOn="STATS">
+				<tns:sql><![CDATA[CREATE UNIQUE INDEX IDX_STATS_TABLE_NAME ON STATS (TID)]]></tns:sql>
+			</tns:Object>
+			<tns:Object order="16" type="table" name="PARTITION_METHODS">
 				<tns:sql><![CDATA[
 				CREATE TABLE PARTITION_METHODS (
   				TID INT NOT NULL REFERENCES TABLES (TID) ON DELETE CASCADE,
@@ -163,10 +163,10 @@
 				)]]>
 				</tns:sql>
 			</tns:Object>
-			<tns:Object order="18" type="index" name="IDX_PARTITION_METHODS_TABLE_ID" dependsOn="PARTITION_METHODS">
+			<tns:Object order="17" type="index" name="IDX_PARTITION_METHODS_TABLE_ID" dependsOn="PARTITION_METHODS">
 				<tns:sql><![CDATA[CREATE INDEX idx_partition_methods_table_id ON PARTITION_METHODS (TID)]]></tns:sql>
 			</tns:Object>
-			<tns:Object name="PARTITIONS" type="table" order="19">
+			<tns:Object name="PARTITIONS" type="table" order="18">
 				<tns:sql><![CDATA[
 				CREATE TABLE PARTITIONS (
   				PARTITION_ID INT NOT NULL GENERATED ALWAYS AS IDENTITY (START WITH 1, INCREMENT BY 1),
@@ -178,9 +178,9 @@
 				)]]>
 				</tns:sql>
 			</tns:Object>
-			<!--<tns:Object name="PARTITIONS_IDX" type="index" dependsOn="PARTITIONS" order="19">-->
-				<!--<tns:sql><![CDATA[CREATE INDEX PARTITIONS_IDX ON PARTITIONS(PARTITION_ID, TID, PARTITION_NAME)]]></tns:sql>-->
-			<!--</tns:Object>-->
+			<tns:Object name="PARTITIONS_IDX" type="index" dependsOn="PARTITIONS" order="19">
+				<tns:sql><![CDATA[CREATE INDEX PARTITIONS_IDX ON PARTITIONS(PARTITION_ID, TID, PARTITION_NAME)]]></tns:sql>
+			</tns:Object>
       <tns:Object name="PARTITION_KEYS" type="table" order="20">
         <tns:sql><![CDATA[
 				CREATE TABLE PARTITION_KEYS (

@@ -59,33 +59,10 @@ public class TestCatalog {
 	
 	static CatalogServer server;
 	static CatalogService catalog;
-//  static String testDir;
-
-//  public static Pair<TajoConf, String> newTajoConfForCatalogTest() throws IOException, UnsupportedCatalogStore {
-//    String testDir = CommonTestingUtil.getTestDir().toString();
-//    return new Pair<>(CatalogTestingUtil.configureCatalog(new TajoConf(), testDir), testDir);
-//  }
 
 	@BeforeClass
 	public static void setUp() throws Exception {
 
-//    Pair<TajoConf, String> confAndTestDir = newTajoConfForCatalogTest();
-//    testDir = confAndTestDir.getSecond();
-//
-//	  server = new CatalogServer();
-//    server.init(confAndTestDir.getFirst());
-//    server.start();
-//    catalog = new LocalCatalogWrapper(server);
-//    if (!catalog.existTablespace(TajoConstants.DEFAULT_TABLESPACE_NAME)) {
-//      catalog.createTablespace(TajoConstants.DEFAULT_TABLESPACE_NAME, testDir.toString());
-//    }
-//    if (!catalog.existDatabase(DEFAULT_DATABASE_NAME)) {
-//      catalog.createDatabase(DEFAULT_DATABASE_NAME, TajoConstants.DEFAULT_TABLESPACE_NAME);
-//    }
-//
-//    for(String table : catalog.getAllTableNames(DEFAULT_DATABASE_NAME)) {
-//      catalog.dropTable(table);
-//    }
     server = new MiniCatalogServer();
     catalog = new LocalCatalogWrapper(server);
 	}
@@ -93,7 +70,6 @@ public class TestCatalog {
 	@AfterClass
 	public static void tearDown() throws IOException {
 	  server.stop();
-//    CommonTestingUtil.cleanupTestDir(testDir);
 	}
 
   @Test

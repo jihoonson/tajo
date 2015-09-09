@@ -78,6 +78,9 @@ xsi:schemaLocation="http://tajo.apache.org/catalogstore ../DBMSSchemaDefinition.
 				)]]>
 				</tns:sql>
 			</tns:Object>
+			<tns:Object name="TABLES_IDX_DB_ID" type="index" order="6" dependsOn="TABLES">
+				<tns:sql><![CDATA[CREATE INDEX TABLES_IDX_DB_ID on TABLES (DB_ID)]]></tns:sql>
+			</tns:Object>
 			<tns:Object name="TABLES_IDX_TABLE_ID" type="index" order="7" dependsOn="TABLES">
 				<tns:sql><![CDATA[CREATE UNIQUE INDEX TABLES_IDX_TABLE_ID on TABLES (DB_ID, TABLE_NAME)]]></tns:sql>
 			</tns:Object>
@@ -132,9 +135,9 @@ xsi:schemaLocation="http://tajo.apache.org/catalogstore ../DBMSSchemaDefinition.
 				)]]>
 				</tns:sql>
 			</tns:Object>
-			<!--<tns:Object name="INDEXES_IDX_DB_ID_NAME" type="index" order="11" dependsOn="INDEXES">-->
-				<!--<tns:sql><![CDATA[CREATE UNIQUE INDEX INDEXES_IDX_DB_ID_NAME on INDEXES (DB_ID, INDEX_NAME)]]></tns:sql>-->
-			<!--</tns:Object>-->
+			<tns:Object name="INDEXES_IDX_DB_ID_NAME" type="index" order="11" dependsOn="INDEXES">
+				<tns:sql><![CDATA[CREATE UNIQUE INDEX INDEXES_IDX_DB_ID_NAME on INDEXES (DB_ID, INDEX_NAME)]]></tns:sql>
+			</tns:Object>
 			<tns:Object name="INDEXES_IDX_TID_COLUMN_NAME" type="index" order="12" dependsOn="INDEXES">
 				<tns:sql><![CDATA[CREATE INDEX INDEXES_IDX_TID_COLUMN_NAME on INDEXES (DB_ID, TID, COLUMN_NAMES)]]></tns:sql>
 			</tns:Object>
@@ -172,9 +175,9 @@ xsi:schemaLocation="http://tajo.apache.org/catalogstore ../DBMSSchemaDefinition.
 				)]]>
 				</tns:sql>
 			</tns:Object>
-      <!--<tns:Object name="PARTITIONS_UNIQUE_IDX" type="index" order="16" dependsOn="PARTITIONS">-->
-        <!--<tns:sql><![CDATA[CREATE UNIQUE INDEX PARTITIONS_UNIQUE_IDX on PARTITIONS (TID, PARTITION_NAME)]]></tns:sql>-->
-      <!--</tns:Object>-->
+      <tns:Object name="PARTITIONS_UNIQUE_IDX" type="index" order="16" dependsOn="PARTITIONS">
+        <tns:sql><![CDATA[CREATE UNIQUE INDEX PARTITIONS_UNIQUE_IDX on PARTITIONS (TID, PARTITION_NAME)]]></tns:sql>
+      </tns:Object>
       <tns:Object name="PARTITION_KEYS" type="table" order="17">
         <tns:sql><![CDATA[
           CREATE TABLE PARTITION_KEYS (

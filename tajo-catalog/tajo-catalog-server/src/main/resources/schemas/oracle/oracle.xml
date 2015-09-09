@@ -229,9 +229,9 @@
 				END;]]>
         </tns:sql>
       </tns:Object>
-      <!--<tns:Object order="21" type="index" name="PARTITIONS_UNIQUE_IDX" dependsOn="PARTITIONS">-->
-        <!--<tns:sql><![CDATA[CREATE UNIQUE INDEX PARTITIONS_UNIQUE_IDX on PARTITIONS (TID, PARTITION_NAME)]]></tns:sql>-->
-      <!--</tns:Object>-->
+      <tns:Object order="21" type="index" name="PARTITIONS_UNIQUE_IDX" dependsOn="PARTITIONS">
+        <tns:sql><![CDATA[CREATE UNIQUE INDEX PARTITIONS_UNIQUE_IDX on PARTITIONS (TID, PARTITION_NAME)]]></tns:sql>
+      </tns:Object>
       <tns:Object order="22" type="table" name="PARTITION_KEYS">
         <tns:sql><![CDATA[
           CREATE TABLE PARTITION_KEYS (
