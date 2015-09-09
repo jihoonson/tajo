@@ -84,8 +84,8 @@ public class CatalogServer extends AbstractService {
   private Map<String, List<FunctionDescProto>> functions = new ConcurrentHashMap<String,
       List<FunctionDescProto>>();
 
-  private final LinkedMetadataManager linkedMetadataManager;
-  private final InfoSchemaMetadataDictionary metaDictionary = new InfoSchemaMetadataDictionary();
+  protected final LinkedMetadataManager linkedMetadataManager;
+  protected final InfoSchemaMetadataDictionary metaDictionary = new InfoSchemaMetadataDictionary();
 
   // RPC variables
   private BlockingRpcServer rpcServer;
@@ -466,7 +466,7 @@ public class CatalogServer extends AbstractService {
       String databaseName = request.getValue();
 
       if (linkedMetadataManager.existsDatabase(databaseName)) {
-        return errInsufficientPrivilege("alter a table in database '" + databaseName + "'");
+        return errInsufficientPrivilege("drop a table in database '" + databaseName + "'");
       }
 
       if (metaDictionary.isSystemDatabase(databaseName)) {

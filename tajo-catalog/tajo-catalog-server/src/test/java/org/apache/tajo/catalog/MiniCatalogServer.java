@@ -64,15 +64,9 @@ public class MiniCatalogServer extends CatalogServer {
         catalog.createDatabase(DEFAULT_DATABASE_NAME, TajoConstants.DEFAULT_TABLESPACE_NAME);
       }
 
-      for (String table : catalog.getAllTableNames(DEFAULT_DATABASE_NAME)) {
-        catalog.dropTable(CatalogUtil.buildFQName(DEFAULT_DATABASE_NAME, table));
-      }
-    } catch (UndefinedDatabaseException
-        | UndefinedTableException
-        | DuplicateDatabaseException
+    } catch (DuplicateDatabaseException
         | UnsupportedCatalogStore
         | IOException
-        | InsufficientPrivilegeException
         | DuplicateTablespaceException e) {
       throw new RuntimeException(e);
     }
@@ -80,8 +74,30 @@ public class MiniCatalogServer extends CatalogServer {
 
   @Override
   public void serviceStop() throws Exception {
+    cleanup();
+
     super.serviceStop();
     CommonTestingUtil.cleanupTestDir(testDir);
+  }
+
+  public void cleanup() throws UndefinedTableException, InsufficientPrivilegeException, UndefinedDatabaseException,
+      UndefinedTablespaceException {
+    for (String table : catalog.getAllTableNames(DEFAULT_DATABASE_NAME)) {
+      catalog.dropTable(CatalogUtil.buildFQName(DEFAULT_DATABASE_NAME, table));
+    }
+    for (String database : catalog.getAllDatabaseNames()) {
+      if (!database.equals(TajoConstants.DEFAULT_DATABASE_NAME) &&
+          !linkedMetadataManager.existsDatabase(database) &&
+          !metaDictionary.isSystemDatabase(database)) {
+        catalog.dropDatabase(database);
+      }
+    }
+    for (String tablespace : catalog.getAllTablespaceNames()) {
+      if (!tablespace.equals(TajoConstants.DEFAULT_TABLESPACE_NAME) &&
+          !linkedMetadataManager.existsTablespace(tablespace)) {
+        catalog.dropTablespace(tablespace);
+      }
+    }
   }
 
   public CatalogService getCatalogService() {
