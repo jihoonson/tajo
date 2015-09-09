@@ -65,7 +65,7 @@ public class MiniCatalogServer extends CatalogServer {
       }
 
       for (String table : catalog.getAllTableNames(DEFAULT_DATABASE_NAME)) {
-        catalog.dropTable(table);
+        catalog.dropTable(CatalogUtil.buildFQName(DEFAULT_DATABASE_NAME, table));
       }
     } catch (UndefinedDatabaseException
         | UndefinedTableException
