@@ -543,7 +543,7 @@ public class DDLExecutor {
 
       break;
     default:
-      //TODO
+      throw new InternalError("alterTable cannot handle such query: \n" + alterTable.toJson());
     }
   }
 

@@ -1,5 +1,7 @@
 Tajo Change Log 
 
+Release 0.12.0 - unreleased
+
 Release 0.11.0 - unreleased
 
   NEW FEATURES
@@ -33,6 +35,12 @@ Release 0.11.0 - unreleased
     (Contributed by Dongjoon Hyun, Committed by jihoon)
 
   IMPROVEMENT
+
+    TAJO-1828: tajo-daemon scripts should kill process after process can not 
+    stop gracefully. (jinho)
+
+    TAJO-1729: No handling of default case in DDLExecutor.
+    (Contributed by Dongkyu Hwangbo. Committed by jinho)
 
     TAJO-1818: Separate sql parser into an independent maven module.
     (hyunsik) 
@@ -247,7 +255,11 @@ Release 0.11.0 - unreleased
 
   BUG FIXES
 
-    TAJO-1819: TAJO-1819: Cannot find existing tables when pgsql catalog starts up.
+    TAJO-1829: Fix DelimitedTextFileAppender NPE in negative tests. (jinho)
+
+    TAJO-1674: Validation of CTAS schema mismatch. (hyunsik)
+
+    TAJO-1819: Cannot find existing tables when pgsql catalog starts up. 
     (jihoon)
 
     TAJO-1821: Temporary data is not cleared after TestCatalog. (jihoon)
