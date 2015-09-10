@@ -1289,7 +1289,7 @@ public class SQLAnalyzer extends SQLParserBaseVisitor<Expr> {
         ColumnDefinition[] elements = getDefinitions(ctx.table_elements());
         createTable.setTableElements(elements);
       } else {
-        createTable.setSchemaless();
+        createTable.setHasSelfDesribeSchema();
       }
       String storageType = ctx.storage_type.getText();
       createTable.setStorageType(storageType);
@@ -1303,7 +1303,7 @@ public class SQLAnalyzer extends SQLParserBaseVisitor<Expr> {
         ColumnDefinition[] elements = getDefinitions(ctx.table_elements());
         createTable.setTableElements(elements);
       } else {
-        createTable.setSchemaless();
+        createTable.setHasSelfDesribeSchema();
       }
 
       if (checkIfExist(ctx.TABLESPACE())) {

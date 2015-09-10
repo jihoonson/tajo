@@ -54,8 +54,8 @@ public class CreateTable extends Expr {
   private boolean ifNotExists;
   @Expose @SerializedName("LikeParentTable")
   private String likeParentTable;
-  @Expose @SerializedName("IsSchemaless")
-  private boolean schemaless = false;
+  @Expose @SerializedName("IsSelfDescribe")
+  private boolean hasSlefDescSchema = false;
 
   public CreateTable(final String tableName, boolean ifNotExists) {
     super(OpType.CreateTable);
@@ -176,12 +176,12 @@ public class CreateTable extends Expr {
     return likeParentTable;
   }
 
-  public void setSchemaless() {
-    schemaless = true;
+  public void setHasSelfDesribeSchema() {
+    hasSlefDescSchema = true;
   }
 
-  public boolean isSchemaless() {
-    return schemaless;
+  public boolean isHasSlefDescSchema() {
+    return hasSlefDescSchema;
   }
 
 

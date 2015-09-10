@@ -181,8 +181,8 @@ public abstract class NameResolver {
       }
 
       Column column;
-      if (isSchemaless(relationOp)) {
-        column = getSchemalessColumn(CatalogUtil.buildFQName(normalized.getFirst(), normalized.getSecond()));
+      if (describeSchemaByItself(relationOp)) {
+        column = guessColumn(CatalogUtil.buildFQName(normalized.getFirst(), normalized.getSecond()));
 
       } else {
         // Please consider a query case:
@@ -258,12 +258,12 @@ public abstract class NameResolver {
     } else {
       List<RelationNode> candidateRels = TUtil.newList();
       for (RelationNode rel : block.getRelations()) {
-        if (isSchemaless(rel)) {
+        if (describeSchemaByItself(rel)) {
           candidateRels.add(rel);
         }
       }
       if (candidateRels.size() == 1) {
-        return getSchemalessColumn(CatalogUtil.buildFQName(candidateRels.get(0).getCanonicalName(), columnName));
+        return guessColumn(CatalogUtil.buildFQName(candidateRels.get(0).getCanonicalName(), columnName));
       } else if (candidateRels.size() > 1) {
         // TODO: TooManySchemalessRelationsException
         throw new AmbiguousColumnException(columnName);
@@ -273,11 +273,11 @@ public abstract class NameResolver {
     }
   }
 
-  static boolean isSchemaless(RelationNode relationNode) {
-    return relationNode instanceof ScanNode && !((ScanNode) relationNode).getTableDesc().hasPredifinedSchema();
+  static boolean describeSchemaByItself(RelationNode relationNode) {
+    return relationNode instanceof ScanNode && ((ScanNode) relationNode).getTableDesc().hasSelfDescSchema();
   }
 
-  static Column getSchemalessColumn(String qualifiedName) {
+  static Column guessColumn(String qualifiedName) {
     // TODO: other data types must be supported.
     return new Column(qualifiedName, Type.TEXT);
   }
@@ -314,7 +314,7 @@ public abstract class NameResolver {
 
 
 
-  static Column resolveFromAllSchemalessReslInAllBlocks(LogicalPlan plan, ColumnReferenceExpr columnRef)
+  static Column resolveFromAllSelfDescReslInAllBlocks(LogicalPlan plan, LogicalPlan.QueryBlock block, ColumnReferenceExpr columnRef)
       throws AmbiguousColumnException{
     List<Column> candidates = Lists.newArrayList();
 
@@ -322,8 +322,8 @@ public abstract class NameResolver {
     for (LogicalPlan.QueryBlock eachBlock : plan.getQueryBlocks()) {
 
       for (RelationNode rel : eachBlock.getRelations()) {
-        if (isSchemaless(rel)) {
-          Column col = getSchemalessColumn(CatalogUtil.buildFQName(rel.getCanonicalName(),
+        if (describeSchemaByItself(rel)) {
+          Column col = guessColumn(CatalogUtil.buildFQName(rel.getCanonicalName(),
               columnRef.getCanonicalName()));
           candidates.add(col);
         }
@@ -429,9 +429,9 @@ public abstract class NameResolver {
 
     // throw exception if no column cannot be founded or two or more than columns are founded
     if (guessedRelations.size() == 0) {
-      // check schemaless relations
+      // check self-describing relations
       for (RelationNode rel : block.getRelations()) {
-        if (isSchemaless(rel)) {
+        if (describeSchemaByItself(rel)) {
           guessedRelations.add(rel);
         }
       }

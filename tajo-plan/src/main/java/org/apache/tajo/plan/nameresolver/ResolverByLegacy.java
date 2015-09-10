@@ -121,7 +121,10 @@ public class ResolverByLegacy extends NameResolver {
       return found;
     }
 
-
+    found = resolveFromAllSelfDescReslInAllBlocks(plan, block, columnRef);
+    if (found != null) {
+      return found;
+    }
 
     throw new UndefinedColumnException(columnRef.getCanonicalName());
   }

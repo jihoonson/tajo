@@ -1980,7 +1980,7 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
       return createTableNode;
 
     } else { // if CREATE AN EMPTY TABLE
-      if (!expr.isSchemaless()) {
+      if (!expr.isHasSlefDescSchema()) {
         Schema tableSchema = convertColumnsToSchema(expr.getTableElements());
         createTableNode.setTableSchema(tableSchema);
       }
