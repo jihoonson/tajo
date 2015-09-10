@@ -246,6 +246,10 @@ public class PreLogicalPlanVerifier extends BaseAlgebraVisitor<PreLogicalPlanVer
 
     if (expr.hasTableElements()) {
       assertRelationSchema(context, expr);
+    } else {
+      if (!expr.isSchemaless()) {
+        throw new TajoInternalError("Any schema is required or schemaless is set for " + expr.getTableName());
+      }
     }
 
     if (expr.hasStorageType()) {

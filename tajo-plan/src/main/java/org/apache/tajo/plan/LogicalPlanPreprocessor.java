@@ -380,12 +380,11 @@ public class LogicalPlanPreprocessor extends BaseAlgebraVisitor<LogicalPlanner.P
   }
 
   @Override
-  public LogicalNode visitRelation(LogicalPlanner.PlanContext ctx, Stack<Expr> stack, Relation expr)
+  public LogicalNode visitRelation(LogicalPlanner.PlanContext ctx, Stack<Expr> stack, Relation relation)
       throws TajoException {
-    Relation relation = expr;
 
     String actualRelationName;
-    if (CatalogUtil.isFQTableName(expr.getName())) {
+    if (CatalogUtil.isFQTableName(relation.getName())) {
       actualRelationName = relation.getName();
     } else {
       actualRelationName =
