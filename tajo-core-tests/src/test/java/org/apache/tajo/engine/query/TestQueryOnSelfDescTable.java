@@ -69,6 +69,122 @@ public class TestQueryOnSelfDescTable extends QueryTestCaseBase {
 
   @Test
   @Option(sort = true)
+  @SimpleTest(
+      queries = @QuerySpec("" +
+          "select title1, title2, null_expected, sortas, abbrev from (\n" +
+          "select\n" +
+          "  glossary.title title1,\n" +
+          "  glossary.\"GlossDiv\".title title2,\n" +
+          "  glossary.\"GlossDiv\".null_expected null_expected,\n" +
+          "  glossary.\"GlossDiv\".\"GlossList\".\"GlossEntry\".\"SortAs\" sortas,\n" +
+          "  glossary.\"GlossDiv\".\"GlossList\".\"GlossEntry\".\"Abbrev\" abbrev\n" +
+          "from\n" +
+          "  self_desc_table2\n" +
+          "  where glossary.title is not null" +
+          ") t"
+      )
+  )
+  public final void testTableSubquery() throws Exception {
+    runSimpleTests();
+  }
+
+  @Test
+  @Option(sort = true)
+  @SimpleTest(
+      queries = @QuerySpec("" +
+          "select title1, title2, null_expected, sortas, abbrev from (\n" +
+          "select\n" +
+          "  glossary.title title1,\n" +
+          "  glossary.\"GlossDiv\".title title2,\n" +
+          "  glossary.\"GlossDiv\".null_expected null_expected,\n" +
+          "  glossary.\"GlossDiv\".\"GlossList\".\"GlossEntry\".\"SortAs\" sortas,\n" +
+          "  glossary.\"GlossDiv\".\"GlossList\".\"GlossEntry\".\"Abbrev\" abbrev\n" +
+          "from\n" +
+          "  self_desc_table2\n" +
+          ") t " +
+          "where title1 is not null"
+      )
+  )
+  public final void testTableSubquery2() throws Exception {
+    runSimpleTests();
+  }
+
+  @Test
+  @Option(sort = true)
+  @SimpleTest(
+      queries = @QuerySpec("" +
+          "select title1, char_length(title2) len, null_expected, sortas, abbrev from (\n" +
+          "select\n" +
+          "  glossary.title title1,\n" +
+          "  glossary.\"GlossDiv\".title title2,\n" +
+          "  glossary.\"GlossDiv\".null_expected null_expected,\n" +
+          "  glossary.\"GlossDiv\".\"GlossList\".\"GlossEntry\".\"SortAs\" sortas,\n" +
+          "  glossary.\"GlossDiv\".\"GlossList\".\"GlossEntry\".\"Abbrev\" abbrev\n" +
+          "from\n" +
+          "  self_desc_table2\n" +
+          ") t " +
+          "where len > 1"
+      )
+  )
+  public final void testTableSubquery3() throws Exception {
+    runSimpleTests();
+  }
+
+  @Test
+  @Option(sort = true)
+  @SimpleTest(
+      queries = @QuerySpec("" +
+          "select " +
+          "  author_mail, count(distinct repo_name) " +
+          "from (\n" +
+          "  select " +
+          "    json_extract_path_text( json_array_get(github.payload.commits, 0), '$.author.email' ) author_mail, " +
+          "    repo.name repo_name " +
+          "  from " +
+          "    github" +
+          "  where " +
+          "    type = 'PushEvent'  \n" +
+          ") t \n" +
+          "group by " +
+          "  author_mail"
+      )
+  )
+  public final void testTableSubquery4() throws Exception {
+    runSimpleTests();
+  }
+
+  @Test
+  @Option(sort = true)
+  @SimpleTest(
+      queries = @QuerySpec("" +
+          "select " +
+          "  json_extract_path_text( json_array_get(github_test.payload.commits, 0), '$.author.email' ), " +
+          "  count(*) " +
+          "from " +
+          "  github_test, " +
+          "  (" +
+          "    select " +
+          "      repos.repo.full_name as repo_name, " +
+          "      json_extract_path_text(json_array_get(repos.commit_act, 0), '$.total')::int4 total " +
+          "    from " +
+          "      repos " +
+          "    where " +
+          "      total is not null and total > 0 " +
+          "    order by " +
+          "      total desc" +
+          "  ) t " +
+          "where " +
+          "  github.repo.name = t.repo_name and type = 'PushEvent' " +
+          "group by " +
+          "  json_extract_path_text( json_array_get(github_test.payload.commits, 0), '$.author.email' )"
+      )
+  )
+  public final void testTableSubquery5() throws Exception {
+    runSimpleTests();
+  }
+
+  @Test
+  @Option(sort = true)
   @SimpleTest
   public final void testGroupby() throws Exception {
     runSimpleTests();

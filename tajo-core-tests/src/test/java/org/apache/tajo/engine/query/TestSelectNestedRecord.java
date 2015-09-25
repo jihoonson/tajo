@@ -127,4 +127,29 @@ public class TestSelectNestedRecord extends QueryTestCaseBase {
     assertResultSet(res);
     res.close();
   }
+
+  @Test
+  public final void testTableSubquery4() throws Exception {
+    executeString("create external table github (" +
+        "type TEXT, repo RECORD (name TEXT), payload RECORD (commits TEXT)" +
+        ") using json location 'file:///Users/jihoonson/Projects/tajo/tajo-core-tests/src/test/resources/dataset/TestQueryOnSelfDescTable/github'").close();
+
+    ResultSet res = executeString("select " +
+        "  author_mail, count(distinct repo_name) " +
+        "from (\n" +
+        "  select " +
+        "    json_extract_path_text( json_array_get(github.payload.commits, 0), '$.author.email' ) author_mail, " +
+        "    repo.name repo_name " +
+        "  from " +
+        "    github" +
+        "  where " +
+        "    type = 'PushEvent'  \n" +
+        ") t \n" +
+        "group by " +
+        "  author_mail");
+
+    System.out.println(resultSetToString(res));
+
+    executeString("drop table github").close();
+  }
 }
