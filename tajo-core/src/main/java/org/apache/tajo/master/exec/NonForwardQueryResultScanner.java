@@ -37,6 +37,8 @@ public interface NonForwardQueryResultScanner {
   @Deprecated
   List<ByteString> getNextRows(int fetchRowNum) throws IOException;
 
+  List<byte[]> getNextRowsInString(int fetchRowNum) throws IOException;
+
   SerializedResultSet nextRowBlock(int fetchRowNum) throws IOException;
 
   QueryId getQueryId();

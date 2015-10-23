@@ -339,7 +339,8 @@ public class QueryResultResource {
 
       try {
         int start_offset = cachedQueryResultScanner.getCurrentRowNumber();
-        List<ByteString> output = cachedQueryResultScanner.getNextRows(count);
+//        List<ByteString> output = cachedQueryResultScanner.getNextRows(count);
+        List<byte[]> output = cachedQueryResultScanner.getNextRowsInString(count);
         String digestString = getEncodedBase64DigestString(output);
         boolean eos = count != output.size();
 
@@ -360,11 +361,12 @@ public class QueryResultResource {
       }
     }
 
-    private String getEncodedBase64DigestString(List<ByteString> outputList) throws NoSuchAlgorithmException {
+//    private String getEncodedBase64DigestString(List<ByteString> outputList) throws NoSuchAlgorithmException {
+    private String getEncodedBase64DigestString(List<byte[]> outputList) throws NoSuchAlgorithmException {
       MessageDigest messageDigest = MessageDigest.getInstance("SHA-1");
 
-      for (ByteString byteString: outputList) {
-        messageDigest.update(byteString.toByteArray());
+      for (byte[] byteString: outputList) {
+        messageDigest.update(byteString);
       }
 
       return Base64.encodeBase64String(messageDigest.digest());
@@ -373,9 +375,9 @@ public class QueryResultResource {
 
   private static class QueryResultStreamingOutput implements StreamingOutput {
 
-    private final List<ByteString> outputList;
+    private final List<byte[]> outputList;
 
-    public QueryResultStreamingOutput(List<ByteString> outputList) {
+    public QueryResultStreamingOutput(List<byte[]> outputList) {
       this.outputList = outputList;
     }
 
@@ -383,8 +385,8 @@ public class QueryResultResource {
     public void write(OutputStream outputStream) throws IOException, WebApplicationException {
       DataOutputStream streamingOutputStream = new DataOutputStream(new BufferedOutputStream(outputStream));
 
-      for (ByteString byteString: outputList) {
-        byte[] byteStringArray = byteString.toByteArray();
+      for (byte[] byteStringArray: outputList) {
+//        byte[] byteStringArray = byteString.toByteArray();
         streamingOutputStream.writeInt(byteStringArray.length);
         streamingOutputStream.write(byteStringArray);
       }

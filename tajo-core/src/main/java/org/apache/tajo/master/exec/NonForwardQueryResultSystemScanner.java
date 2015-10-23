@@ -22,6 +22,7 @@ import com.google.common.collect.Lists;
 import com.google.protobuf.ByteString;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.io.IOUtils;
 import org.apache.tajo.QueryId;
 import org.apache.tajo.TaskAttemptId;
 import org.apache.tajo.TaskId;
@@ -57,8 +58,12 @@ import org.apache.tajo.storage.RowStoreUtil;
 import org.apache.tajo.storage.RowStoreUtil.RowStoreEncoder;
 import org.apache.tajo.storage.Tuple;
 import org.apache.tajo.storage.VTuple;
+import org.apache.tajo.storage.rcfile.NonSyncByteArrayOutputStream;
+import org.apache.tajo.storage.text.CSVLineSerializer;
+import org.apache.tajo.storage.text.TextLineSerializer;
 import org.apache.tajo.tuple.memory.MemoryBlock;
 import org.apache.tajo.tuple.memory.MemoryRowBlock;
+import org.apache.tajo.unit.StorageUnit;
 import org.apache.tajo.util.KeyValueSet;
 import org.apache.tajo.util.TUtil;
 import org.apache.tajo.worker.TaskAttemptContext;
@@ -87,6 +92,9 @@ public class NonForwardQueryResultSystemScanner implements NonForwardQueryResult
   private PhysicalExec physicalExec;
   private MemoryRowBlock rowBlock;
   private boolean eof;
+
+  private NonSyncByteArrayOutputStream os;
+  private TextLineSerializer serializer;
   
   public NonForwardQueryResultSystemScanner(MasterContext context, LogicalPlan plan, QueryId queryId, 
       String sessionId, int maxRow) {
@@ -153,6 +161,14 @@ public class NonForwardQueryResultSystemScanner implements NonForwardQueryResult
     }
     physicalExec = null;
     currentRow = -1;
+
+    if (serializer != null) {
+      serializer.release();
+    }
+
+    if (os != null) {
+      IOUtils.cleanup(LOG, os);
+    }
   }
   
   private List<Tuple> getTablespaces(Schema outSchema) {
@@ -619,6 +635,50 @@ public class NonForwardQueryResultSystemScanner implements NonForwardQueryResult
     }
     
     return rows;
+  }
+
+  @Override
+  public List<byte[]> getNextRowsInString(int fetchRowNum) throws IOException {
+
+    if (serializer == null) {
+      serializer = new CSVLineSerializer(outSchema, tableDesc.getMeta());
+      serializer.init();
+    }
+
+    if (os == null) {
+      os = new NonSyncByteArrayOutputStream(128 * StorageUnit.KB);
+    }
+
+    int startRow = currentRow;
+    int endRow = startRow + fetchRowNum;
+
+    if (physicalExec == null) {
+      return null;
+    }
+
+    List<byte[]> results = new ArrayList<>();
+    while (currentRow < endRow) {
+      Tuple currentTuple = physicalExec.next();
+
+      if (currentTuple == null) {
+        physicalExec.close();
+        physicalExec = null;
+        break;
+      }
+
+      currentRow++;
+      os.reset();
+      serializer.serialize(os, currentTuple);
+      results.add(os.getData());
+
+      if (currentRow >= maxRow) {
+        physicalExec.close();
+        physicalExec = null;
+        break;
+      }
+    }
+
+    return results;
   }
 
   @Override

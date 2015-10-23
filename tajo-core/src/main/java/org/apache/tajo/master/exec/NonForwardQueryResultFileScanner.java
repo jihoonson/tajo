@@ -24,6 +24,7 @@ import com.google.protobuf.ByteString;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.IOUtils;
 import org.apache.tajo.ExecutionBlockId;
 import org.apache.tajo.QueryId;
 import org.apache.tajo.TaskAttemptId;
@@ -46,8 +47,12 @@ import org.apache.tajo.storage.*;
 import org.apache.tajo.storage.RowStoreUtil.RowStoreEncoder;
 import org.apache.tajo.storage.fragment.Fragment;
 import org.apache.tajo.storage.fragment.FragmentConvertor;
+import org.apache.tajo.storage.rcfile.NonSyncByteArrayOutputStream;
+import org.apache.tajo.storage.text.CSVLineSerializer;
+import org.apache.tajo.storage.text.TextLineSerializer;
 import org.apache.tajo.tuple.memory.MemoryBlock;
 import org.apache.tajo.tuple.memory.MemoryRowBlock;
+import org.apache.tajo.unit.StorageUnit;
 import org.apache.tajo.util.CompressionUtil;
 import org.apache.tajo.util.TUtil;
 import org.apache.tajo.worker.TaskAttemptContext;
@@ -80,6 +85,9 @@ public class NonForwardQueryResultFileScanner implements NonForwardQueryResultSc
   private ExecutorService executor;
   private MemoryRowBlock rowBlock;
   private Future<MemoryRowBlock> nextFetch;
+
+  private NonSyncByteArrayOutputStream os;
+  private TextLineSerializer serializer;
 
   public NonForwardQueryResultFileScanner(TajoConf tajoConf, String sessionId, QueryId queryId, ScanNode scanNode,
                                           int maxRow) throws IOException {
@@ -163,6 +171,14 @@ public class NonForwardQueryResultFileScanner implements NonForwardQueryResultSc
       executor.shutdown();
     }
 
+    if (serializer != null) {
+      serializer.release();
+    }
+
+    if (os != null) {
+      IOUtils.cleanup(LOG, os);
+    }
+
     //remove temporal final output
     if (!tajoConf.getBoolVar(TajoConf.ConfVars.$DEBUG_ENABLED)) {
       Path temporalResultDir = TajoConf.getTemporalResultDir(tajoConf, queryId);
@@ -208,6 +224,49 @@ public class NonForwardQueryResultFileScanner implements NonForwardQueryResultSc
       close();
     }
     return rows;
+  }
+
+  @Override
+  public List<byte[]> getNextRowsInString(int fetchRowNum) throws IOException {
+    if (serializer == null) {
+      serializer = new CSVLineSerializer(tableDesc.getSchema(), tableDesc.getMeta());
+      serializer.init();
+    }
+
+    if (os == null) {
+      os = new NonSyncByteArrayOutputStream(128 * StorageUnit.KB);
+    }
+
+    if (scanExec == null) {
+      return null;
+    }
+    List<byte[]> results = new ArrayList<>();
+    int rowCount = 0;
+    while (!eof) {
+      Tuple tuple = scanExec.next();
+      if (tuple == null) {
+        eof = true;
+        break;
+      }
+
+      os.reset();
+      serializer.serialize(os, tuple);
+      results.add(os.getData());
+      rowCount++;
+      currentNumRows++;
+      if (rowCount >= fetchRowNum) {
+        break;
+      }
+      if (currentNumRows >= maxRow) {
+        eof = true;
+        break;
+      }
+    }
+
+    if(eof) {
+      close();
+    }
+    return results;
   }
 
   @Override
