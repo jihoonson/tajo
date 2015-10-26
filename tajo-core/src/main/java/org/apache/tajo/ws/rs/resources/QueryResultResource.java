@@ -341,11 +341,11 @@ public class QueryResultResource {
         int start_offset = cachedQueryResultScanner.getCurrentRowNumber();
 //        List<ByteString> output = cachedQueryResultScanner.getNextRows(count);
         List<byte[]> output = cachedQueryResultScanner.getNextRowsInString(count);
-        String digestString = getEncodedBase64DigestString(output);
+//        String digestString = getEncodedBase64DigestString(output);
         boolean eos = count != output.size();
 
         return Response.ok(new QueryResultStreamingOutput(output))
-          .header(tajoDigestHeaderName, digestString)
+//          .header(tajoDigestHeaderName, digestString)
           .header(tajoOffsetHeaderName, start_offset)
           .header(tajoCountHeaderName, output.size())
           .header(tajoEOSHeaderName, eos)
@@ -354,10 +354,10 @@ public class QueryResultResource {
         LOG.error(e.getMessage(), e);
 
         return ResourcesUtil.createExceptionResponse(null, e.getMessage());
-      } catch (NoSuchAlgorithmException e) {
-        LOG.error(e.getMessage(), e);
-
-        return ResourcesUtil.createExceptionResponse(null, e.getMessage());
+//      } catch (NoSuchAlgorithmException e) {
+//        LOG.error(e.getMessage(), e);
+//
+//        return ResourcesUtil.createExceptionResponse(null, e.getMessage());
       }
     }
 
@@ -387,8 +387,9 @@ public class QueryResultResource {
 
       for (byte[] byteStringArray: outputList) {
 //        byte[] byteStringArray = byteString.toByteArray();
-        streamingOutputStream.writeInt(byteStringArray.length);
+//        streamingOutputStream.writeInt(byteStringArray.length);
         streamingOutputStream.write(byteStringArray);
+        streamingOutputStream.write("\r\n".getBytes());
       }
 
       streamingOutputStream.flush();

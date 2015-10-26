@@ -18,14 +18,20 @@
 
 package org.apache.tajo.ws.rs.resources;
 
+import io.netty.buffer.ByteBuf;
 import org.apache.commons.codec.binary.Base64;
+import org.apache.tajo.BuiltinStorages;
 import org.apache.tajo.QueryTestCaseBase;
 import org.apache.tajo.TajoConstants;
+import org.apache.tajo.catalog.TableMeta;
 import org.apache.tajo.conf.TajoConf.ConfVars;
 import org.apache.tajo.error.Errors.ResultCode;
 import org.apache.tajo.exception.ErrorUtil;
-import org.apache.tajo.storage.RowStoreUtil;
-import org.apache.tajo.storage.Tuple;
+import org.apache.tajo.storage.*;
+import org.apache.tajo.storage.text.ByteBufLineReader;
+import org.apache.tajo.storage.text.CSVLineDeserializer;
+import org.apache.tajo.util.FileUtil;
+import org.apache.tajo.util.KeyValueSet;
 import org.apache.tajo.util.TUtil;
 import org.apache.tajo.ws.rs.netty.gson.GsonFeature;
 import org.apache.tajo.ws.rs.requests.NewSessionRequest;
@@ -33,6 +39,7 @@ import org.apache.tajo.ws.rs.requests.SubmitQueryRequest;
 import org.apache.tajo.ws.rs.responses.GetQueryResultDataResponse;
 import org.apache.tajo.ws.rs.responses.GetSubmitQueryResponse;
 import org.apache.tajo.ws.rs.responses.NewSessionResponse;
+import org.apache.tools.ant.util.FileUtils;
 import org.glassfish.jersey.client.ClientProperties;
 import org.glassfish.jersey.filter.LoggingFilter;
 import org.junit.After;
@@ -47,13 +54,14 @@ import javax.ws.rs.core.GenericType;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 import javax.ws.rs.core.Response.Status;
-import java.io.BufferedInputStream;
-import java.io.DataInputStream;
-import java.io.EOFException;
-import java.io.InputStream;
+import java.io.*;
 import java.net.URI;
+import java.nio.ByteBuffer;
+import java.nio.channels.Channels;
+import java.nio.channels.ReadableByteChannel;
 import java.security.MessageDigest;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.apache.tajo.exception.ErrorUtil.isOk;
 import static org.junit.Assert.*;
@@ -202,8 +210,8 @@ public class TestQueryResultResource extends QueryTestCaseBase {
         .get();
 
     assertNotNull(queryResultSetResponse);
-    String tajoDigest = queryResultSetResponse.getHeaderString(tajoDigestHeaderName);
-    assertTrue(tajoDigest != null && !tajoDigest.isEmpty());
+//    String tajoDigest = queryResultSetResponse.getHeaderString(tajoDigestHeaderName);
+//    assertTrue(tajoDigest != null && !tajoDigest.isEmpty());
 
     DataInputStream queryResultSetInputStream =
         new DataInputStream(new BufferedInputStream(queryResultSetResponse.readEntity(InputStream.class)));
@@ -212,25 +220,40 @@ public class TestQueryResultResource extends QueryTestCaseBase {
 
     boolean isFinished = false;
     List<Tuple> tupleList = TUtil.newList();
-    RowStoreUtil.RowStoreDecoder decoder = RowStoreUtil.createDecoder(response.getSchema());
-    MessageDigest messageDigest = MessageDigest.getInstance("SHA-1");
+//    RowStoreUtil.RowStoreDecoder decoder = RowStoreUtil.createDecoder(response.getSchema());
+    CSVLineDeserializer deserializer = new CSVLineDeserializer(response.getSchema(), new TableMeta(BuiltinStorages.TEXT, new KeyValueSet()), response.getSchema().toArray());
+    deserializer.init();
+    ByteBufLineReader reader = new ByteBufLineReader(new DataInputChannel(queryResultSetInputStream));
+    AtomicInteger readBytes = new AtomicInteger();
+//    MessageDigest messageDigest = MessageDigest.getInstance("SHA-1");
     while (!isFinished) {
       try {
-        int length = queryResultSetInputStream.readInt();
-        byte[] dataByteArray = new byte[length];
-        int readBytes = queryResultSetInputStream.read(dataByteArray);
+//        int length = queryResultSetInputStream.readInt();
+//        byte[] dataByteArray = new byte[length];
+//        int readBytes = queryResultSetInputStream.read(dataByteArray);
+//
+//        assertEquals(length, readBytes);
+//        messageDigest.update(dataByteArray);
 
-        assertEquals(length, readBytes);
+//        tupleList.add(decoder.toTuple(dataByteArray));
 
-        tupleList.add(decoder.toTuple(dataByteArray));
-        messageDigest.update(dataByteArray);
+        Tuple tuple = new VTuple(response.getSchema().size());
+        deserializer.deserialize(reader.readLineBuf(readBytes), tuple);
+        if (readBytes.get() == 0) {
+          isFinished = true;
+        } else {
+          tupleList.add(tuple);
+        }
+
       } catch (EOFException eof) {
         isFinished = true;
       }
     }
+    reader.close();
+    deserializer.release();
 
     assertEquals(5, tupleList.size());
-    assertEquals(tajoDigest, Base64.encodeBase64String(messageDigest.digest()));
+//    assertEquals(tajoDigest, Base64.encodeBase64String(messageDigest.digest()));
 
     for (Tuple aTuple: tupleList) {
       assertTrue(aTuple.getInt4(response.getSchema().getColumnId("l_orderkey")) > 0);
@@ -302,6 +325,27 @@ public class TestQueryResultResource extends QueryTestCaseBase {
 
     for (Tuple aTuple: tupleList) {
       assertTrue(aTuple.getInt4(response.getSchema().getColumnId("l_orderkey")) > 0);
+    }
+  }
+
+  static class DataInputChannel extends InputChannel {
+
+    private DataInputStream inputStream;
+    private ReadableByteChannel channel;
+
+    public DataInputChannel(DataInputStream inputStream) {
+      this.inputStream = inputStream;
+      this.channel = Channels.newChannel(inputStream);
+    }
+
+    @Override
+    protected void implCloseChannel() throws IOException {
+      FileUtil.cleanup(null, inputStream);
+    }
+
+    @Override
+    public int read(ByteBuffer dst) throws IOException {
+      return channel.read(dst);
     }
   }
 }
