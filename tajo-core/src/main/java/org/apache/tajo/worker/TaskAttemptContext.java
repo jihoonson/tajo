@@ -241,12 +241,8 @@ public class TaskAttemptContext {
   }
   
   public void addPartitionOutputVolume(int partId, long volume) {
-    if (partitionOutputVolume.containsKey(partId)) {
-      long sum = partitionOutputVolume.get(partId);
-      partitionOutputVolume.put(partId, sum + volume);
-    } else {
-      partitionOutputVolume.put(partId, volume);
-    }
+    long sum = partitionOutputVolume.containsKey(partId) ? partitionOutputVolume.get(partId) : 0;
+    partitionOutputVolume.put(partId, sum + volume);
   }
 
   public Map<Integer, Long> getPartitionOutputVolume() {

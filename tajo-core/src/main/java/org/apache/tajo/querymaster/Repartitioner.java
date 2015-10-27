@@ -701,8 +701,11 @@ public class Repartitioner {
     List<ExecutionBlock> childBlocks = masterPlan.getChilds(stage.getId());
     for (ExecutionBlock childBlock : childBlocks) {
       Stage childExecSM = stage.getContext().getStage(childBlock.getId());
-      for (Task qu : childExecSM.getTasks()) {
-        for (IntermediateEntry p : qu.getIntermediateData()) {
+      for (Task task : childExecSM.getTasks()) {
+        for (IntermediateEntry p : task.getIntermediateData()) {
+          if (p.getVolume() == 0) {
+            LOG.info("volume is 0");
+          }
           FetchImpl fetch = new FetchImpl(p.getPullHost(), RANGE_SHUFFLE, childBlock.getId(), 0);
           fetch.addPart(p.getTaskId(), p.getAttemptId());
           fetches.add(fetch);
@@ -717,6 +720,7 @@ public class Repartitioner {
     SortedMap<TupleRange, Collection<FetchImpl>> map;
     map = new TreeMap<>();
 
+    long sum = 0;
     Set<FetchImpl> fetchSet;
     try {
       RowStoreUtil.RowStoreEncoder encoder = RowStoreUtil.createEncoder(sortSchema);
@@ -733,13 +737,19 @@ public class Repartitioner {
           }
           copy.setRangeParams(rangeParam);
           fetchSet.add(copy);
+          copy.setName("");
+          sum += copy.getProto().getSerializedSize();
         }
-        map.put(ranges[i], fetchSet);
+        LOG.info("ranges[i]: " + ranges[i] + ", fetchSet.size(): " + fetchSet.size());
+        if (fetchSet.size() > 0) {
+          map.put(ranges[i], fetchSet);
+        }
       }
       LOG.info("Grouping fetches done");
     } catch (UnsupportedEncodingException e) {
       LOG.error(e);
     }
+    LOG.info("sum: " + sum);
 
     scheduleFetchesByRoundRobin(stage, map, scan.getTableName(), determinedTaskNum);
 
