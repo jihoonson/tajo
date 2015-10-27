@@ -696,6 +696,7 @@ public class Repartitioner {
         new String[]{UNKNOWN_HOST});
     Stage.scheduleFragment(stage, dummyFragment);
 
+    LOG.info("Creating fetches ...");
     List<FetchImpl> fetches = new ArrayList<>();
     List<ExecutionBlock> childBlocks = masterPlan.getChilds(stage.getId());
     for (ExecutionBlock childBlock : childBlocks) {
@@ -708,7 +709,11 @@ public class Repartitioner {
         }
       }
     }
+    LOG.info("Creating fetches done");
 
+    LOG.info("# of fetches (# of tasks x # of intermData): " + fetches.size());
+
+    LOG.info("Grouping fetches ...");
     SortedMap<TupleRange, Collection<FetchImpl>> map;
     map = new TreeMap<>();
 
@@ -731,7 +736,7 @@ public class Repartitioner {
         }
         map.put(ranges[i], fetchSet);
       }
-
+      LOG.info("Grouping fetches done");
     } catch (UnsupportedEncodingException e) {
       LOG.error(e);
     }
