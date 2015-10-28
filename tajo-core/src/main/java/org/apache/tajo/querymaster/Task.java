@@ -614,7 +614,7 @@ public class Task implements EventHandler<TaskEvent> {
       task.succeededWorker = attempt.getWorkerConnectionInfo();
 
       task.finishTask();
-      task.eventHandler.handle(new StageTaskEvent(event.getTaskId(), TaskState.SUCCEEDED));
+      task.eventHandler.handle(new StageTaskEvent(event.getTaskId(), TaskState.SUCCEEDED, attemptEvent.getHistogram()));
     }
   }
 

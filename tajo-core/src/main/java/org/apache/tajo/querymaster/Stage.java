@@ -34,6 +34,7 @@ import org.apache.tajo.catalog.TableDesc;
 import org.apache.tajo.catalog.TableMeta;
 import org.apache.tajo.catalog.proto.CatalogProtos.PartitionDescProto;
 import org.apache.tajo.catalog.statistics.ColumnStats;
+import org.apache.tajo.catalog.statistics.FreqHistogram;
 import org.apache.tajo.catalog.statistics.StatisticsUtil;
 import org.apache.tajo.catalog.statistics.TableStats;
 import org.apache.tajo.conf.TajoConf;
@@ -108,7 +109,7 @@ public class Stage implements EventHandler<StageEvent> {
   private volatile long lastContactTime;
   private Thread timeoutChecker;
 
-
+  private FreqHistogram histogramForRangeShuffle;
 
   private final Map<TaskId, Task> tasks = Maps.newConcurrentMap();
   private final Map<Integer, InetSocketAddress> workerMap = Maps.newConcurrentMap();
@@ -711,6 +712,10 @@ public class Stage implements EventHandler<StageEvent> {
     }
   }
 
+  public void initStatCollect(Schema shuffleKeySchema) {
+    histogramForRangeShuffle = new FreqHistogram(shuffleKeySchema);
+  }
+
   /**
    * Get the launched worker address
    */
@@ -846,40 +851,38 @@ public class Stage implements EventHandler<StageEvent> {
           initTaskScheduler(stage);
           // execute pre-processing asyncronously
           stage.getContext().getQueryMasterContext().getSingleEventExecutor()
-              .submit(new Runnable() {
-                        @Override
-                        public void run() {
-                          try {
-                            schedule(stage);
-                            stage.totalScheduledObjectsCount = stage.getTaskScheduler().remainingScheduledObjectNum();
-                            LOG.info(stage.totalScheduledObjectsCount + " objects are scheduled");
+              .submit(() -> {
+                    try {
+                      schedule(stage);
+                      stage.totalScheduledObjectsCount = stage.getTaskScheduler().remainingScheduledObjectNum();
+                      LOG.info(stage.totalScheduledObjectsCount + " objects are scheduled");
 
-                            if (stage.getTaskScheduler().remainingScheduledObjectNum() == 0) { // if there is no tasks
-                              stage.eventHandler.handle(
-                                  new StageEvent(stage.getId(), StageEventType.SQ_STAGE_COMPLETED));
-                            } else {
-                              if(stage.getSynchronizedState() == StageState.INITED) {
-                                stage.taskScheduler.start();
-                                stage.eventHandler.handle(new StageEvent(stage.getId(), StageEventType.SQ_START));
-                              } else {
+                      if (stage.getTaskScheduler().remainingScheduledObjectNum() == 0) { // if there is no tasks
+                        stage.eventHandler.handle(
+                            new StageEvent(stage.getId(), StageEventType.SQ_STAGE_COMPLETED));
+                      } else {
+                        if(stage.getSynchronizedState() == StageState.INITED) {
+                          stage.taskScheduler.start();
+                          stage.eventHandler.handle(new StageEvent(stage.getId(), StageEventType.SQ_START));
+                        } else {
                                 /* all tasks are killed before stage are inited */
-                                if (stage.getTotalScheduledObjectsCount() == stage.getCompletedTaskCount()) {
-                                  stage.eventHandler.handle(
-                                      new StageEvent(stage.getId(), StageEventType.SQ_STAGE_COMPLETED));
-                                } else {
-                                  stage.eventHandler.handle(
-                                      new StageEvent(stage.getId(), StageEventType.SQ_KILL));
-                                }
-                              }
-                            }
-                          } catch (Throwable e) {
-                            LOG.error("Stage (" + stage.getId() + ") ERROR: ", e);
-                            stage.setFinishTime();
-                            stage.eventHandler.handle(new StageDiagnosticsUpdateEvent(stage.getId(), e.getMessage()));
-                            stage.eventHandler.handle(new StageCompletedEvent(stage.getId(), StageState.ERROR));
+                          if (stage.getTotalScheduledObjectsCount() == stage.getCompletedTaskCount()) {
+                            stage.eventHandler.handle(
+                                new StageEvent(stage.getId(), StageEventType.SQ_STAGE_COMPLETED));
+                          } else {
+                            stage.eventHandler.handle(
+                                new StageEvent(stage.getId(), StageEventType.SQ_KILL));
                           }
                         }
                       }
+                    } catch (Throwable e) {
+                      LOG.error("Stage (" + stage.getId() + ") ERROR: ", e);
+                      stage.setFinishTime();
+                      stage.eventHandler.handle(new StageDiagnosticsUpdateEvent(stage.getId(), e.getMessage()));
+                      stage.eventHandler.handle(new StageCompletedEvent(stage.getId(), StageState.ERROR));
+                    }
+
+                  }
               );
           state = StageState.INITED;
         }
@@ -1231,6 +1234,12 @@ public class Stage implements EventHandler<StageEvent> {
 
         if (taskEvent.getState() == TaskState.SUCCEEDED) {
           stage.succeededObjectCount++;
+          // update histogram
+          if (stage.histogramForRangeShuffle != null) {
+            stage.histogramForRangeShuffle.merge(taskEvent.getHistogram());
+            // refine
+
+          }
         } else if (task.getState() == TaskState.KILLED) {
           stage.killedObjectCount++;
         } else if (task.getState() == TaskState.FAILED) {
@@ -1276,6 +1285,7 @@ public class Stage implements EventHandler<StageEvent> {
     stopExecutionBlock();
     this.finalStageHistory = makeStageHistory();
     this.finalStageHistory.setTasks(makeTaskHistories());
+    this.histogramForRangeShuffle.clear();
   }
 
   public List<IntermediateEntry> getHashShuffleIntermediateEntries() {

@@ -29,7 +29,10 @@ import org.apache.tajo.storage.Tuple;
 import org.apache.tajo.storage.VTuple;
 import org.apache.tajo.util.Pair;
 
-import java.util.*;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 
 public class FreqHistogram implements ProtoObject<FreqHistogramProto>, Cloneable, GsonObject {
   protected Schema keySchema;
@@ -48,11 +51,24 @@ public class FreqHistogram implements ProtoObject<FreqHistogramProto>, Cloneable
   }
 
   public void updateBucket(Tuple startKey, Tuple endKey, long change) {
-    Pair<Tuple, Tuple> key = new Pair<>(startKey, endKey);
+    Tuple startClone = null, endClone = null;
+    try {
+      startClone = startKey.clone();
+      endClone = endKey.clone();
+    } catch (CloneNotSupportedException e) {
+      throw new RuntimeException(e);
+    }
+    Pair<Tuple, Tuple> key = new Pair<>(startClone, endClone);
     if (buckets.containsKey(key)) {
       getBucket(key).incCount(change);
     } else {
-      buckets.put(key, new Bucket(startKey, endKey, change));
+      buckets.put(key, new Bucket(startClone, endClone, change));
+    }
+  }
+
+  public void merge(FreqHistogram other) {
+    for (Bucket eachBucket: other.getAllBuckets()) {
+      updateBucket(eachBucket.startKey, eachBucket.endKey, eachBucket.count);
     }
   }
 
@@ -83,6 +99,9 @@ public class FreqHistogram implements ProtoObject<FreqHistogramProto>, Cloneable
     return builder.build();
   }
 
+  public void clear() {
+    buckets.clear();
+  }
 
   public class Bucket implements ProtoObject<FreqBucketProto>, Cloneable, GsonObject {
     // start and end keys are inclusive

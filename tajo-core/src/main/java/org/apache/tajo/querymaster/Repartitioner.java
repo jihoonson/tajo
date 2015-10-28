@@ -657,6 +657,10 @@ public class Repartitioner {
 
       determinedTaskNum = ranges.length;
     } else {
+      // TODO: create partitions by merging the ranges of the histogram
+      // determinedTaskNum = card > maxNum ? card : maxNum
+      // range의 수가 determinedTaskNum이 될 때까지 histogram의 range들을 merge
+
       RangePartitionAlgorithm partitioner = new UniformRangePartition(mergedRange, sortSpecs);
       BigInteger card = partitioner.getTotalCardinality();
 
@@ -709,8 +713,7 @@ public class Repartitioner {
       }
     }
 
-    SortedMap<TupleRange, Collection<FetchImpl>> map;
-    map = new TreeMap<>();
+    SortedMap<TupleRange, Collection<FetchImpl>> map = new TreeMap<>();
 
     Set<FetchImpl> fetchSet;
     try {
@@ -720,7 +723,7 @@ public class Repartitioner {
         for (FetchImpl fetch: fetches) {
           String rangeParam =
               TupleUtil.rangeToQuery(ranges[i], i == (ranges.length - 1) , encoder);
-          FetchImpl copy = null;
+          FetchImpl copy;
           try {
             copy = fetch.clone();
           } catch (CloneNotSupportedException e) {
@@ -1212,6 +1215,7 @@ public class Repartitioner {
           keys[i] = sort.getSortKeys()[i].getSortKey();
         }
       }
+      stage.initStatCollect(new Schema(channel.getShuffleKeys()));
     }
     if (keys != null) {
       if (keys.length == 0) {
