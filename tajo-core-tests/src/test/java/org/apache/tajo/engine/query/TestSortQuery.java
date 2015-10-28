@@ -28,7 +28,6 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
 import java.sql.ResultSet;
-import java.util.Map;
 
 import static org.junit.Assert.assertEquals;
 

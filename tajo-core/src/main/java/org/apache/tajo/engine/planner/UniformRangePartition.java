@@ -21,8 +21,6 @@ package org.apache.tajo.engine.planner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.sun.tools.javac.util.Convert;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.tajo.catalog.Column;
 import org.apache.tajo.catalog.SortSpec;
 import org.apache.tajo.common.TajoDataTypes;
@@ -47,7 +45,6 @@ import java.util.List;
  * arbitrary base number systems respectively.
  */
 public class UniformRangePartition extends RangePartitionAlgorithm {
-  private final static Log LOG = LogFactory.getLog(UniformRangePartition.class);
   private final TupleRange originalRange;
   private int variableId;
   private BigInteger[] cardForEachDigit;
@@ -101,10 +98,8 @@ public class UniformRangePartition extends RangePartitionAlgorithm {
     this(range, sortSpecs, true);
   }
 
-  long incTime = 0;
   @Override
   public TupleRange[] partition(int partNum) {
-    LOG.info("partition start");
     Preconditions.checkArgument(partNum > 0,
         "The number of partitions must be positive, but the given number: "
             + partNum);
@@ -113,7 +108,6 @@ public class UniformRangePartition extends RangePartitionAlgorithm {
 
     int varId;
     for (varId = 0; varId < cardForEachDigit.length; varId++) {
-      // varId 번 째 까지 곱한게 파티션 수(partNum) 보다 큰 가장 작은 varId를 찾는다
       if (cardForEachDigit[varId].compareTo(BigInteger.valueOf(partNum)) >= 0)
         break;
     }
@@ -132,22 +126,16 @@ public class UniformRangePartition extends RangePartitionAlgorithm {
 
     BigDecimal x = new BigDecimal(reverseCardsForDigit[0]);
 
-    // 가장 마지막 col의 cardinality를 파티션 수로 나눔
     BigInteger term = x.divide(BigDecimal.valueOf(partNum), RoundingMode.CEILING).toBigInteger();
     BigInteger reminder = reverseCardsForDigit[0];
     Tuple last = mergedRange.getStart();
     TupleRange tupleRange;
 
-    LOG.info("while start");
-    incTime = 0;
-    incAndGenRemTime = 0;
     while(reminder.compareTo(BigInteger.ZERO) > 0) {
       if (reminder.compareTo(term) <= 0) { // final one is inclusive
         tupleRange = new TupleRange(sortSpecs, last, mergedRange.getEnd());
       } else {
-        long before = System.currentTimeMillis();
         Tuple next = increment(last, term, variableId);
-        incTime += System.currentTimeMillis() - before;
         tupleRange = new TupleRange(sortSpecs, last, next);
       }
 
@@ -155,9 +143,6 @@ public class UniformRangePartition extends RangePartitionAlgorithm {
       last = ranges.get(ranges.size() - 1).getEnd();
       reminder = reminder.subtract(term);
     }
-    LOG.info("while end");
-    LOG.info("time to incrementAndGetReminder(): " + (incAndGenRemTime) + " ms");
-    LOG.info("time to increment(): " + incTime + " ms");
 
     // Recovering the transformed same bytes tuples into the original start and end keys
     ranges.get(0).setStart(originalRange.getStart());
@@ -435,7 +420,6 @@ public class UniformRangePartition extends RangePartitionAlgorithm {
    * @param interval
    * @return
    */
-  long incAndGenRemTime = 0;
   public Tuple increment(final Tuple last, BigInteger interval, final int baseDigit) {
     BigInteger [] incs = new BigInteger[last.size()];
     boolean [] overflowFlag = new boolean[last.size()];
@@ -464,9 +448,7 @@ public class UniformRangePartition extends RangePartitionAlgorithm {
           throw new RangeOverflowException(mergedRange, last, incs[i].longValue(), sortSpecs[i].isAscending());
         }
         // increment some volume of the serialized one-dimension key space
-        long before = System.currentTimeMillis();
         long rem = incrementAndGetReminder(i, last, value.longValue());
-        incAndGenRemTime += System.currentTimeMillis()-before;
         incs[i] = BigInteger.valueOf(rem);
         incs[i - 1] = incs[i-1].add(BigInteger.ONE);
         overflowFlag[i] = true;

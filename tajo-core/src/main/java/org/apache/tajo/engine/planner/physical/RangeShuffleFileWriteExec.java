@@ -69,7 +69,6 @@ public class RangeShuffleFileWriteExec extends UnaryPhysicalExec {
     }
   }
 
-  @Override
   public void init() throws IOException {
 
     keySchema = PlannerUtil.sortSpecsToSchema(sortSpecs);
@@ -118,7 +117,6 @@ public class RangeShuffleFileWriteExec extends UnaryPhysicalExec {
   public void rescan() throws IOException {
   }
 
-  @Override
   public void close() throws IOException {
     super.close();
 
