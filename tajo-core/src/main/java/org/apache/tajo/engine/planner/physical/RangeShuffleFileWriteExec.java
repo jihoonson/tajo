@@ -28,6 +28,7 @@ import org.apache.tajo.catalog.CatalogUtil;
 import org.apache.tajo.catalog.Schema;
 import org.apache.tajo.catalog.SortSpec;
 import org.apache.tajo.catalog.TableMeta;
+import org.apache.tajo.catalog.statistics.FreqHistogram;
 import org.apache.tajo.conf.TajoConf;
 import org.apache.tajo.engine.planner.KeyProjector;
 import org.apache.tajo.plan.logical.ShuffleFileWriteNode;
@@ -55,6 +56,8 @@ public class RangeShuffleFileWriteExec extends UnaryPhysicalExec {
   private TableMeta meta;
 
   private KeyProjector keyProjector;
+
+  private FreqHistogram freqHistogram;
 
   public RangeShuffleFileWriteExec(final TaskAttemptContext context,
                                    final ShuffleFileWriteNode plan,
@@ -90,6 +93,8 @@ public class RangeShuffleFileWriteExec extends UnaryPhysicalExec {
     this.indexWriter.setLoadNum(100);
     this.indexWriter.open();
 
+    this.freqHistogram = new FreqHistogram(keySchema);
+
     super.init();
   }
 
@@ -104,6 +109,7 @@ public class RangeShuffleFileWriteExec extends UnaryPhysicalExec {
       offset = appender.getOffset();
       appender.addTuple(tuple);
       keyTuple = keyProjector.project(tuple);
+      freqHistogram.updateBucket(keyTuple, keyTuple, 1);
       if (!prevKeyTuple.equals(keyTuple)) {
         indexWriter.write(keyTuple, offset);
         prevKeyTuple.put(keyTuple.getValues());
@@ -128,6 +134,7 @@ public class RangeShuffleFileWriteExec extends UnaryPhysicalExec {
     // Collect statistics data
     context.setResultStats(appender.getStats());
     context.addShuffleFileOutput(0, context.getTaskId().toString());
+    context.setFreqHistogram(freqHistogram);
     appender = null;
     indexWriter = null;
   }

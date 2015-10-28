@@ -356,6 +356,11 @@ public class TaskImpl implements Task {
       } while (it.hasNext());
     }
 
+    if (context.hasFreqHistogram()) {
+      // TODO: range sampling
+      builder.setFreqHistogram(context.getFreqHistogram().getProto());
+    }
+
     return builder.build();
   }
 

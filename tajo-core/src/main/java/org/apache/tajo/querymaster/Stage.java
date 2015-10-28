@@ -108,6 +108,8 @@ public class Stage implements EventHandler<StageEvent> {
   private volatile long lastContactTime;
   private Thread timeoutChecker;
 
+
+
   private final Map<TaskId, Task> tasks = Maps.newConcurrentMap();
   private final Map<Integer, InetSocketAddress> workerMap = Maps.newConcurrentMap();
 
