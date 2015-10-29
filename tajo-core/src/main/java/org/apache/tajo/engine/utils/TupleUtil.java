@@ -23,15 +23,13 @@ import com.google.common.collect.Maps;
 import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.tajo.catalog.Column;
-import org.apache.tajo.catalog.Schema;
-import org.apache.tajo.catalog.SortSpec;
+import org.apache.tajo.catalog.*;
 import org.apache.tajo.catalog.statistics.ColumnStats;
 import org.apache.tajo.datum.DatumFactory;
 import org.apache.tajo.datum.NullDatum;
 import org.apache.tajo.storage.RowStoreUtil;
 import org.apache.tajo.storage.RowStoreUtil.RowStoreEncoder;
-import org.apache.tajo.storage.TupleRange;
+import org.apache.tajo.storage.Tuple;
 import org.apache.tajo.storage.VTuple;
 
 import java.io.UnsupportedEncodingException;
@@ -170,6 +168,7 @@ public class TupleUtil {
       }
       i++;
     }
-    return new TupleRange(sortSpecs, startTuple, endTuple);
+    return new TupleRange(startTuple, endTuple, TupleRangeUtil.createMinBaseTuple(sortSpecs),
+        new BaseTupleComparator(target, sortSpecs));
   }
 }

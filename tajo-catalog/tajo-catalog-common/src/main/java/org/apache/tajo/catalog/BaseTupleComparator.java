@@ -16,17 +16,14 @@
  * limitations under the License.
  */
 
-package org.apache.tajo.storage;
+package org.apache.tajo.catalog;
 
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
-import org.apache.tajo.catalog.Schema;
-import org.apache.tajo.catalog.SortSpec;
 import org.apache.tajo.common.ProtoObject;
 import org.apache.tajo.datum.Datum;
-
-import static org.apache.tajo.catalog.proto.CatalogProtos.TupleComparatorSpecProto;
-import static org.apache.tajo.index.IndexProtos.TupleComparatorProto;
+import org.apache.tajo.storage.StorageProtos.TupleComparatorProto;
+import org.apache.tajo.storage.Tuple;
 
 /**
  * The Comparator class for Tuples
@@ -37,9 +34,9 @@ public class BaseTupleComparator extends TupleComparator implements ProtoObject<
   private final Schema schema;
   private final SortSpec [] sortSpecs;
   private final int[] sortKeyIds;
-  private final boolean[] asc;
-  @SuppressWarnings("unused")
-  private final boolean[] nullFirsts;  
+//  private final boolean[] asc;
+//  @SuppressWarnings("unused")
+//  private final boolean[] nullFirsts;
 
   private Datum left;
   private Datum right;
@@ -56,17 +53,17 @@ public class BaseTupleComparator extends TupleComparator implements ProtoObject<
     this.schema = schema;
     this.sortSpecs = sortKeys;
     this.sortKeyIds = new int[sortKeys.length];
-    this.asc = new boolean[sortKeys.length];
-    this.nullFirsts = new boolean[sortKeys.length];
+//    this.asc = new boolean[sortKeys.length];
+//    this.nullFirsts = new boolean[sortKeys.length];
     for (int i = 0; i < sortKeys.length; i++) {
       if (sortKeys[i].getSortKey().hasQualifier()) {
         this.sortKeyIds[i] = schema.getColumnId(sortKeys[i].getSortKey().getQualifiedName());
       } else {
         this.sortKeyIds[i] = schema.getColumnIdByName(sortKeys[i].getSortKey().getSimpleName());
       }
-          
-      this.asc[i] = sortKeys[i].isAscending();
-      this.nullFirsts[i]= sortKeys[i].isNullFirst();
+
+//      this.asc[i] = sortKeys[i].isAscending();
+//      this.nullFirsts[i]= sortKeys[i].isNullFirst();
     }
   }
 
@@ -78,16 +75,28 @@ public class BaseTupleComparator extends TupleComparator implements ProtoObject<
       sortSpecs[i] = new SortSpec(proto.getSortSpecs(i));
     }
 
-    this.sortKeyIds = new int[proto.getCompSpecsCount()];
-    this.asc = new boolean[proto.getCompSpecsCount()];
-    this.nullFirsts = new boolean[proto.getCompSpecsCount()];
+    this.sortKeyIds = new int[sortSpecs.length];
+//    this.asc = new boolean[sortKeys.length];
+//    this.nullFirsts = new boolean[sortKeys.length];
+    for (int i = 0; i < sortSpecs.length; i++) {
+      if (sortSpecs[i].getSortKey().hasQualifier()) {
+        this.sortKeyIds[i] = schema.getColumnId(sortSpecs[i].getSortKey().getQualifiedName());
+      } else {
+        this.sortKeyIds[i] = schema.getColumnIdByName(sortSpecs[i].getSortKey().getSimpleName());
+      }
 
-    for (int i = 0; i < proto.getCompSpecsCount(); i++) {
-      TupleComparatorSpecProto sortSepcProto = proto.getCompSpecs(i);
-      sortKeyIds[i] = sortSepcProto.getColumnId();
-      asc[i] = sortSepcProto.getAscending();
-      nullFirsts[i] = sortSepcProto.getNullFirst();
+//      this.asc[i] = sortKeys[i].isAscending();
+//      this.nullFirsts[i]= sortKeys[i].isNullFirst();
     }
+//    this.asc = new boolean[proto.getCompSpecsCount()];
+//    this.nullFirsts = new boolean[proto.getCompSpecsCount()];
+
+//    for (int i = 0; i < proto.getCompSpecsCount(); i++) {
+//      TupleComparatorSpecProto sortSepcProto = proto.getCompSpecs(i);
+//      sortKeyIds[i] = sortSepcProto.getColumnId();
+//      asc[i] = sortSepcProto.getAscending();
+//      nullFirsts[i] = sortSepcProto.getNullFirst();
+//    }
   }
 
   public Schema getSchema() {
@@ -104,7 +113,7 @@ public class BaseTupleComparator extends TupleComparator implements ProtoObject<
 
   @Override
   public boolean isAscendingFirstKey() {
-    return this.asc[0];
+    return this.sortSpecs[0].isAscending();
   }
 
   @Override
@@ -121,7 +130,9 @@ public class BaseTupleComparator extends TupleComparator implements ProtoObject<
             compVal = -1;
           }
           if (compVal != 0) {
-            if ((nullFirsts[i] && asc[i]) || (!nullFirsts[i] && !asc[i])) {
+//            if ((nullFirsts[i] && asc[i]) || (!nullFirsts[i] && !asc[i])) {
+            if ((sortSpecs[i].isNullFirst() && sortSpecs[i].isAscending()) ||
+                (!sortSpecs[i].isNullFirst() && !sortSpecs[i].isAscending())) {
               compVal *= -1;
             }
           }
@@ -129,7 +140,8 @@ public class BaseTupleComparator extends TupleComparator implements ProtoObject<
           compVal = 0;
         }
       } else {
-        if (asc[i]) {
+//        if (asc[i]) {
+        if (sortSpecs[i].isAscending()) {
           compVal = left.compareTo(right);
         } else {
           compVal = right.compareTo(left);
@@ -158,8 +170,10 @@ public class BaseTupleComparator extends TupleComparator implements ProtoObject<
 
       for (int i = 0; i < sortKeyIds.length; i++) {
         if (sortKeyIds[i] != other.sortKeyIds[i] ||
-            asc[i] != other.asc[i] ||
-            nullFirsts[i] != other.nullFirsts[i]) {
+//            asc[i] != other.asc[i] ||
+//            nullFirsts[i] != other.nullFirsts[i]) {
+            sortSpecs[i].isAscending() != other.sortSpecs[i].isAscending() ||
+            sortSpecs[i].isNullFirst() != other.sortSpecs[i].isNullFirst()) {
           return false;
         }
       }
@@ -178,14 +192,14 @@ public class BaseTupleComparator extends TupleComparator implements ProtoObject<
       builder.addSortSpecs(sortSpecs[i].getProto());
     }
 
-    TupleComparatorSpecProto.Builder sortSpecBuilder;
-    for (int i = 0; i < sortKeyIds.length; i++) {
-      sortSpecBuilder = TupleComparatorSpecProto.newBuilder();
-      sortSpecBuilder.setColumnId(sortKeyIds[i]);
-      sortSpecBuilder.setAscending(asc[i]);
-      sortSpecBuilder.setNullFirst(nullFirsts[i]);
-      builder.addCompSpecs(sortSpecBuilder);
-    }
+//    TupleComparatorSpecProto.Builder sortSpecBuilder;
+//    for (int i = 0; i < sortKeyIds.length; i++) {
+//      sortSpecBuilder = TupleComparatorSpecProto.newBuilder();
+//      sortSpecBuilder.setColumnId(sortKeyIds[i]);
+//      sortSpecBuilder.setAscending(asc[i]);
+//      sortSpecBuilder.setNullFirst(nullFirsts[i]);
+//      builder.addCompSpecs(sortSpecBuilder);
+//    }
 
     return builder.build();
   }
@@ -197,8 +211,8 @@ public class BaseTupleComparator extends TupleComparator implements ProtoObject<
     String prefix = "";
     for (int i = 0; i < sortKeyIds.length; i++) {
       sb.append(prefix).append("SortKeyId=").append(sortKeyIds[i])
-        .append(",Asc=").append(asc[i])
-        .append(",NullFirst=").append(nullFirsts[i]);
+        .append(",Asc=").append(sortSpecs[i].isAscending())
+        .append(",NullFirst=").append(sortSpecs[i].isNullFirst());
       prefix = " ,";
     }
     return sb.toString();

@@ -19,8 +19,10 @@
 package org.apache.tajo.engine.util;
 
 import org.apache.hadoop.fs.Path;
+import org.apache.tajo.catalog.BaseTupleComparator;
 import org.apache.tajo.catalog.Schema;
 import org.apache.tajo.catalog.SortSpec;
+import org.apache.tajo.catalog.TupleRange;
 import org.apache.tajo.common.TajoDataTypes.Type;
 import org.apache.tajo.datum.Datum;
 import org.apache.tajo.datum.DatumFactory;
@@ -125,7 +127,8 @@ public class TestTupleUtil {
     eTuple.put(5, DatumFactory.createFloat4(150));
     eTuple.put(6, DatumFactory.createFloat8(170));
 
-    RangePartitionAlgorithm partitioner = new UniformRangePartition(new TupleRange(sortSpecs, sTuple, eTuple),
+    RangePartitionAlgorithm partitioner = new UniformRangePartition(new TupleRange(sTuple, eTuple,
+        new BaseTupleComparator(schema, sortSpecs)),
         sortSpecs);
     TupleRange [] ranges = partitioner.partition(5);
     assertTrue(5 <= ranges.length);

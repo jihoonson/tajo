@@ -28,10 +28,7 @@ import org.apache.hadoop.yarn.event.Event;
 import org.apache.hadoop.yarn.event.EventHandler;
 import org.apache.hadoop.yarn.state.*;
 import org.apache.tajo.*;
-import org.apache.tajo.catalog.CatalogUtil;
-import org.apache.tajo.catalog.Schema;
-import org.apache.tajo.catalog.TableDesc;
-import org.apache.tajo.catalog.TableMeta;
+import org.apache.tajo.catalog.*;
 import org.apache.tajo.catalog.proto.CatalogProtos.PartitionDescProto;
 import org.apache.tajo.catalog.statistics.ColumnStats;
 import org.apache.tajo.catalog.statistics.FreqHistogram;
@@ -712,8 +709,12 @@ public class Stage implements EventHandler<StageEvent> {
     }
   }
 
-  public void initStatCollect(Schema shuffleKeySchema) {
-    histogramForRangeShuffle = new FreqHistogram(shuffleKeySchema);
+  public void initStatCollect(Schema shuffleKeySchema, SortSpec[] sortSpecs) {
+    histogramForRangeShuffle = new FreqHistogram(shuffleKeySchema, sortSpecs);
+  }
+
+  public FreqHistogram getHistogramForRangeShuffle() {
+    return histogramForRangeShuffle;
   }
 
   /**

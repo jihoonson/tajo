@@ -24,10 +24,7 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.RawLocalFileSystem;
 import org.apache.hadoop.io.IOUtils;
-import org.apache.tajo.catalog.CatalogUtil;
-import org.apache.tajo.catalog.Schema;
-import org.apache.tajo.catalog.SortSpec;
-import org.apache.tajo.catalog.TableMeta;
+import org.apache.tajo.catalog.*;
 import org.apache.tajo.catalog.statistics.FreqHistogram;
 import org.apache.tajo.conf.TajoConf;
 import org.apache.tajo.engine.planner.KeyProjector;
@@ -93,7 +90,7 @@ public class RangeShuffleFileWriteExec extends UnaryPhysicalExec {
     this.indexWriter.setLoadNum(100);
     this.indexWriter.open();
 
-    this.freqHistogram = new FreqHistogram(keySchema);
+    this.freqHistogram = new FreqHistogram(keySchema, sortSpecs);
 
     super.init();
   }
@@ -103,13 +100,14 @@ public class RangeShuffleFileWriteExec extends UnaryPhysicalExec {
     Tuple tuple;
     Tuple keyTuple;
     Tuple prevKeyTuple = new VTuple(keySchema.size());
+    Tuple keyBase = TupleRangeUtil.createMinBaseTuple(sortSpecs);
     long offset;
 
     while(!context.isStopped() && (tuple = child.next()) != null) {
       offset = appender.getOffset();
       appender.addTuple(tuple);
       keyTuple = keyProjector.project(tuple);
-      freqHistogram.updateBucket(keyTuple, keyTuple, 1);
+      freqHistogram.updateBucket(keyTuple, keyTuple, keyBase, 1);
       if (!prevKeyTuple.equals(keyTuple)) {
         indexWriter.write(keyTuple, offset);
         prevKeyTuple.put(keyTuple.getValues());

@@ -19,7 +19,7 @@
 package org.apache.tajo.engine.planner.physical;
 
 import org.apache.tajo.storage.Tuple;
-import org.apache.tajo.storage.TupleComparator;
+import org.apache.tajo.catalog.TupleComparator;
 
 import java.util.Collections;
 
