@@ -992,7 +992,8 @@ public class HBaseTablespace extends Tablespace {
                       rowKeyFields[i]));
             }
           }
-          tupleRanges.add(new TupleRange(sortSpecs, previousTuple, endTuple));
+          tupleRanges.add(new TupleRange(previousTuple, endTuple, TupleRangeUtil.createMinBaseTuple(sortSpecs),
+              comparator));
           previousTuple = endTuple;
         }
 

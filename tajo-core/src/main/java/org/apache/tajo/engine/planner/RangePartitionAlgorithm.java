@@ -19,9 +19,9 @@
 package org.apache.tajo.engine.planner;
 
 import org.apache.tajo.catalog.SortSpec;
+import org.apache.tajo.catalog.TupleRange;
 import org.apache.tajo.common.TajoDataTypes.DataType;
 import org.apache.tajo.storage.Tuple;
-import org.apache.tajo.storage.TupleRange;
 import org.apache.tajo.util.Bytes;
 import org.apache.tajo.util.BytesUtils;
 import org.apache.tajo.util.StringUtils;
@@ -61,7 +61,7 @@ public abstract class RangePartitionAlgorithm {
    * @return
    */
   public static BigInteger computeCardinality(DataType dataType, TupleRange range, int i,
-                                              boolean inclusive, boolean isAscending) {
+                                              boolean lastInclusive, boolean isAscending) {
     BigInteger columnCard;
 
     Tuple start = range.getStart();
@@ -182,7 +182,7 @@ public abstract class RangePartitionAlgorithm {
         throw new UnsupportedOperationException(dataType + " is not supported yet");
     }
 
-    return inclusive ? columnCard.add(BigInteger.valueOf(1)).abs() : columnCard.abs();
+    return lastInclusive ? columnCard.add(BigInteger.valueOf(1)).abs() : columnCard.abs();
   }
 
   /**

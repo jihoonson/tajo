@@ -55,12 +55,16 @@ import org.apache.hadoop.security.ssl.SSLFactory;
 import org.apache.hadoop.service.AbstractService;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.tajo.catalog.Schema;
+import org.apache.tajo.catalog.TupleComparator;
 import org.apache.tajo.conf.TajoConf;
 import org.apache.tajo.conf.TajoConf.ConfVars;
 import org.apache.tajo.pullserver.retriever.FileChunk;
 import org.apache.tajo.rpc.NettyUtils;
-import org.apache.tajo.storage.*;
+import org.apache.tajo.storage.HashShuffleAppenderManager;
+import org.apache.tajo.storage.RowStoreUtil;
 import org.apache.tajo.storage.RowStoreUtil.RowStoreDecoder;
+import org.apache.tajo.storage.StorageUtil;
+import org.apache.tajo.storage.Tuple;
 import org.apache.tajo.storage.index.bst.BSTIndex;
 
 import java.io.*;

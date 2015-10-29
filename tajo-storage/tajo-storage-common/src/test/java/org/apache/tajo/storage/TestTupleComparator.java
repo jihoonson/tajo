@@ -18,6 +18,7 @@
 
 package org.apache.tajo.storage;
 
+import org.apache.tajo.catalog.BaseTupleComparator;
 import org.apache.tajo.catalog.Schema;
 import org.apache.tajo.catalog.SortSpec;
 import org.apache.tajo.common.TajoDataTypes.Type;

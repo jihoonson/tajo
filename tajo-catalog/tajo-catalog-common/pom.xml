@@ -89,6 +89,7 @@
                 <argument>--proto_path=../../tajo-common/src/main/proto</argument>
                 <argument>--java_out=target/generated-sources/proto</argument>
                 <argument>src/main/proto/CatalogProtos.proto</argument>
+                <argument>src/main/proto/StorageProtos.proto</argument>
               </arguments>
             </configuration>
             <goals>

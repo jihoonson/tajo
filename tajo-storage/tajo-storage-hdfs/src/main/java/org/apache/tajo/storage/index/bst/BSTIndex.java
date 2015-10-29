@@ -25,11 +25,14 @@ import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.tajo.catalog.BaseTupleComparator;
 import org.apache.tajo.catalog.Schema;
+import org.apache.tajo.catalog.TupleComparator;
 import org.apache.tajo.catalog.proto.CatalogProtos.SchemaProto;
 import org.apache.tajo.storage.*;
 import org.apache.tajo.storage.RowStoreUtil.RowStoreDecoder;
 import org.apache.tajo.storage.RowStoreUtil.RowStoreEncoder;
+import org.apache.tajo.storage.StorageProtos.TupleComparatorProto;
 import org.apache.tajo.storage.index.IndexMethod;
 import org.apache.tajo.storage.index.IndexWriter;
 import org.apache.tajo.storage.index.OrderIndexReader;
@@ -41,7 +44,7 @@ import java.util.LinkedList;
 import java.util.Set;
 import java.util.TreeMap;
 
-import static org.apache.tajo.index.IndexProtos.TupleComparatorProto;
+//import static org.apache.tajo.index.IndexProtos.TupleComparatorProto;
 
 /**
  * This is two-level binary search tree index. This is one of the value-list 

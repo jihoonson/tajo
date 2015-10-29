@@ -19,7 +19,7 @@
 package org.apache.tajo.engine.exception;
 
 import org.apache.tajo.storage.Tuple;
-import org.apache.tajo.storage.TupleRange;
+import org.apache.tajo.catalog.TupleRange;
 
 public class RangeOverflowException extends RuntimeException {
   public RangeOverflowException(TupleRange range, Tuple overflowValue, long inc, boolean ascending) {

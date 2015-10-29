@@ -18,14 +18,11 @@
 
 package org.apache.tajo.engine.planner;
 
-import org.apache.tajo.catalog.Schema;
-import org.apache.tajo.catalog.SortSpec;
+import org.apache.tajo.catalog.*;
 import org.apache.tajo.common.TajoDataTypes.Type;
 import org.apache.tajo.datum.DatumFactory;
 import org.apache.tajo.plan.util.PlannerUtil;
-import org.apache.tajo.storage.BaseTupleComparator;
 import org.apache.tajo.storage.Tuple;
-import org.apache.tajo.storage.TupleRange;
 import org.apache.tajo.storage.VTuple;
 import org.junit.Test;
 
@@ -48,7 +45,8 @@ public class TestUniformRangePartition {
     s.put(0, DatumFactory.createInt2((short) 1));
     e.put(0, DatumFactory.createInt2((short) 30000));
 
-    TupleRange expected = new TupleRange(sortSpecs, s, e);
+    TupleRange expected = new TupleRange(s, e, TupleRangeUtil.createMinBaseTuple(sortSpecs), 
+        new BaseTupleComparator(schema, sortSpecs));
 
     UniformRangePartition partitioner = new UniformRangePartition(expected, sortSpecs);
     int partNum = 64;
@@ -79,7 +77,8 @@ public class TestUniformRangePartition {
     s.put(0, DatumFactory.createInt2((short) 30000));
     e.put(0, DatumFactory.createInt2((short) 1));
 
-    TupleRange expected = new TupleRange(sortSpecs, s, e);
+    TupleRange expected = new TupleRange(s, e, TupleRangeUtil.createMinBaseTuple(sortSpecs),
+        new BaseTupleComparator(schema, sortSpecs));
 
     UniformRangePartition partitioner = new UniformRangePartition(expected, sortSpecs);
     int partNum = 64;
@@ -109,7 +108,8 @@ public class TestUniformRangePartition {
     s.put(0, DatumFactory.createInt4(1));
     e.put(0, DatumFactory.createInt4(10000));
 
-    TupleRange expected = new TupleRange(sortSpecs, s, e);
+    TupleRange expected = new TupleRange(s, e, TupleRangeUtil.createMinBaseTuple(sortSpecs),
+        new BaseTupleComparator(schema, sortSpecs));
 
     UniformRangePartition partitioner = new UniformRangePartition(expected, sortSpecs);
     int partNum = 64;
@@ -140,7 +140,8 @@ public class TestUniformRangePartition {
     s.put(0, DatumFactory.createInt4(10000));
     e.put(0, DatumFactory.createInt4(1));
 
-    TupleRange expected = new TupleRange(sortSpecs, s, e);
+    TupleRange expected = new TupleRange(s, e, TupleRangeUtil.createMinBaseTuple(sortSpecs),
+        new BaseTupleComparator(schema, sortSpecs));
 
     UniformRangePartition partitioner = new UniformRangePartition(expected, sortSpecs);
     int partNum = 64;
@@ -170,7 +171,8 @@ public class TestUniformRangePartition {
     s.put(0, DatumFactory.createInt8(1));
     e.put(0, DatumFactory.createInt8(10000));
 
-    TupleRange expected = new TupleRange(sortSpecs, s, e);
+    TupleRange expected = new TupleRange(s, e, TupleRangeUtil.createMinBaseTuple(sortSpecs),
+        new BaseTupleComparator(schema, sortSpecs));
 
     UniformRangePartition partitioner = new UniformRangePartition(expected, sortSpecs);
     int partNum = 64;
@@ -201,7 +203,8 @@ public class TestUniformRangePartition {
     s.put(0, DatumFactory.createInt8(10000));
     e.put(0, DatumFactory.createInt8(1));
 
-    TupleRange expected = new TupleRange(sortSpecs, s, e);
+    TupleRange expected = new TupleRange(s, e, TupleRangeUtil.createMinBaseTuple(sortSpecs),
+        new BaseTupleComparator(schema, sortSpecs));
 
     UniformRangePartition partitioner = new UniformRangePartition(expected, sortSpecs);
     int partNum = 64;
@@ -231,7 +234,8 @@ public class TestUniformRangePartition {
     s.put(0, DatumFactory.createFloat4((float) 1.0));
     e.put(0, DatumFactory.createFloat4((float) 10000.0));
 
-    TupleRange expected = new TupleRange(sortSpecs, s, e);
+    TupleRange expected = new TupleRange(s, e, TupleRangeUtil.createMinBaseTuple(sortSpecs),
+        new BaseTupleComparator(schema, sortSpecs));
 
     UniformRangePartition partitioner = new UniformRangePartition(expected, sortSpecs);
     int partNum = 64;
@@ -262,7 +266,8 @@ public class TestUniformRangePartition {
     s.put(0, DatumFactory.createFloat4((float) 10000.0));
     e.put(0, DatumFactory.createFloat4((float) 1.0));
 
-    TupleRange expected = new TupleRange(sortSpecs, s, e);
+    TupleRange expected = new TupleRange(s, e, TupleRangeUtil.createMinBaseTuple(sortSpecs),
+        new BaseTupleComparator(schema, sortSpecs));
 
     UniformRangePartition partitioner = new UniformRangePartition(expected, sortSpecs);
     int partNum = 64;
@@ -292,7 +297,8 @@ public class TestUniformRangePartition {
     s.put(0, DatumFactory.createFloat8(1.0));
     e.put(0, DatumFactory.createFloat8(10000.0));
 
-    TupleRange expected = new TupleRange(sortSpecs, s, e);
+    TupleRange expected = new TupleRange(s, e, TupleRangeUtil.createMinBaseTuple(sortSpecs),
+        new BaseTupleComparator(schema, sortSpecs));
 
     UniformRangePartition partitioner = new UniformRangePartition(expected, sortSpecs);
     int partNum = 64;
@@ -323,7 +329,8 @@ public class TestUniformRangePartition {
     s.put(0, DatumFactory.createFloat8((float) 10000.0));
     e.put(0, DatumFactory.createFloat8((float) 1.0));
 
-    TupleRange expected = new TupleRange(sortSpecs, s, e);
+    TupleRange expected = new TupleRange(s, e, TupleRangeUtil.createMinBaseTuple(sortSpecs),
+        new BaseTupleComparator(schema, sortSpecs));
 
     UniformRangePartition partitioner = new UniformRangePartition(expected, sortSpecs);
     int partNum = 64;
@@ -359,7 +366,8 @@ public class TestUniformRangePartition {
     e.put(0, DatumFactory.createText("D"));
     e.put(1, DatumFactory.createText("C"));
 
-    TupleRange expected = new TupleRange(sortSpecs, s, e);
+    TupleRange expected = new TupleRange(s, e, TupleRangeUtil.createMinBaseTuple(sortSpecs),
+        new BaseTupleComparator(schema, sortSpecs));
 
     UniformRangePartition partitioner = new UniformRangePartition(expected, sortSpecs);
     assertEquals(12, partitioner.getTotalCardinality().intValue());
@@ -406,7 +414,8 @@ public class TestUniformRangePartition {
     e.put(0, DatumFactory.createText("D"));
     e.put(1, DatumFactory.createText("C"));
 
-    TupleRange expected = new TupleRange(sortSpecs, s, e);
+    TupleRange expected = new TupleRange(s, e, TupleRangeUtil.createMinBaseTuple(sortSpecs),
+        new BaseTupleComparator(schema, sortSpecs));
 
     UniformRangePartition partitioner = new UniformRangePartition(expected, sortSpecs);
     assertEquals(12, partitioner.getTotalCardinality().intValue());
@@ -454,7 +463,8 @@ public class TestUniformRangePartition {
     e.put(1, DatumFactory.createText("B")); //  2
     e.put(2, DatumFactory.createText("C")); // x3 = 24
 
-    TupleRange expected = new TupleRange(sortSpecs, s, e);
+    TupleRange expected = new TupleRange(s, e, TupleRangeUtil.createMinBaseTuple(sortSpecs),
+        new BaseTupleComparator(schema, sortSpecs));
 
     UniformRangePartition partitioner = new UniformRangePartition(expected, sortSpecs);
     assertEquals(24, partitioner.getTotalCardinality().intValue());
@@ -481,7 +491,8 @@ public class TestUniformRangePartition {
     VTuple e = new VTuple(1);
     e.put(0, DatumFactory.createText("하하하"));
 
-    TupleRange expected = new TupleRange(sortSpecs, s, e);
+    TupleRange expected = new TupleRange(s, e, TupleRangeUtil.createMinBaseTuple(sortSpecs),
+        new BaseTupleComparator(schema, sortSpecs));
 
     UniformRangePartition partitioner = new UniformRangePartition(expected, sortSpecs);
     BaseTupleComparator comp = new BaseTupleComparator(schema, sortSpecs);
@@ -509,7 +520,8 @@ public class TestUniformRangePartition {
     VTuple e = new VTuple(1);
     e.put(0, DatumFactory.createText("다"));
 
-    TupleRange expected = new TupleRange(sortSpecs, s, e);
+    TupleRange expected = new TupleRange(s, e, TupleRangeUtil.createMinBaseTuple(sortSpecs),
+        new BaseTupleComparator(schema, sortSpecs));
 
     UniformRangePartition partitioner = new UniformRangePartition(expected, sortSpecs);
     int partNum = 1;
@@ -539,7 +551,8 @@ public class TestUniformRangePartition {
     VTuple e = new VTuple(1);
     e.put(0, DatumFactory.createText("꽥"));
 
-    TupleRange expected = new TupleRange(sortSpecs, s, e);
+    TupleRange expected = new TupleRange(s, e, TupleRangeUtil.createMinBaseTuple(sortSpecs),
+        new BaseTupleComparator(schema, sortSpecs));
 
     UniformRangePartition partitioner = new UniformRangePartition(expected, sortSpecs);
     int partNum = 8;
@@ -569,7 +582,8 @@ public class TestUniformRangePartition {
     s.put(0, DatumFactory.createText("가가가"));
     e.put(0, DatumFactory.createText("하하하"));
 
-    TupleRange expected = new TupleRange(sortSpecs, s, e);
+    TupleRange expected = new TupleRange(s, e, TupleRangeUtil.createMinBaseTuple(sortSpecs),
+        new BaseTupleComparator(schema, sortSpecs));
 
     UniformRangePartition partitioner = new UniformRangePartition(expected, sortSpecs);
     int partNum = 64;
@@ -599,7 +613,8 @@ public class TestUniformRangePartition {
     s.put(0, DatumFactory.createText("가"));
     e.put(0, DatumFactory.createText("하하하"));
 
-    TupleRange expected = new TupleRange(sortSpecs, s, e);
+    TupleRange expected = new TupleRange(s, e, TupleRangeUtil.createMinBaseTuple(sortSpecs),
+        new BaseTupleComparator(schema, sortSpecs));
 
     UniformRangePartition partitioner = new UniformRangePartition(expected, sortSpecs);
     int partNum = 64;
@@ -629,7 +644,8 @@ public class TestUniformRangePartition {
     s.put(0, DatumFactory.createText("가가가"));
     e.put(0, DatumFactory.createText("하"));
 
-    TupleRange expected = new TupleRange(sortSpecs, s, e);
+    TupleRange expected = new TupleRange(s, e, TupleRangeUtil.createMinBaseTuple(sortSpecs),
+        new BaseTupleComparator(schema, sortSpecs));
 
     UniformRangePartition partitioner = new UniformRangePartition(expected, sortSpecs);
     int partNum = 64;
@@ -660,7 +676,8 @@ public class TestUniformRangePartition {
     s.put(0, DatumFactory.createText("하하하"));
     e.put(0, DatumFactory.createText("가가가"));
 
-    TupleRange expected = new TupleRange(sortSpecs, s, e);
+    TupleRange expected = new TupleRange(s, e, TupleRangeUtil.createMinBaseTuple(sortSpecs),
+        new BaseTupleComparator(schema, sortSpecs));
 
     UniformRangePartition partitioner = new UniformRangePartition(expected, sortSpecs);
     int partNum = 64;
@@ -691,7 +708,8 @@ public class TestUniformRangePartition {
     s.put(0, DatumFactory.createText("하"));
     e.put(0, DatumFactory.createText("가가가"));
 
-    TupleRange expected = new TupleRange(sortSpecs, s, e);
+    TupleRange expected = new TupleRange(s, e, TupleRangeUtil.createMinBaseTuple(sortSpecs),
+        new BaseTupleComparator(schema, sortSpecs));
 
     UniformRangePartition partitioner = new UniformRangePartition(expected, sortSpecs);
     int partNum = 64;
@@ -722,7 +740,8 @@ public class TestUniformRangePartition {
     s.put(0, DatumFactory.createText("하"));
     e.put(0, DatumFactory.createText("가가가"));
 
-    TupleRange expected = new TupleRange(sortSpecs, s, e);
+    TupleRange expected = new TupleRange(s, e, TupleRangeUtil.createMinBaseTuple(sortSpecs),
+        new BaseTupleComparator(schema, sortSpecs));
 
     UniformRangePartition partitioner = new UniformRangePartition(expected, sortSpecs);
     int partNum = 64;
@@ -755,7 +774,8 @@ public class TestUniformRangePartition {
     e.put(0, DatumFactory.createInt8(19));
     e.put(1, DatumFactory.createInt8(39));
 
-    TupleRange expected = new TupleRange(sortSpecs, s, e);
+    TupleRange expected = new TupleRange(s, e, TupleRangeUtil.createMinBaseTuple(sortSpecs),
+        new BaseTupleComparator(schema, sortSpecs));
 
     UniformRangePartition partitioner = new UniformRangePartition(expected, sortSpecs);
     assertEquals(200, partitioner.getTotalCardinality().longValue());
@@ -785,7 +805,8 @@ public class TestUniformRangePartition {
     e.put(1, DatumFactory.createInt8(2)); // 2
     e.put(2, DatumFactory.createInt8(3)); //x3 = 24
 
-    TupleRange expected = new TupleRange(sortSpecs, s, e);
+    TupleRange expected = new TupleRange(s, e, TupleRangeUtil.createMinBaseTuple(sortSpecs),
+        new BaseTupleComparator(schema, sortSpecs));
 
     UniformRangePartition partitioner = new UniformRangePartition(expected, sortSpecs);
     assertEquals(24, partitioner.getTotalCardinality().longValue());
@@ -818,7 +839,8 @@ public class TestUniformRangePartition {
     e.put(1, DatumFactory.createFloat8(2.1d)); // 2
     e.put(2, DatumFactory.createFloat8(3.1d)); //x3 = 24
 
-    TupleRange expected = new TupleRange(sortSpecs, s, e);
+    TupleRange expected = new TupleRange(s, e, TupleRangeUtil.createMinBaseTuple(sortSpecs),
+        new BaseTupleComparator(schema, sortSpecs));
 
     UniformRangePartition partitioner = new UniformRangePartition(expected, sortSpecs);
     assertEquals(24, partitioner.getTotalCardinality().longValue());
@@ -851,7 +873,8 @@ public class TestUniformRangePartition {
     e.put(1, DatumFactory.createInet4("127.0.0.2")); // 2
     e.put(2, DatumFactory.createInet4("128.0.0.255")); //x3 = 24
 
-    TupleRange expected = new TupleRange(sortSpecs, s, e);
+    TupleRange expected = new TupleRange(s, e, TupleRangeUtil.createMinBaseTuple(sortSpecs),
+        new BaseTupleComparator(schema, sortSpecs));
 
     UniformRangePartition partitioner = new UniformRangePartition(expected, sortSpecs);
     assertEquals(24, partitioner.getTotalCardinality().longValue());
@@ -880,7 +903,8 @@ public class TestUniformRangePartition {
     VTuple e = new VTuple(2);
     e.put(0, DatumFactory.createText("R"));
     e.put(1, DatumFactory.createText("O"));
-    TupleRange expected = new TupleRange(sortSpecs, s, e);
+    TupleRange expected = new TupleRange(s, e, TupleRangeUtil.createMinBaseTuple(sortSpecs),
+        new BaseTupleComparator(schema, sortSpecs));
     RangePartitionAlgorithm partitioner
         = new UniformRangePartition(expected, sortSpecs, true);
     TupleRange [] ranges = partitioner.partition(31);
@@ -909,7 +933,8 @@ public class TestUniformRangePartition {
     VTuple e = new VTuple(2);
     e.put(0, DatumFactory.createText("R"));
     e.put(1, DatumFactory.createText("O"));
-    TupleRange expected = new TupleRange(sortSpecs, s, e);
+    TupleRange expected = new TupleRange(s, e, TupleRangeUtil.createMinBaseTuple(sortSpecs),
+        new BaseTupleComparator(schema, sortSpecs));
     RangePartitionAlgorithm partitioner =
         new UniformRangePartition(expected, sortSpecs, true);
     TupleRange [] ranges = partitioner.partition(1);
@@ -931,7 +956,8 @@ public class TestUniformRangePartition {
     VTuple e = new VTuple(2);
     e.put(0, DatumFactory.createText("R"));
     e.put(1, DatumFactory.createNullDatum());
-    TupleRange expected = new TupleRange(sortSpecs, s, e);
+    TupleRange expected = new TupleRange(s, e, TupleRangeUtil.createMinBaseTuple(sortSpecs),
+        new BaseTupleComparator(schema, sortSpecs));
     RangePartitionAlgorithm partitioner =
         new UniformRangePartition(expected, sortSpecs, true);
     TupleRange [] ranges = partitioner.partition(1);
@@ -951,7 +977,8 @@ public class TestUniformRangePartition {
     VTuple e = new VTuple(1);
     e.put(0, DatumFactory.createText("ZZZ"));
 
-    TupleRange expected = new TupleRange(sortSpecs, s, e);
+    TupleRange expected = new TupleRange(s, e, TupleRangeUtil.createMinBaseTuple(sortSpecs),
+        new BaseTupleComparator(schema, sortSpecs));
     RangePartitionAlgorithm partitioner =
         new UniformRangePartition(expected, sortSpecs, true);
     TupleRange [] ranges = partitioner.partition(48);
@@ -982,7 +1009,8 @@ public class TestUniformRangePartition {
 
     final int partNum = 2;
 
-    TupleRange expected = new TupleRange(sortSpecs, s, e);
+    TupleRange expected = new TupleRange(s, e, TupleRangeUtil.createMinBaseTuple(sortSpecs),
+        new BaseTupleComparator(schema, sortSpecs));
     RangePartitionAlgorithm partitioner =
         new UniformRangePartition(expected, sortSpecs, true);
     TupleRange [] ranges = partitioner.partition(partNum);
@@ -1014,7 +1042,8 @@ public class TestUniformRangePartition {
 
     final int partNum = 48;
 
-    TupleRange expected = new TupleRange(sortSpecs, s, e);
+    TupleRange expected = new TupleRange(s, e, TupleRangeUtil.createMinBaseTuple(sortSpecs),
+        new BaseTupleComparator(schema, sortSpecs));
     RangePartitionAlgorithm partitioner =
         new UniformRangePartition(expected, sortSpecs, true);
     TupleRange [] ranges = partitioner.partition(partNum);
@@ -1045,7 +1074,8 @@ public class TestUniformRangePartition {
 
     final int partNum = 4;
 
-    TupleRange expected = new TupleRange(sortSpecs, s, e);
+    TupleRange expected = new TupleRange(s, e, TupleRangeUtil.createMinBaseTuple(sortSpecs),
+        new BaseTupleComparator(schema, sortSpecs));
     RangePartitionAlgorithm partitioner =
         new UniformRangePartition(expected, sortSpecs, true);
     TupleRange [] ranges = partitioner.partition(partNum);
@@ -1076,7 +1106,8 @@ public class TestUniformRangePartition {
     VTuple e = new VTuple(2);
     e.put(0, DatumFactory.createNullDatum());
     e.put(1, DatumFactory.createNullDatum());
-    TupleRange expected = new TupleRange(sortSpecs, s, e);
+    TupleRange expected = new TupleRange(s, e, TupleRangeUtil.createMinBaseTuple(sortSpecs),
+        new BaseTupleComparator(schema, sortSpecs));
     RangePartitionAlgorithm partitioner =
         new UniformRangePartition(expected, sortSpecs, true);
     TupleRange [] ranges = partitioner.partition(1);
@@ -1098,7 +1129,8 @@ public class TestUniformRangePartition {
     VTuple e = new VTuple(2);
     e.put(0, DatumFactory.createNullDatum());
     e.put(1, DatumFactory.createText("O"));
-    TupleRange expected = new TupleRange(sortSpecs, s, e);
+    TupleRange expected = new TupleRange(s, e, TupleRangeUtil.createMinBaseTuple(sortSpecs),
+        new BaseTupleComparator(schema, sortSpecs));
     RangePartitionAlgorithm partitioner
         = new UniformRangePartition(expected, sortSpecs, true);
     TupleRange [] ranges = partitioner.partition(10);
@@ -1127,7 +1159,8 @@ public class TestUniformRangePartition {
     VTuple e = new VTuple(2);
     e.put(0, DatumFactory.createInet4("127.0.1.20"));
     e.put(1, DatumFactory.createInet4("127.0.2.20"));
-    TupleRange expected = new TupleRange(sortSpecs, s, e);
+    TupleRange expected = new TupleRange(s, e, TupleRangeUtil.createMinBaseTuple(sortSpecs),
+        new BaseTupleComparator(schema, sortSpecs));
     RangePartitionAlgorithm partitioner
         = new UniformRangePartition(expected, sortSpecs, true);
     TupleRange [] ranges = partitioner.partition(10);

@@ -162,7 +162,8 @@ public class TestSortExec {
     s.put(0, DatumFactory.createInt8(0));
     VTuple e = new VTuple(1);
     e.put(0, DatumFactory.createInt8(6000000000l));
-    TupleRange expected = new TupleRange(sortSpecs, s, e);
+    TupleRange expected = new TupleRange(s, e, TupleRangeUtil.createMinBaseTuple(sortSpecs),
+        new BaseTupleComparator(schema, sortSpecs));
     RangePartitionAlgorithm partitioner
         = new UniformRangePartition(expected, sortSpecs, true);
     TupleRange [] ranges = partitioner.partition(967);
