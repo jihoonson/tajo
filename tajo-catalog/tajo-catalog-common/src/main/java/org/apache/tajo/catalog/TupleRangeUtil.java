@@ -18,6 +18,7 @@
 
 package org.apache.tajo.catalog;
 
+import com.google.common.base.Preconditions;
 import org.apache.tajo.common.TajoDataTypes.DataType;
 import org.apache.tajo.datum.Datum;
 import org.apache.tajo.datum.DatumFactory;
@@ -26,6 +27,11 @@ import org.apache.tajo.exception.NotImplementedException;
 import org.apache.tajo.exception.TajoInternalError;
 import org.apache.tajo.storage.Tuple;
 import org.apache.tajo.storage.VTuple;
+import org.apache.tajo.util.Bytes;
+import org.apache.tajo.util.BytesUtils;
+import org.apache.tajo.util.StringUtils;
+
+import java.math.BigInteger;
 
 public class TupleRangeUtil {
 
@@ -93,5 +99,131 @@ public class TupleRangeUtil {
 
     }
     return null;
+  }
+
+  public static Tuple addTuple(Schema schema, Tuple t1, Tuple t2) {
+    Preconditions.checkArgument(t1.size() == t2.size(), "Tuples must have the same length.");
+    Preconditions.checkArgument(t1.size() == schema.size(), "Schema has a different length from the tuple.");
+
+    Tuple out = new VTuple(schema.size());
+
+    for (int i = 0; i < schema.size(); i++) {
+      DataType dataType = schema.getColumn(i).getDataType();
+      switch (dataType.getType()) {
+        case BOOLEAN:
+          if (t1.getBool(i) || t2.getBool(i)) {
+            out.put(i, DatumFactory.createBool(true));
+          } else {
+            out.put(i, DatumFactory.createBool(false));
+          }
+          break;
+        case CHAR:
+          out.put(i, DatumFactory.createChar(t1.getChar(i) + t2.getChar(i)));
+          break;
+        case BIT:
+          if (isAsct2ing) {
+            columnCard = BigInteger.valueOf(t2.getByte(i) - t1.getByte(i));
+          } else {
+            columnCard = BigInteger.valueOf(t1.getByte(i) - t2.getByte(i));
+          }
+          break;
+        case INT2:
+          if (isAsct2ing) {
+            columnCard = BigInteger.valueOf(t2.getInt2(i) - t1.getInt2(i));
+          } else {
+            columnCard = BigInteger.valueOf(t1.getInt2(i) - t2.getInt2(i));
+          }
+          break;
+        case INT4:
+          if (isAsct2ing) {
+            columnCard = BigInteger.valueOf(t2.getInt4(i) - t1.getInt4(i));
+          } else {
+            columnCard = BigInteger.valueOf(t1.getInt4(i) - t2.getInt4(i));
+          }
+          break;
+        case INT8:
+        case TIME:
+        case TIMESTAMP:
+          if (isAsct2ing) {
+            columnCard = BigInteger.valueOf(t2.getInt8(i) - t1.getInt8(i));
+          } else {
+            columnCard = BigInteger.valueOf(t1.getInt8(i) - t2.getInt8(i));
+          }
+          break;
+        case FLOAT4:
+          if (isAsct2ing) {
+            columnCard = BigInteger.valueOf(t2.getInt4(i) - t1.getInt4(i));
+          } else {
+            columnCard = BigInteger.valueOf(t1.getInt4(i) - t2.getInt4(i));
+          }
+          break;
+        case FLOAT8:
+          if (isAsct2ing) {
+            columnCard = BigInteger.valueOf(t2.getInt8(i) - t1.getInt8(i));
+          } else {
+            columnCard = BigInteger.valueOf(t1.getInt8(i) - t2.getInt8(i));
+          }
+          break;
+        case TEXT: {
+          boolean isPureAscii = StringUtils.isPureAscii(t1.getText(i)) && StringUtils.isPureAscii(t2.getText(i));
+
+          if (isPureAscii) {
+            byte[] a;
+            byte[] b;
+            if (isAsct2ing) {
+              a = t1.getBytes(i);
+              b = t2.getBytes(i);
+            } else {
+              b = t1.getBytes(i);
+              a = t2.getBytes(i);
+            }
+
+            byte[][] padded = BytesUtils.padBytes(a, b);
+            a = padded[0];
+            b = padded[1];
+
+            byte[] prependHeader = {1, 0};
+            final BigInteger startBI = new BigInteger(Bytes.add(prependHeader, a));
+            final BigInteger stopBI = new BigInteger(Bytes.add(prependHeader, b));
+            BigInteger diffBI = stopBI.subtract(startBI);
+            columnCard = diffBI;
+          } else {
+            char[] a;
+            char[] b;
+
+            if (isAsct2ing) {
+              a = t1.getUnicodeChars(i);
+              b = t2.getUnicodeChars(i);
+            } else {
+              b = t1.getUnicodeChars(i);
+              a = t2.getUnicodeChars(i);
+            }
+
+            BigInteger startBI = UniformRangePartition.charsToBigInteger(a);
+            BigInteger stopBI = UniformRangePartition.charsToBigInteger(b);
+
+            BigInteger diffBI = stopBI.subtract(startBI);
+            columnCard = diffBI;
+          }
+          break;
+        }
+        case DATE:
+          if (isAsct2ing) {
+            columnCard = BigInteger.valueOf(t2.getInt4(i) - t1.getInt4(i));
+          } else {
+            columnCard = BigInteger.valueOf(t1.getInt4(i) - t2.getInt4(i));
+          }
+          break;
+        case INET4:
+          if (isAsct2ing) {
+            columnCard = BigInteger.valueOf(t2.getInt4(i) - t1.getInt4(i));
+          } else {
+            columnCard = BigInteger.valueOf(t1.getInt4(i) - t2.getInt4(i));
+          }
+          break;
+        default:
+          throw new UnsupportedOperationException(dataType + " is not supported yet");
+      }
+    }
   }
 }
