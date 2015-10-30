@@ -78,7 +78,7 @@ public class UniformRangePartition extends RangePartitionAlgorithm {
     normalize(sortSpecs, this.mergedRange);
 
     for (int i = 0; i < sortSpecs.length; i++) {
-      colCards[i] =  computeCardinality(sortSpecs[i].getSortKey().getDataType(), entireRange, i,
+      colCards[i] =  TupleRangeUtil.computeCardinality(sortSpecs[i].getSortKey().getDataType(), entireRange, i,
           inclusive, sortSpecs[i].isAscending());
     }
 
@@ -324,8 +324,8 @@ public class UniformRangePartition extends RangePartitionAlgorithm {
 
           Preconditions.checkState(lastChars.length == endChars.length);
 
-          BigInteger lastBi = charsToBigInteger(lastChars);
-          BigInteger endBi = charsToBigInteger(endChars);
+          BigInteger lastBi = TupleRangeUtil.charsToBigInteger(lastChars);
+          BigInteger endBi = TupleRangeUtil.charsToBigInteger(endChars);
 
           if (sortSpecs[colId].isAscending()) {
             candidate = incDecimal.add(new BigDecimal(lastBi));
@@ -702,20 +702,5 @@ public class UniformRangePartition extends RangePartitionAlgorithm {
     }
 
     return end;
-  }
-
-  public static BigInteger charsToBigInteger(char [] chars) {
-    BigInteger digitBase;
-    BigInteger sum = BigInteger.ZERO;
-    for (int i = chars.length - 1; i >= 0; i--) {
-      BigInteger charVal = BigInteger.valueOf(chars[(chars.length - 1) - i]);
-      if (i > 0) {
-        digitBase = charVal.multiply(BigInteger.valueOf(TextDatum.UNICODE_CHAR_BITS_NUM).pow(i));
-        sum = sum.add(digitBase);
-      } else {
-        sum = sum.add(charVal);
-      }
-    }
-    return sum;
   }
 }

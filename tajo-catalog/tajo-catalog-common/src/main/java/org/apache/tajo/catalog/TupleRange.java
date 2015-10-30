@@ -66,16 +66,16 @@ public class TupleRange implements Comparable<TupleRange>, Cloneable {
     this.base = base;
   }
 
-  public TupleRange add(TupleRange other) {
-    Preconditions.checkArgument(base.equals(other.getBase()));
-    Preconditions.checkArgument(TupleRangeUtil.diff(this, other).equals(base));
-
-    if (this.compareTo(other) < 0) {
-      return new TupleRange(this.start, other.end, this.base, comp);
-    } else {
-      return new TupleRange(other.start, this.end, this.base, comp);
-    }
-  }
+//  public TupleRange add(TupleRange other) {
+//    Preconditions.checkArgument(base.equals(other.getBase()));
+//    Preconditions.checkArgument(TupleRangeUtil.diff(this, other).equals(base));
+//
+//    if (this.compareTo(other) < 0) {
+//      return new TupleRange(this.start, other.end, this.base, comp);
+//    } else {
+//      return new TupleRange(other.start, this.end, this.base, comp);
+//    }
+//  }
 
   public String toString() {
     return "[" + this.start + ", " + this.end + ", base: " + this.base + "]";

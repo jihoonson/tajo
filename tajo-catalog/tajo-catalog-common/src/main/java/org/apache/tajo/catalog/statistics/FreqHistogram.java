@@ -18,34 +18,36 @@
 
 package org.apache.tajo.catalog.statistics;
 
-import com.google.common.base.Preconditions;
 import com.google.protobuf.ByteString;
 import org.apache.tajo.catalog.*;
 import org.apache.tajo.catalog.proto.CatalogProtos.FreqBucketProto;
 import org.apache.tajo.catalog.proto.CatalogProtos.FreqHistogramProto;
 import org.apache.tajo.common.ProtoObject;
+import org.apache.tajo.common.TajoDataTypes.Type;
+import org.apache.tajo.datum.Datum;
 import org.apache.tajo.datum.DatumFactory;
 import org.apache.tajo.json.GsonObject;
 import org.apache.tajo.storage.Tuple;
 import org.apache.tajo.storage.VTuple;
 
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Map;
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.math.MathContext;
+import java.math.RoundingMode;
+import java.util.*;
 
 /**
  * Frequency histogram
  */
 public class FreqHistogram implements ProtoObject<FreqHistogramProto>, Cloneable, GsonObject {
-  protected final Schema keySchema;
-  protected final SortSpec[] sortSpec;
+  protected final Schema keySchema; // TODO: remove
+  protected final SortSpec[] sortSpecs;
   protected final Map<TupleRange, Bucket> buckets = new HashMap<>();
   protected final TupleComparator comparator;
 
   public FreqHistogram(Schema keySchema, SortSpec[] sortSpec) {
     this.keySchema = keySchema;
-    this.sortSpec = sortSpec;
+    this.sortSpecs = sortSpec;
     this.comparator = new BaseTupleComparator(keySchema, sortSpec);
   }
 
@@ -58,11 +60,11 @@ public class FreqHistogram implements ProtoObject<FreqHistogramProto>, Cloneable
 
   public FreqHistogram(FreqHistogramProto proto) {
     keySchema = new Schema(proto.getSchema());
-    sortSpec = new SortSpec[proto.getSortSpecCount()];
-    for (int i = 0; i < sortSpec.length; i++) {
-      sortSpec[i] = new SortSpec(proto.getSortSpec(i));
+    sortSpecs = new SortSpec[proto.getSortSpecCount()];
+    for (int i = 0; i < sortSpecs.length; i++) {
+      sortSpecs[i] = new SortSpec(proto.getSortSpec(i));
     }
-    this.comparator = new BaseTupleComparator(keySchema, sortSpec);
+    this.comparator = new BaseTupleComparator(keySchema, sortSpecs);
     for (FreqBucketProto eachBucketProto : proto.getBucketsList()) {
       Bucket bucket = new Bucket(eachBucketProto);
       buckets.put(bucket.key, bucket);
@@ -74,7 +76,7 @@ public class FreqHistogram implements ProtoObject<FreqHistogramProto>, Cloneable
   }
 
   public SortSpec[] getSortSpecs() {
-    return sortSpec;
+    return sortSpecs;
   }
 
   public void updateBucket(Tuple startKey, Tuple endKey, Tuple base, long change) {
@@ -90,6 +92,11 @@ public class FreqHistogram implements ProtoObject<FreqHistogramProto>, Cloneable
     updateBucket(key, change);
   }
 
+  /**
+   *
+   * @param key
+   * @param change
+   */
   public void updateBucket(TupleRange key, long change) {
     if (buckets.containsKey(key)) {
       getBucket(key).incCount(change);
@@ -98,6 +105,10 @@ public class FreqHistogram implements ProtoObject<FreqHistogramProto>, Cloneable
     }
   }
 
+  /**
+   *
+   * @param other
+   */
   public void merge(FreqHistogram other) {
     for (Bucket eachBucket: other.getAllBuckets()) {
       updateBucket(eachBucket.key, eachBucket.count);
@@ -120,6 +131,44 @@ public class FreqHistogram implements ProtoObject<FreqHistogramProto>, Cloneable
     return buckets.size();
   }
 
+  public Comparator<Tuple> getComparator() {
+    return comparator;
+  }
+
+  /**
+   * Normalize ranges of buckets into the range of [0, 1).
+   *
+   * @param totalRange
+   * @return
+   */
+  public FreqHistogram normalize(TupleRange totalRange) {
+    // TODO: Type must be able to contain BigDecimal
+    Schema normalizedSchema = new Schema(new Column[]{new Column("normalized", Type.FLOAT8)});
+    SortSpec[] normalizedSortSpecs = new SortSpec[1];
+    normalizedSortSpecs[0] = new SortSpec(normalizedSchema.getColumn(0), true, false);
+    FreqHistogram normalized = new FreqHistogram(normalizedSchema, normalizedSortSpecs);
+
+    BigDecimal totalDiff = new BigDecimal(TupleRangeUtil.computeCardinalityForAllColumns(sortSpecs, totalRange, true));
+    BigDecimal baseDiff = BigDecimal.ONE;
+
+    MathContext mathContext = new MathContext(20, RoundingMode.HALF_DOWN);
+    Tuple normalizedBase = new VTuple(normalizedSchema.size());
+    BigDecimal div = baseDiff.divide(totalDiff, mathContext);
+    normalizedBase.put(0, DatumFactory.createFloat8(div.doubleValue()));
+
+    for (Bucket eachBucket: buckets.values()) {
+      BigDecimal startDiff = new BigDecimal(TupleRangeUtil.computeCardinalityForAllColumns(sortSpecs,
+          totalRange.getStart(), eachBucket.getStartKey(), totalRange.getBase(), true).subtract(BigInteger.ONE));
+      BigDecimal endDiff = new BigDecimal(TupleRangeUtil.computeCardinalityForAllColumns(sortSpecs,
+          totalRange.getStart(), eachBucket.getEndKey(), totalRange.getBase(), true).subtract(BigInteger.ONE));
+      Tuple normalizedStartTuple = new VTuple(new Datum[]{DatumFactory.createFloat8(startDiff.divide(totalDiff, mathContext).doubleValue())});
+      Tuple normalizedEndTuple = new VTuple(new Datum[]{DatumFactory.createFloat8(endDiff.divide(totalDiff, mathContext).doubleValue())});
+      normalized.updateBucket(normalizedStartTuple, normalizedEndTuple, normalizedBase, eachBucket.count);
+    }
+
+    return normalized;
+  }
+
   @Override
   public String toJson() {
     return null;
@@ -139,10 +188,12 @@ public class FreqHistogram implements ProtoObject<FreqHistogramProto>, Cloneable
     buckets.clear();
   }
 
+  public Bucket createBucket(TupleRange key, long count) {
+    return new Bucket(key, count);
+  }
+
   public class Bucket implements ProtoObject<FreqBucketProto>, Cloneable, GsonObject {
     // start and end keys are inclusive
-//    private final Tuple startKey;
-//    private final Tuple endKey;
     private final TupleRange key;
     private long count;
 
@@ -160,9 +211,12 @@ public class FreqHistogram implements ProtoObject<FreqHistogramProto>, Cloneable
       Tuple endKey = new VTuple(keySchema.size());
       Tuple base = new VTuple(keySchema.size());
       for (int i = 0; i < keySchema.size(); i++) {
-        startKey.put(i, DatumFactory.createFromBytes(keySchema.getColumn(i).getDataType(), proto.getStartKey(i).toByteArray()));
-        endKey.put(i, DatumFactory.createFromBytes(keySchema.getColumn(i).getDataType(), proto.getEndKey(i).toByteArray()));
-        // base
+        startKey.put(i, DatumFactory.createFromBytes(keySchema.getColumn(i).getDataType(),
+            proto.getStartKey(i).toByteArray()));
+        endKey.put(i, DatumFactory.createFromBytes(keySchema.getColumn(i).getDataType(),
+            proto.getEndKey(i).toByteArray()));
+        base.put(i, DatumFactory.createFromBytes(keySchema.getColumn(i).getDataType(),
+            proto.getBase(i).toByteArray()));
       }
       this.key = new TupleRange(startKey, endKey, base, comparator);
       this.count = proto.getCount();
@@ -213,12 +267,18 @@ public class FreqHistogram implements ProtoObject<FreqHistogramProto>, Cloneable
     }
 
     public void merge(Bucket other) {
-      Preconditions.checkArgument(this.key.equals(other.key));
+      Tuple minStart, maxEnd;
+      if (this.key.compareTo(other.key) < 0) {
+        minStart = key.getStart();
+        maxEnd = other.key.getEnd();
+      } else {
+        minStart = other.key.getStart();
+        maxEnd = key.getEnd();
+      }
+
+      this.key.setStart(minStart);
+      this.key.setEnd(maxEnd);
       this.count += other.count;
     }
-  }
-
-  public static Bucket mergeBuckets(Bucket b1, Bucket b2) {
-    return new Bucket()
   }
 }
