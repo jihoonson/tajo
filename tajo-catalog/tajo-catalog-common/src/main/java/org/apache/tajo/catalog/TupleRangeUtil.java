@@ -18,6 +18,7 @@
 
 package org.apache.tajo.catalog;
 
+import org.apache.tajo.common.TajoDataTypes;
 import org.apache.tajo.common.TajoDataTypes.DataType;
 import org.apache.tajo.datum.Datum;
 import org.apache.tajo.datum.DatumFactory;
@@ -107,12 +108,12 @@ public class TupleRangeUtil {
                                               boolean lastInclusive, boolean isAscending) {
     BigInteger columnCard;
 
-
     switch (dataType.getType()) {
       case BOOLEAN:
         columnCard = BigInteger.valueOf(2);
         break;
       case CHAR:
+        // TODO: round
         if (isAscending) {
           columnCard = BigInteger.valueOf((end.getChar(i) - start.getChar(i)) / base.getChar(i));
         } else {
@@ -153,20 +154,16 @@ public class TupleRangeUtil {
         break;
       case FLOAT4:
         if (isAscending) {
-//          columnCard = BigInteger.valueOf(end.getInt4(i) - start.getInt4(i));
           // TODO: round
           columnCard = BigDecimal.valueOf(end.getFloat4(i)).subtract(BigDecimal.valueOf(start.getFloat4(i))).divide(BigDecimal.valueOf(base.getFloat4(i))).toBigInteger();
         } else {
-//          columnCard = BigInteger.valueOf(start.getInt4(i) - end.getInt4(i));
           columnCard = BigDecimal.valueOf(start.getFloat4(i)).subtract(BigDecimal.valueOf(end.getFloat4(i))).divide(BigDecimal.valueOf(base.getFloat4(i))).toBigInteger();
         }
         break;
       case FLOAT8:
         if (isAscending) {
-//          columnCard = BigInteger.valueOf(end.getInt8(i) - start.getInt8(i));
           columnCard = BigDecimal.valueOf(end.getFloat8(i)).subtract(BigDecimal.valueOf(start.getFloat8(i))).divide(BigDecimal.valueOf(base.getFloat8(i))).toBigInteger();
         } else {
-//          columnCard = BigInteger.valueOf(start.getInt8(i) - end.getInt8(i));
           columnCard = BigDecimal.valueOf(start.getFloat8(i)).subtract(BigDecimal.valueOf(end.getFloat8(i))).divide(BigDecimal.valueOf(base.getFloat8(i))).toBigInteger();
         }
         break;
@@ -188,12 +185,10 @@ public class TupleRangeUtil {
           byte [][] padded = BytesUtils.padBytes(s, e);
           s = padded[0];
           e = padded[1];
-//          b = padded[2];
 
           byte[] prependHeader = {1, 0};
           final BigInteger startBI = new BigInteger(Bytes.add(prependHeader, s));
           final BigInteger stopBI = new BigInteger(Bytes.add(prependHeader, e));
-//          final BigInteger baseBI = new BigInteger(Bytes.add(prependHeader, b));
 
           final BigInteger baseBI = new BigInteger(b);
           columnCard = stopBI.subtract(startBI).divide(baseBI);
@@ -262,5 +257,59 @@ public class TupleRangeUtil {
    */
   public static BigInteger computeCardinalityForAllColumns(SortSpec[] sortSpecs, TupleRange range, boolean lastInclusive) {
     return computeCardinalityForAllColumns(sortSpecs, range.getStart(), range.getEnd(), range.getBase(), lastInclusive);
+  }
+
+  /**
+   * Makes the start and end keys of the TEXT type equal in length.
+   *
+   * @param sortSpecs Sort specifications
+   * @param range Tuple range to be normalized
+   */
+  public static void normalizeLength(final SortSpec [] sortSpecs, TupleRange range) {
+    // normalize text fields to have same bytes length
+    for (int i = 0; i < sortSpecs.length; i++) {
+      if (sortSpecs[i].getSortKey().getDataType().getType() == TajoDataTypes.Type.TEXT) {
+        boolean isPureAscii = StringUtils.isPureAscii(range.getStart().getText(i)) &&
+            StringUtils.isPureAscii(range.getEnd().getText(i));
+        if (isPureAscii) {
+          byte[] startBytes;
+          byte[] endBytes;
+          if (range.getStart().isBlankOrNull(i)) {
+            startBytes = BigInteger.ZERO.toByteArray();
+          } else {
+            startBytes = range.getStart().getBytes(i);
+          }
+
+          if (range.getEnd().isBlankOrNull(i)) {
+            endBytes = BigInteger.ZERO.toByteArray();
+          } else {
+            endBytes = range.getEnd().getBytes(i);
+          }
+
+          byte[][] padded = BytesUtils.padBytes(startBytes, endBytes);
+          range.getStart().put(i, DatumFactory.createText(padded[0]));
+          range.getEnd().put(i, DatumFactory.createText(padded[1]));
+
+        } else {
+          char[] startChars;
+          char[] endChars;
+          if (range.getStart().isBlankOrNull(i)) {
+            startChars = new char[] {0};
+          } else {
+            startChars = range.getStart().getUnicodeChars(i);
+          }
+
+          if (range.getEnd().isBlankOrNull(i)) {
+            endChars = new char[] {0};
+          } else {
+            endChars = range.getEnd().getUnicodeChars(i);
+          }
+
+          char[][] padded = StringUtils.padChars(startChars, endChars);
+          range.getStart().put(i, DatumFactory.createText(new String(padded[0])));
+          range.getEnd().put(i, DatumFactory.createText(new String(padded[1])));
+        }
+      }
+    }
   }
 }

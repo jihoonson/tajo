@@ -30,6 +30,7 @@ import org.apache.tajo.algebra.JoinType;
 import org.apache.tajo.catalog.*;
 import org.apache.tajo.catalog.statistics.FreqHistogram;
 import org.apache.tajo.catalog.statistics.FreqHistogram.Bucket;
+import org.apache.tajo.catalog.statistics.HistogramUtil;
 import org.apache.tajo.catalog.statistics.StatisticsUtil;
 import org.apache.tajo.catalog.statistics.TableStats;
 import org.apache.tajo.conf.TajoConf.ConfVars;
@@ -695,7 +696,7 @@ public class Repartitioner {
       FreqHistogram mergedHistogram = new FreqHistogram(histogram.getKeySchema(), histogram.getSortSpecs(), buckets);
 
       // Normalize ranges of the histogram
-      FreqHistogram normalizedHistogram = mergedHistogram.normalize(mergedRange);
+      FreqHistogram normalizedHistogram = HistogramUtil.normalize(mergedHistogram, mergedRange);
 
       // The average cardinality of the original histogram must be same with new one.
       BigInteger avgCard = totalCard.divide(BigInteger.valueOf(histogram.size()));
@@ -785,7 +786,7 @@ public class Repartitioner {
       }
 
       // Restore ranges from the normalized one
-      
+
 
       // create new partitions with the remaining passed ranges
 

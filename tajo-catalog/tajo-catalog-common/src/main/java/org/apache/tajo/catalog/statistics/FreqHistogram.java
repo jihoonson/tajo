@@ -23,17 +23,11 @@ import org.apache.tajo.catalog.*;
 import org.apache.tajo.catalog.proto.CatalogProtos.FreqBucketProto;
 import org.apache.tajo.catalog.proto.CatalogProtos.FreqHistogramProto;
 import org.apache.tajo.common.ProtoObject;
-import org.apache.tajo.common.TajoDataTypes.Type;
-import org.apache.tajo.datum.Datum;
 import org.apache.tajo.datum.DatumFactory;
 import org.apache.tajo.json.GsonObject;
 import org.apache.tajo.storage.Tuple;
 import org.apache.tajo.storage.VTuple;
 
-import java.math.BigDecimal;
-import java.math.BigInteger;
-import java.math.MathContext;
-import java.math.RoundingMode;
 import java.util.*;
 
 /**
@@ -80,6 +74,7 @@ public class FreqHistogram implements ProtoObject<FreqHistogramProto>, Cloneable
   }
 
   public void updateBucket(Tuple startKey, Tuple endKey, Tuple base, long change) {
+    // TODO: normalize length
     Tuple startClone, endClone, baseClone;
     try {
       startClone = startKey.clone();
@@ -133,40 +128,6 @@ public class FreqHistogram implements ProtoObject<FreqHistogramProto>, Cloneable
 
   public Comparator<Tuple> getComparator() {
     return comparator;
-  }
-
-  /**
-   * Normalize ranges of buckets into the range of [0, 1).
-   *
-   * @param totalRange
-   * @return
-   */
-  public FreqHistogram normalize(TupleRange totalRange) {
-    // TODO: Type must be able to contain BigDecimal
-    Schema normalizedSchema = new Schema(new Column[]{new Column("normalized", Type.FLOAT8)});
-    SortSpec[] normalizedSortSpecs = new SortSpec[1];
-    normalizedSortSpecs[0] = new SortSpec(normalizedSchema.getColumn(0), true, false);
-    FreqHistogram normalized = new FreqHistogram(normalizedSchema, normalizedSortSpecs);
-
-    BigDecimal totalDiff = new BigDecimal(TupleRangeUtil.computeCardinalityForAllColumns(sortSpecs, totalRange, true));
-    BigDecimal baseDiff = BigDecimal.ONE;
-
-    MathContext mathContext = new MathContext(20, RoundingMode.HALF_DOWN);
-    Tuple normalizedBase = new VTuple(normalizedSchema.size());
-    BigDecimal div = baseDiff.divide(totalDiff, mathContext);
-    normalizedBase.put(0, DatumFactory.createFloat8(div.doubleValue()));
-
-    for (Bucket eachBucket: buckets.values()) {
-      BigDecimal startDiff = new BigDecimal(TupleRangeUtil.computeCardinalityForAllColumns(sortSpecs,
-          totalRange.getStart(), eachBucket.getStartKey(), totalRange.getBase(), true).subtract(BigInteger.ONE));
-      BigDecimal endDiff = new BigDecimal(TupleRangeUtil.computeCardinalityForAllColumns(sortSpecs,
-          totalRange.getStart(), eachBucket.getEndKey(), totalRange.getBase(), true).subtract(BigInteger.ONE));
-      Tuple normalizedStartTuple = new VTuple(new Datum[]{DatumFactory.createFloat8(startDiff.divide(totalDiff, mathContext).doubleValue())});
-      Tuple normalizedEndTuple = new VTuple(new Datum[]{DatumFactory.createFloat8(endDiff.divide(totalDiff, mathContext).doubleValue())});
-      normalized.updateBucket(normalizedStartTuple, normalizedEndTuple, normalizedBase, eachBucket.count);
-    }
-
-    return normalized;
   }
 
   @Override
