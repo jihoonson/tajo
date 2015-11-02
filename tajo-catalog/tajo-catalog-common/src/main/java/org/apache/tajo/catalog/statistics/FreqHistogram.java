@@ -24,9 +24,11 @@ import org.apache.tajo.catalog.proto.CatalogProtos.FreqBucketProto;
 import org.apache.tajo.catalog.proto.CatalogProtos.FreqHistogramProto;
 import org.apache.tajo.common.ProtoObject;
 import org.apache.tajo.datum.DatumFactory;
+import org.apache.tajo.datum.NullDatum;
 import org.apache.tajo.json.GsonObject;
 import org.apache.tajo.storage.Tuple;
 import org.apache.tajo.storage.VTuple;
+import org.apache.tajo.util.TUtil;
 
 import java.util.*;
 
@@ -122,6 +124,17 @@ public class FreqHistogram implements ProtoObject<FreqHistogramProto>, Cloneable
     return Collections.unmodifiableCollection(buckets.values());
   }
 
+  public List<Bucket> getSortedBuckets() {
+    List<Bucket> bucketList = new ArrayList<>(this.buckets.values());
+    bucketList.sort(new Comparator<Bucket>() {
+      @Override
+      public int compare(Bucket o1, Bucket o2) {
+        return o1.getKey().compareTo(o2.getKey());
+      }
+    });
+    return bucketList;
+  }
+
   public int size() {
     return buckets.size();
   }
@@ -139,6 +152,9 @@ public class FreqHistogram implements ProtoObject<FreqHistogramProto>, Cloneable
   public FreqHistogramProto getProto() {
     FreqHistogramProto.Builder builder = FreqHistogramProto.newBuilder();
     builder.setSchema(keySchema.getProto());
+    for (SortSpec sortSpec : sortSpecs) {
+      builder.addSortSpec(sortSpec.getProto());
+    }
     for (Bucket bucket : buckets.values()) {
       builder.addBuckets(bucket.getProto());
     }
@@ -151,6 +167,18 @@ public class FreqHistogram implements ProtoObject<FreqHistogramProto>, Cloneable
 
   public Bucket createBucket(TupleRange key, long count) {
     return new Bucket(key, count);
+  }
+
+  @Override
+  public boolean equals(Object o) {
+    if (o instanceof FreqHistogram) {
+      FreqHistogram other = (FreqHistogram) o;
+      boolean eq = this.keySchema.equals(other.keySchema);
+      eq &= Arrays.equals(this.sortSpecs, other.sortSpecs);
+      eq &= this.getSortedBuckets().equals(other.getSortedBuckets());
+      return eq;
+    }
+    return false;
   }
 
   public class Bucket implements ProtoObject<FreqBucketProto>, Cloneable, GsonObject {
@@ -172,11 +200,14 @@ public class FreqHistogram implements ProtoObject<FreqHistogramProto>, Cloneable
       Tuple endKey = new VTuple(keySchema.size());
       Tuple base = new VTuple(keySchema.size());
       for (int i = 0; i < keySchema.size(); i++) {
-        startKey.put(i, DatumFactory.createFromBytes(keySchema.getColumn(i).getDataType(),
+        startKey.put(i, proto.getStartKey(i).size() == 0 ? NullDatum.get() :
+            DatumFactory.createFromBytes(keySchema.getColumn(i).getDataType(),
             proto.getStartKey(i).toByteArray()));
-        endKey.put(i, DatumFactory.createFromBytes(keySchema.getColumn(i).getDataType(),
+        endKey.put(i, proto.getEndKey(i).size() == 0 ? NullDatum.get() :
+            DatumFactory.createFromBytes(keySchema.getColumn(i).getDataType(),
             proto.getEndKey(i).toByteArray()));
-        base.put(i, DatumFactory.createFromBytes(keySchema.getColumn(i).getDataType(),
+        base.put(i, proto.getBase(i).size() == 0 ? NullDatum.get() :
+            DatumFactory.createFromBytes(keySchema.getColumn(i).getDataType(),
             proto.getBase(i).toByteArray()));
       }
       this.key = new TupleRange(startKey, endKey, base, comparator);
@@ -189,6 +220,7 @@ public class FreqHistogram implements ProtoObject<FreqHistogramProto>, Cloneable
       for (int i = 0; i < keySchema.size(); i++) {
         builder.addStartKey(ByteString.copyFrom(key.getStart().asDatum(i).asByteArray()));
         builder.addEndKey(ByteString.copyFrom(key.getEnd().asDatum(i).asByteArray()));
+        builder.addBase(ByteString.copyFrom(key.getBase().asDatum(i).asByteArray()));
       }
       return builder.setCount(count).build();
     }
@@ -240,6 +272,16 @@ public class FreqHistogram implements ProtoObject<FreqHistogramProto>, Cloneable
       this.key.setStart(minStart);
       this.key.setEnd(maxEnd);
       this.count += other.count;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (o instanceof Bucket) {
+        Bucket other = (Bucket) o;
+        return TUtil.checkEquals(this.key, other.key) &&
+            this.count == other.count;
+      }
+      return false;
     }
   }
 }

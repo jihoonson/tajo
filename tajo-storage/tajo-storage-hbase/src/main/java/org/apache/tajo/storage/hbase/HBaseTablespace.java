@@ -38,6 +38,7 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter;
 import org.apache.hadoop.mapreduce.task.JobContextImpl;
 import org.apache.tajo.*;
 import org.apache.tajo.catalog.*;
+import org.apache.tajo.catalog.statistics.ColumnStats;
 import org.apache.tajo.catalog.statistics.TableStats;
 import org.apache.tajo.common.TajoDataTypes.Type;
 import org.apache.tajo.conf.TajoConf;
@@ -936,8 +937,17 @@ public class HBaseTablespace extends Tablespace {
 
   @Override
   public TupleRange[] getInsertSortRanges(OverridableConf queryContext, TableDesc tableDesc,
-                                          Schema inputSchema, SortSpec[] sortSpecs, TupleRange dataRange)
+                                          Schema inputSchema, SortSpec[] sortSpecs, List<ColumnStats> columnStatsList)
       throws IOException {
+    Tuple start = new VTuple(columnStatsList.size());
+    Tuple end = new VTuple(columnStatsList.size());
+    for (int i = 0; i < start.size(); i++) {
+      start.put(i, columnStatsList.get(i).getMinValue());
+      end.put(i, columnStatsList.get(i).getMaxValue());
+    }
+    TupleComparator comparator = new BaseTupleComparator(inputSchema, sortSpecs);
+    TupleRange dataRange = new TupleRange(start, end, null, comparator);
+
     try {
       int[] sortKeyIndexes = new int[sortSpecs.length];
       for (int i = 0; i < sortSpecs.length; i++) {
@@ -954,7 +964,6 @@ public class HBaseTablespace extends Tablespace {
         }
         List<TupleRange> tupleRanges = new ArrayList<>(endKeys.length);
 
-        TupleComparator comparator = new BaseTupleComparator(inputSchema, sortSpecs);
         Tuple previousTuple = dataRange.getStart();
 
         for (byte[] eachEndKey : endKeys) {

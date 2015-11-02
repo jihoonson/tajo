@@ -19,7 +19,6 @@
 package org.apache.tajo.catalog;
 
 import com.google.common.base.Objects;
-import com.google.common.base.Preconditions;
 import org.apache.tajo.storage.Tuple;
 
 import java.util.Comparator;
@@ -66,17 +65,6 @@ public class TupleRange implements Comparable<TupleRange>, Cloneable {
     this.base = base;
   }
 
-//  public TupleRange add(TupleRange other) {
-//    Preconditions.checkArgument(base.equals(other.getBase()));
-//    Preconditions.checkArgument(TupleRangeUtil.diff(this, other).equals(base));
-//
-//    if (this.compareTo(other) < 0) {
-//      return new TupleRange(this.start, other.end, this.base, comp);
-//    } else {
-//      return new TupleRange(other.start, this.end, this.base, comp);
-//    }
-//  }
-
   public String toString() {
     return "[" + this.start + ", " + this.end + ", base: " + this.base + "]";
   }
@@ -105,8 +93,8 @@ public class TupleRange implements Comparable<TupleRange>, Cloneable {
     if (cmpVal != 0) {
       return cmpVal;
     } else {
-      cmpVal = comp.compare(this.end, o.end);
-      return cmpVal != 0 ? cmpVal : comp.compare(this.base, o.base);
+      return comp.compare(this.end, o.end);
+//      return cmpVal != 0 ? cmpVal : comp.compare(this.base, o.base);
     }
   }
 

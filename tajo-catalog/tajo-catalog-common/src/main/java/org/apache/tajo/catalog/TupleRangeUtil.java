@@ -18,12 +18,8 @@
 
 package org.apache.tajo.catalog;
 
-import org.apache.tajo.common.TajoDataTypes;
 import org.apache.tajo.common.TajoDataTypes.DataType;
-import org.apache.tajo.datum.Datum;
-import org.apache.tajo.datum.DatumFactory;
-import org.apache.tajo.datum.NullDatum;
-import org.apache.tajo.datum.TextDatum;
+import org.apache.tajo.datum.*;
 import org.apache.tajo.exception.NotImplementedException;
 import org.apache.tajo.exception.TajoInternalError;
 import org.apache.tajo.storage.Tuple;
@@ -34,6 +30,7 @@ import org.apache.tajo.util.StringUtils;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.math.MathContext;
 
 public class TupleRangeUtil {
 
@@ -93,20 +90,20 @@ public class TupleRangeUtil {
   /**
    * It computes the value cardinality of a tuple range.
    *
-   * @param dataType
+   * @param sortSpec
    * @param range
    * @param i
    * @return
    */
-  public static BigInteger computeCardinality(DataType dataType, TupleRange range, int i,
-                                              boolean lastInclusive, boolean isAscending) {
-    return computeCardinality(dataType, range.getStart(), range.getEnd(), range.getBase(), i, lastInclusive,
-        isAscending);
+  public static BigInteger computeCardinality(SortSpec sortSpec, TupleRange range, int i,
+                                              boolean lastInclusive) {
+    return computeCardinality(sortSpec, range.getStart(), range.getEnd(), range.getBase(), i, lastInclusive);
   }
 
-  public static BigInteger computeCardinality(DataType dataType, Tuple start, Tuple end, Tuple base, int i,
-                                              boolean lastInclusive, boolean isAscending) {
+  public static BigInteger computeCardinality(SortSpec sortSpec, Tuple start, Tuple end, Tuple base, int i,
+                                              boolean lastInclusive) {
     BigInteger columnCard;
+    DataType dataType = sortSpec.getSortKey().getDataType();
 
     switch (dataType.getType()) {
       case BOOLEAN:
@@ -114,58 +111,89 @@ public class TupleRangeUtil {
         break;
       case CHAR:
         // TODO: round
-        if (isAscending) {
-          columnCard = BigInteger.valueOf((end.getChar(i) - start.getChar(i)) / base.getChar(i));
-        } else {
-          columnCard = BigInteger.valueOf((start.getChar(i) - end.getChar(i)) / base.getChar(i));
+        char startChar = start.isBlankOrNull(i) ? (sortSpec.isNullFirst() ? 0 : Character.MAX_VALUE) : start.getChar(i);
+        char endChar = end.isBlankOrNull(i) ? (sortSpec.isNullFirst() ? 0 : Character.MAX_VALUE) : end.getChar(i);
+
+        if (!sortSpec.isAscending()) {
+          char tmp = startChar;
+          startChar = endChar;
+          endChar = tmp;
         }
+        columnCard = BigInteger.valueOf((endChar - startChar) / base.getChar(i));
         break;
-      case BIT:
-        if (isAscending) {
-          columnCard = BigInteger.valueOf((end.getByte(i) - start.getByte(i)) / base.getByte(i));
-        } else {
-          columnCard = BigInteger.valueOf((start.getByte(i) - end.getByte(i)) / base.getByte(i));
-        }
-        break;
+//      case BIT:
+//        byte startByte = start.isBlankOrNull(i) ? (sortSpec.isNullFirst() ? 0 : 0x) : start.getByte(i);
+//
+//        if (sortSpec.isAscending()) {
+//          columnCard = BigInteger.valueOf((end.getByte(i) - start.getByte(i)) / base.getByte(i));
+//        } else {
+//          columnCard = BigInteger.valueOf((start.getByte(i) - end.getByte(i)) / base.getByte(i));
+//        }
+//        break;
       case INT2:
-        if (isAscending) {
-          columnCard = BigInteger.valueOf((end.getInt2(i) - start.getInt2(i)) / base.getInt2(i));
-        } else {
-          columnCard = BigInteger.valueOf((start.getInt2(i) - end.getInt2(i)) / base.getInt2(i));
+        short startShort = start.isBlankOrNull(i) ? (sortSpec.isNullFirst() ? 0 : Short.MAX_VALUE) : start.getInt2(i);
+        short endShort = end.isBlankOrNull(i) ? (sortSpec.isNullFirst() ? 0 : Short.MAX_VALUE) : end.getInt2(i);
+
+        if (!sortSpec.isAscending()) {
+          short tmp = startShort;
+          startShort = endShort;
+          endShort = tmp;
         }
+
+        columnCard = BigInteger.valueOf((endShort - startShort) / base.getInt2(i));
         break;
       case INT4:
       case DATE:
       case INET4:
-        if (isAscending) {
-          columnCard = BigInteger.valueOf((end.getInt4(i) - start.getInt4(i)) / base.getInt4(i));
-        } else {
-          columnCard = BigInteger.valueOf((start.getInt4(i) - end.getInt4(i)) / base.getInt4(i));
+        int startInt = start.isBlankOrNull(i) ? (sortSpec.isNullFirst() ? 0 : Integer.MAX_VALUE) : start.getInt4(i);
+        int endInt = end.isBlankOrNull(i) ? (sortSpec.isNullFirst() ? 0 : Integer.MAX_VALUE) : end.getInt4(i);
+
+        if (!sortSpec.isAscending()) {
+          int tmp = startInt;
+          startInt = endInt;
+          endInt = tmp;
         }
+
+        columnCard = BigInteger.valueOf((endInt - startInt) / base.getInt4(i));
         break;
       case INT8:
       case TIME:
       case TIMESTAMP:
-        if (isAscending) {
-          columnCard = BigInteger.valueOf((end.getInt8(i) - start.getInt8(i)) / base.getInt8(i));
-        } else {
-          columnCard = BigInteger.valueOf((start.getInt8(i) - end.getInt8(i)) / base.getInt8(i));
+        long startLong = start.isBlankOrNull(i) ? (sortSpec.isNullFirst() ? 0 : Long.MAX_VALUE) : start.getInt8(i);
+        long endLong = end.isBlankOrNull(i) ? (sortSpec.isNullFirst() ? 0 : Long.MAX_VALUE) : end.getInt8(i);
+
+        if (!sortSpec.isAscending()) {
+          long tmp = startLong;
+          startLong = endLong;
+          endLong = tmp;
         }
+
+        columnCard = BigInteger.valueOf((endLong - startLong) / base.getInt8(i));
         break;
       case FLOAT4:
-        if (isAscending) {
-          // TODO: round
-          columnCard = BigDecimal.valueOf(end.getFloat4(i)).subtract(BigDecimal.valueOf(start.getFloat4(i))).divide(BigDecimal.valueOf(base.getFloat4(i))).toBigInteger();
-        } else {
-          columnCard = BigDecimal.valueOf(start.getFloat4(i)).subtract(BigDecimal.valueOf(end.getFloat4(i))).divide(BigDecimal.valueOf(base.getFloat4(i))).toBigInteger();
+        float startFloat = start.isBlankOrNull(i) ? (sortSpec.isNullFirst() ? 0 : Float.MAX_VALUE) : start.getFloat4(i);
+        float endFloat = end.isBlankOrNull(i) ? (sortSpec.isNullFirst() ? 0 : Float.MAX_VALUE) : end.getFloat4(i);
+
+        if (!sortSpec.isAscending()) {
+          float tmp = startFloat;
+          startFloat = endFloat;
+          endFloat = tmp;
         }
+
+        // TODO: round
+        columnCard = BigDecimal.valueOf(endFloat).subtract(BigDecimal.valueOf(startFloat)).divide(BigDecimal.valueOf(base.getFloat4(i)), MathContext.DECIMAL128).toBigInteger();
         break;
       case FLOAT8:
-        if (isAscending) {
-          columnCard = BigDecimal.valueOf(end.getFloat8(i)).subtract(BigDecimal.valueOf(start.getFloat8(i))).divide(BigDecimal.valueOf(base.getFloat8(i))).toBigInteger();
-        } else {
-          columnCard = BigDecimal.valueOf(start.getFloat8(i)).subtract(BigDecimal.valueOf(end.getFloat8(i))).divide(BigDecimal.valueOf(base.getFloat8(i))).toBigInteger();
+        double startDouble = start.isBlankOrNull(i) ? (sortSpec.isNullFirst() ? 0 : Double.MAX_VALUE) : start.getFloat8(i);
+        double endDouble = end.isBlankOrNull(i) ? (sortSpec.isNullFirst() ? 0 : Double.MAX_VALUE) : end.getFloat8(i);
+
+        if (!sortSpec.isAscending()) {
+          double tmp = startDouble;
+          startDouble = endDouble;
+          endDouble = tmp;
         }
+
+        columnCard = BigDecimal.valueOf(endDouble).subtract(BigDecimal.valueOf(startDouble)).divide(BigDecimal.valueOf(base.getFloat8(i)), MathContext.DECIMAL128).toBigInteger();
         break;
       case TEXT: {
         boolean isPureAscii = StringUtils.isPureAscii(start.getText(i)) && StringUtils.isPureAscii(end.getText(i));
@@ -174,7 +202,7 @@ public class TupleRangeUtil {
           byte[] s;
           byte[] e;
           byte[] b = base.getBytes(i);
-          if (isAscending) {
+          if (sortSpec.isAscending()) {
             s = start.getBytes(i);
             e = end.getBytes(i);
           } else {
@@ -197,7 +225,7 @@ public class TupleRangeUtil {
           char [] e;
           char [] b = base.getUnicodeChars(i);
 
-          if (isAscending) {
+          if (sortSpec.isAscending()) {
             s = start.getUnicodeChars(i);
             e = end.getUnicodeChars(i);
           } else {
@@ -240,8 +268,7 @@ public class TupleRangeUtil {
     BigInteger cardinality = BigInteger.ONE;
     BigInteger columnCard;
     for (int i = 0; i < sortSpecs.length; i++) {
-      columnCard = computeCardinality(sortSpecs[i].getSortKey().getDataType(), start, end, base, i, lastInclusive,
-          sortSpecs[i].isAscending());
+      columnCard = computeCardinality(sortSpecs[i], start, end, base, i, lastInclusive);
 
       if (BigInteger.ZERO.compareTo(columnCard) < 0) {
         cardinality = cardinality.multiply(columnCard);
@@ -257,59 +284,5 @@ public class TupleRangeUtil {
    */
   public static BigInteger computeCardinalityForAllColumns(SortSpec[] sortSpecs, TupleRange range, boolean lastInclusive) {
     return computeCardinalityForAllColumns(sortSpecs, range.getStart(), range.getEnd(), range.getBase(), lastInclusive);
-  }
-
-  /**
-   * Makes the start and end keys of the TEXT type equal in length.
-   *
-   * @param sortSpecs Sort specifications
-   * @param range Tuple range to be normalized
-   */
-  public static void normalizeLength(final SortSpec [] sortSpecs, TupleRange range) {
-    // normalize text fields to have same bytes length
-    for (int i = 0; i < sortSpecs.length; i++) {
-      if (sortSpecs[i].getSortKey().getDataType().getType() == TajoDataTypes.Type.TEXT) {
-        boolean isPureAscii = StringUtils.isPureAscii(range.getStart().getText(i)) &&
-            StringUtils.isPureAscii(range.getEnd().getText(i));
-        if (isPureAscii) {
-          byte[] startBytes;
-          byte[] endBytes;
-          if (range.getStart().isBlankOrNull(i)) {
-            startBytes = BigInteger.ZERO.toByteArray();
-          } else {
-            startBytes = range.getStart().getBytes(i);
-          }
-
-          if (range.getEnd().isBlankOrNull(i)) {
-            endBytes = BigInteger.ZERO.toByteArray();
-          } else {
-            endBytes = range.getEnd().getBytes(i);
-          }
-
-          byte[][] padded = BytesUtils.padBytes(startBytes, endBytes);
-          range.getStart().put(i, DatumFactory.createText(padded[0]));
-          range.getEnd().put(i, DatumFactory.createText(padded[1]));
-
-        } else {
-          char[] startChars;
-          char[] endChars;
-          if (range.getStart().isBlankOrNull(i)) {
-            startChars = new char[] {0};
-          } else {
-            startChars = range.getStart().getUnicodeChars(i);
-          }
-
-          if (range.getEnd().isBlankOrNull(i)) {
-            endChars = new char[] {0};
-          } else {
-            endChars = range.getEnd().getUnicodeChars(i);
-          }
-
-          char[][] padded = StringUtils.padChars(startChars, endChars);
-          range.getStart().put(i, DatumFactory.createText(new String(padded[0])));
-          range.getEnd().put(i, DatumFactory.createText(new String(padded[1])));
-        }
-      }
-    }
   }
 }

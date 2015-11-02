@@ -409,9 +409,9 @@ public class TaskAttempt implements EventHandler<TaskAttemptEvent> {
 
         taskAttempt.fillTaskStatistics(report);
         taskAttempt.eventHandler.handle(new TaskTAttemptEvent(taskAttempt.getId(), TaskEventType.T_ATTEMPT_SUCCEEDED,
-            new FreqHistogram(report.getFreqHistogram())));
+            report.hasFreqHistogram() ? new FreqHistogram(report.getFreqHistogram()) : null));
       } catch (Throwable t) {
-        taskAttempt.eventHandler.handle(new TaskFatalErrorEvent(taskAttempt.getId(), t.getMessage()));
+        taskAttempt.eventHandler.handle(new TaskFatalErrorEvent(taskAttempt.getId(), ExceptionUtils.getStackTrace(t)));
         taskAttempt.addDiagnosticInfo(ExceptionUtils.getStackTrace(t));
       }
     }

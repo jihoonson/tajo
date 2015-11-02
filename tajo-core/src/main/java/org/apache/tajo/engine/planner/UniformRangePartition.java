@@ -78,8 +78,7 @@ public class UniformRangePartition extends RangePartitionAlgorithm {
     normalize(sortSpecs, this.mergedRange);
 
     for (int i = 0; i < sortSpecs.length; i++) {
-      colCards[i] =  TupleRangeUtil.computeCardinality(sortSpecs[i].getSortKey().getDataType(), entireRange, i,
-          inclusive, sortSpecs[i].isAscending());
+      colCards[i] =  TupleRangeUtil.computeCardinality(sortSpecs[i], entireRange, i, inclusive);
     }
 
     cardForEachDigit = new BigInteger[colCards.length];

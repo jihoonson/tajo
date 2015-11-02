@@ -26,7 +26,6 @@ import org.apache.tajo.json.GsonObject;
 
 import static org.apache.tajo.catalog.proto.CatalogProtos.SortSpecProto;
 
-
 public class SortSpec implements Cloneable, GsonObject, ProtoObject<SortSpecProto> {
   @Expose private Column sortKey;
   @Expose private boolean ascending = true;

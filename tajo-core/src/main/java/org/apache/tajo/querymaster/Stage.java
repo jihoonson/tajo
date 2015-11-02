@@ -1286,7 +1286,7 @@ public class Stage implements EventHandler<StageEvent> {
     stopExecutionBlock();
     this.finalStageHistory = makeStageHistory();
     this.finalStageHistory.setTasks(makeTaskHistories());
-    this.histogramForRangeShuffle.clear();
+//    this.histogramForRangeShuffle.clear();
   }
 
   public List<IntermediateEntry> getHashShuffleIntermediateEntries() {

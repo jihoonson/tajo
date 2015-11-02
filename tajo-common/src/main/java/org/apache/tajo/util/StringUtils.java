@@ -304,24 +304,38 @@ public class StringUtils {
 
     char[][] padded = new char[2][];
     int max = Math.max(startChars.length, endChars.length);
+    padded[0] = padTail(startChars, max);
+    padded[1] = padTail(endChars, max);
 
-    padded[0] = new char[max];
-    padded[1] = new char[max];
-
-    for (int i = 0; i < startChars.length; i++) {
-      padded[0][i] = startChars[i];
-    }
-    for (int i = startChars.length; i < max; i++) {
-      padded[0][i] = 0;
-    }
-    for (int i = 0; i < endChars.length; i++) {
-      padded[1][i] = endChars[i];
-    }
-    for (int i = endChars.length; i < max; i++) {
-      padded[1][i] = 0;
-    }
+//    padded[0] = new char[max];
+//    padded[1] = new char[max];
+//
+//    for (int i = 0; i < startChars.length; i++) {
+//      padded[0][i] = startChars[i];
+//    }
+//    for (int i = startChars.length; i < max; i++) {
+//      padded[0][i] = 0;
+//    }
+//    for (int i = 0; i < endChars.length; i++) {
+//      padded[1][i] = endChars[i];
+//    }
+//    for (int i = endChars.length; i < max; i++) {
+//      padded[1][i] = 0;
+//    }
 
     return padded;
+  }
+
+  public static char[] padTail(char[] chars, int length) {
+    if (chars.length > length) {
+      return chars;
+    } else {
+      char[] padded = Arrays.copyOf(chars, length);
+      for (int i = chars.length; i < length; i++) {
+        padded[i] = 0;
+      }
+      return padded;
+    }
   }
   
   public static char[] convertBytesToChars(byte[] src, Charset charset) {

@@ -29,13 +29,15 @@ import org.apache.tajo.datum.DatumFactory;
 import org.apache.tajo.datum.NullDatum;
 import org.apache.tajo.storage.RowStoreUtil;
 import org.apache.tajo.storage.RowStoreUtil.RowStoreEncoder;
-import org.apache.tajo.storage.Tuple;
 import org.apache.tajo.storage.VTuple;
 
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 public class TupleUtil {
   private static final Log LOG = LogFactory.getLog(TupleUtil.class);
@@ -106,6 +108,25 @@ public class TupleUtil {
     }
   }
 
+  public static List<ColumnStats> extractSortColumnStats(SortSpec [] sortSpecs, List<ColumnStats> colStats,
+                                                         boolean checkNull) {
+    Set<Column> sortKeys = Arrays.stream(sortSpecs)
+        .map(sortSpec -> sortSpec.getSortKey())
+        .collect(Collectors.toSet());
+
+    return colStats.stream()
+        .filter(stats -> sortKeys.contains(stats.getColumn()))
+        .map(stats -> {
+          if (stats.getMinValue() == null)
+            stats.setMinValue(NullDatum.get());
+
+          if (checkNull && stats.hasNullValue() || stats.getMaxValue() == null)
+            stats.setMaxValue(NullDatum.get());
+          return stats;
+        })
+        .collect(Collectors.toList());
+  }
+
   public static TupleRange columnStatToRange(SortSpec [] sortSpecs, Schema target, List<ColumnStats> colStats,
                                              boolean checkNull) {
 
@@ -124,7 +145,7 @@ public class TupleUtil {
     int i = 0;
     int sortSpecIndex = 0;
 
-    // In outer join, empty table could be searched.
+    // For outer join, empty table can be found.
     // As a result, min value and max value would be null.
     // So, we should put NullDatum for this case.
     for (Column col : target.getRootColumns()) {
