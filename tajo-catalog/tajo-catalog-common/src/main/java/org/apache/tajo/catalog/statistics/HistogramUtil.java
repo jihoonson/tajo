@@ -55,6 +55,7 @@ public class HistogramUtil {
     normalizedSortSpecs[0] = new SortSpec(normalizedSchema.getColumn(0), true, false);
     FreqHistogram normalized = new FreqHistogram(normalizedSchema, normalizedSortSpecs);
 
+    // TODO: calculate diff instead of cardinality
     BigDecimal totalDiff = new BigDecimal(TupleRangeUtil.computeCardinalityForAllColumns(histogram.sortSpecs,
         totalRange, true)).multiply(new BigDecimal(totalCardinality));
     BigDecimal baseDiff = BigDecimal.ONE;
