@@ -239,6 +239,10 @@ public class FreqHistogram implements ProtoObject<FreqHistogramProto>, Cloneable
       return key;
     }
 
+    public Tuple getBase() {
+      return key.getBase();
+    }
+
     public Tuple getStartKey() {
       return key.getStart();
     }

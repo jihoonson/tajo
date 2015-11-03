@@ -138,4 +138,13 @@ public class TestFreqHistogram {
     assertEquals(5.1, result.getFloat8(0), 0.0001);
     assertEquals(102, result.getInt8(1));
   }
+
+  @Test
+  public void testDecrement() {
+    Tuple tuple = getTuple(DatumFactory.createFloat8(5.1), DatumFactory.createInt8(102));
+    Tuple result = HistogramUtil.increment(sortSpecs, columnStatsList, tuple, totalBase, -10);
+
+    assertEquals(0.1, result.getFloat8(0), 0.0001);
+    assertEquals(2, result.getInt8(1));
+  }
 }

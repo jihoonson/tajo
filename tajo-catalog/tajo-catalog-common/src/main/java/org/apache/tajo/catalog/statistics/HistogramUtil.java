@@ -33,7 +33,7 @@ import org.apache.tajo.util.StringUtils;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.math.MathContext;
-import java.math.RoundingMode;
+import java.util.Comparator;
 import java.util.List;
 
 public class HistogramUtil {
@@ -47,7 +47,8 @@ public class HistogramUtil {
    * @param totalRange
    * @return
    */
-  public static FreqHistogram normalize(final FreqHistogram histogram, final TupleRange totalRange,
+  public static FreqHistogram normalize(final FreqHistogram histogram,
+                                        final TupleRange totalRange,
                                         final BigInteger totalCardinality) {
     // TODO: Type must be able to contain BigDecimal
     Schema normalizedSchema = new Schema(new Column[]{new Column("normalized", Type.FLOAT8)});
@@ -110,13 +111,15 @@ public class HistogramUtil {
   }
 
   /**
+   * Increment the tuple with the amount of the product of <code>count</code> and <code>baseTuple</code>.
+   * If the <code>count</code> is a negative value, it will work as decrement.
    *
-   * @param sortSpecs
-   * @param columnStatsList
-   * @param operand
-   * @param baseTuple
-   * @param count
-   * @return
+   * @param sortSpecs an array of sort specifications
+   * @param columnStatsList a list of statistics which must include min-max values of each column
+   * @param operand tuple to be incremented
+   * @param baseTuple base tuple
+   * @param count increment count. If this value is negative, this method works as decrement.
+   * @return incremented tuple
    */
   public static Tuple increment(final SortSpec[] sortSpecs, final List<ColumnStats> columnStatsList,
                                 final Tuple operand, final Tuple baseTuple, long count) {
@@ -376,6 +379,123 @@ public class HistogramUtil {
             range.getEnd().put(i, DatumFactory.createText(new String(endChars)));
           }
         }
+      }
+    }
+  }
+
+//  public static void refineToEquiLength(FreqHistogram normalizedHistogram, BigInteger avgCard, Comparator<Tuple> comparator) {
+  public static void refineToEquiLength(final FreqHistogram histogram,
+                                        final BigInteger avgCard,
+                                        final List<ColumnStats> columnStatsList) {
+//    List<Bucket> buckets = normalizedHistogram.getSortedBuckets();
+    List<Bucket> buckets = histogram.getSortedBuckets();
+    Comparator<Tuple> comparator = histogram.comparator;
+    SortSpec[] sortSpecs = histogram.sortSpecs;
+    Bucket passed = null;
+
+    // Refine from the last to the left direction.
+    for (int i = buckets.size() - 1; i >= 0; i--) {
+      Bucket current = buckets.get(i);
+      // First add the passed range from the previous partition to the current one.
+      if (passed != null) {
+        current.merge(passed);
+        passed = null;
+      }
+      int compare = BigInteger.valueOf(current.getCount()).compareTo(avgCard);
+      if (compare < 0) {
+        // Take the lacking range from the next partition.
+        long require = avgCard.subtract(BigInteger.valueOf(current.getCount())).longValue();
+        for (int j = i - 1; j >= 0 && require > 0; j--) {
+          Bucket nextBucket = buckets.get(j);
+          long takeAmount = require < nextBucket.getCount() ? require : nextBucket.getCount();
+
+          Tuple newStart = increment(sortSpecs, columnStatsList, current.getStartKey(), nextBucket.getBase(), -1 * takeAmount);
+
+//          Tuple newEnd = new VTuple(new Datum[] {
+//              DatumFactory.createFloat8(
+//                  // nextBucket.endKey * (takeAmount / nextBucket.count)
+//                  new BigDecimal(nextBucket.getEndKey().getFloat8(0))
+//                      .multiply(new BigDecimal(takeAmount))
+//                      .divide(new BigDecimal(nextBucket.getCount()), MathContext.DECIMAL128).doubleValue())
+//          });
+//          current.getKey().setEnd(newEnd);
+//          current.incCount(takeAmount);
+//          nextBucket.getKey().setStart(newEnd);
+//          nextBucket.incCount(-1 * takeAmount);
+
+          current.getKey().setStart(newStart);
+          current.incCount(takeAmount);
+          nextBucket.getKey().setEnd(newStart);
+          nextBucket.incCount(-1 * takeAmount);
+          require -= takeAmount;
+        }
+
+      } else if (compare > 0) {
+        // Pass the remaining range to the next partition.
+        long passAmount = BigInteger.valueOf(current.getCount()).subtract(avgCard).longValue();
+
+        Tuple newStart = increment(sortSpecs, columnStatsList, current.getStartKey(), current.getBase(), passAmount);
+
+//        Tuple newEnd = new VTuple(new Datum[] {
+//            DatumFactory.createFloat8(
+//                // current.endKey * (passAmount / current.count)
+//                new BigDecimal(current.getEndKey().getFloat8(0))
+//                    .multiply(new BigDecimal(passAmount))
+//                    .divide(new BigDecimal(current.getCount()), MathContext.DECIMAL128).doubleValue())
+//        });
+//        passed = histogram.createBucket(new TupleRange(newEnd, current.getEndKey(), current.getKey().getBase(), comparator), passAmount);
+//        current.getKey().setEnd(newEnd);
+        passed = histogram.createBucket(new TupleRange(current.getStartKey(), newStart, current.getBase(), comparator), passAmount);
+        current.getKey().setStart(newStart);
+        current.incCount(-1 * passAmount);
+      }
+    }
+
+    // Refine from the first to the right direction
+    for (int i = 0; i < buckets.size(); i++) {
+      Bucket current = buckets.get(i);
+      // First add the passed range from the previous partition to the current one.
+      if (passed != null) {
+        current.merge(passed);
+        passed = null;
+      }
+      int compare = BigInteger.valueOf(current.getCount()).compareTo(avgCard);
+      if (compare < 0) {
+        // Take the lacking range from the next partition.
+        long require = avgCard.subtract(BigInteger.valueOf(current.getCount())).longValue();
+        for (int j = i + 1; j < buckets.size() && require > 0; j++) {
+          Bucket nextBucket = buckets.get(j);
+          long takeAmount = require < nextBucket.getCount() ? require : nextBucket.getCount();
+          Tuple newEnd = increment(sortSpecs, columnStatsList, current.getEndKey(), current.getBase(), takeAmount);
+
+//          Tuple newEnd = new VTuple(new Datum[] {
+//              DatumFactory.createFloat8(
+//                  // nextBucket.endKey * (takeAmount / nextBucket.count)
+//                  new BigDecimal(nextBucket.getEndKey().getFloat8(0))
+//                      .multiply(new BigDecimal(takeAmount))
+//                      .divide(new BigDecimal(nextBucket.getCount()), MathContext.DECIMAL128).doubleValue())
+//          });
+          current.getKey().setEnd(newEnd);
+          current.incCount(takeAmount);
+          nextBucket.getKey().setStart(newEnd);
+          nextBucket.incCount(-1 * takeAmount);
+          require -= takeAmount;
+        }
+
+      } else if (compare > 0) {
+        // Pass the remaining range to the next partition.
+        long passAmount = BigInteger.valueOf(current.getCount()).subtract(avgCard).longValue();
+//        Tuple newEnd = new VTuple(new Datum[] {
+//            DatumFactory.createFloat8(
+//                // current.endKey * (passAmount / current.count)
+//                new BigDecimal(current.getEndKey().getFloat8(0))
+//                    .multiply(new BigDecimal(passAmount))
+//                    .divide(new BigDecimal(current.getCount()), MathContext.DECIMAL128).doubleValue())
+//        });
+        Tuple newEnd = increment(sortSpecs, columnStatsList, current.getEndKey(), current.getBase(), -1 * passAmount);
+        passed = histogram.createBucket(new TupleRange(newEnd, current.getEndKey(), current.getKey().getBase(), comparator), passAmount);
+        current.getKey().setEnd(newEnd);
+        current.incCount(-1 * passAmount);
       }
     }
   }

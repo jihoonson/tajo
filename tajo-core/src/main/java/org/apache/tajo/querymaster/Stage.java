@@ -30,16 +30,15 @@ import org.apache.hadoop.yarn.state.*;
 import org.apache.tajo.*;
 import org.apache.tajo.catalog.*;
 import org.apache.tajo.catalog.proto.CatalogProtos.PartitionDescProto;
-import org.apache.tajo.catalog.statistics.ColumnStats;
-import org.apache.tajo.catalog.statistics.FreqHistogram;
-import org.apache.tajo.catalog.statistics.StatisticsUtil;
-import org.apache.tajo.catalog.statistics.TableStats;
+import org.apache.tajo.catalog.statistics.*;
+import org.apache.tajo.catalog.statistics.FreqHistogram.Bucket;
 import org.apache.tajo.conf.TajoConf;
 import org.apache.tajo.engine.planner.PhysicalPlannerImpl;
 import org.apache.tajo.engine.planner.enforce.Enforcer;
 import org.apache.tajo.engine.planner.global.DataChannel;
 import org.apache.tajo.engine.planner.global.ExecutionBlock;
 import org.apache.tajo.engine.planner.global.MasterPlan;
+import org.apache.tajo.engine.utils.TupleUtil;
 import org.apache.tajo.exception.TajoException;
 import org.apache.tajo.ipc.TajoWorkerProtocol;
 import org.apache.tajo.master.TaskState;
@@ -66,6 +65,7 @@ import org.apache.tajo.util.history.TaskHistory;
 import org.apache.tajo.worker.FetchImpl;
 
 import java.io.IOException;
+import java.math.BigInteger;
 import java.net.InetSocketAddress;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -1215,6 +1215,29 @@ public class Stage implements EventHandler<StageEvent> {
     return unit;
   }
 
+  List<ColumnStats> sortKeyStats = null;
+  private static void updateHistogram(Stage stage, StageTaskEvent taskEvent, int n) {
+    // 1) Update histograms of range partitions using the report
+    // TODO: should handle buckets of different bases
+    stage.histogramForRangeShuffle.merge(taskEvent.getHistogram());
+    FreqHistogram histogram = stage.histogramForRangeShuffle;
+    HistogramUtil.normalizeLength(histogram);
+    List<Bucket> buckets = histogram.getSortedBuckets();
+
+    // 2) Calculate ​Θ, the average count of range partitions
+    BigInteger avgCard = buckets.stream().map(bucket ->
+            BigInteger.valueOf(bucket.getCount())
+    ).reduce(BigInteger.ZERO, (a, b) -> a.add(b))
+        .divide(BigInteger.valueOf(histogram.size()));
+
+    // 3) Refine ranges of the selected partition and its adjacent partitions to make their counts not to exceed ​Θ
+    if (stage.sortKeyStats == null) {
+      stage.sortKeyStats = TupleUtil.extractSortColumnStats(histogram.getSortSpecs(),
+          Repartitioner.computeChildBlocksStats(stage.context, stage.masterPlan, stage.getId()).getColumnStats(), false);
+    }
+    HistogramUtil.refineToEquiLength(histogram, avgCard, stage.sortKeyStats);
+  }
+
   private static class TaskCompletedTransition implements SingleArcTransition<Stage, StageEvent> {
 
     @Override
@@ -1237,9 +1260,7 @@ public class Stage implements EventHandler<StageEvent> {
           stage.succeededObjectCount++;
           // update histogram
           if (stage.histogramForRangeShuffle != null) {
-            stage.histogramForRangeShuffle.merge(taskEvent.getHistogram());
-            // refine
-
+            updateHistogram(stage, taskEvent, 100000);
           }
         } else if (task.getState() == TaskState.KILLED) {
           stage.killedObjectCount++;
