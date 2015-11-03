@@ -182,7 +182,7 @@ public class FreqHistogram implements ProtoObject<FreqHistogramProto>, Cloneable
   }
 
   public class Bucket implements ProtoObject<FreqBucketProto>, Cloneable, GsonObject {
-    // start and end keys are inclusive
+    // [start key, end key)
     private final TupleRange key;
     private long count;
 

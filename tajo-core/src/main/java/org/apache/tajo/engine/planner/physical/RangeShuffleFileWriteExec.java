@@ -26,6 +26,7 @@ import org.apache.hadoop.fs.RawLocalFileSystem;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.tajo.catalog.*;
 import org.apache.tajo.catalog.statistics.FreqHistogram;
+import org.apache.tajo.catalog.statistics.HistogramUtil;
 import org.apache.tajo.conf.TajoConf;
 import org.apache.tajo.engine.planner.KeyProjector;
 import org.apache.tajo.plan.logical.ShuffleFileWriteNode;
@@ -101,17 +102,19 @@ public class RangeShuffleFileWriteExec extends UnaryPhysicalExec {
     Tuple keyTuple;
     Tuple prevKeyTuple = new VTuple(keySchema.size());
     Tuple keyBase = TupleRangeUtil.createMinBaseTuple(sortSpecs);
+    Tuple endKeyTuple = null;
     long offset;
 
     while(!context.isStopped() && (tuple = child.next()) != null) {
       offset = appender.getOffset();
       appender.addTuple(tuple);
       keyTuple = keyProjector.project(tuple);
-      freqHistogram.updateBucket(keyTuple, keyTuple, keyBase, 1);
       if (!prevKeyTuple.equals(keyTuple)) {
         indexWriter.write(keyTuple, offset);
         prevKeyTuple.put(keyTuple.getValues());
+        endKeyTuple = HistogramUtil.increment(sortSpecs, null, keyTuple, keyBase, 1);
       }
+      freqHistogram.updateBucket(keyTuple, endKeyTuple, keyBase, 1);
     }
 
     return null;

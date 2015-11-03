@@ -18,6 +18,9 @@
 
 package org.apache.tajo.catalog.statistics;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+import org.apache.tajo.annotation.Nullable;
 import org.apache.tajo.catalog.*;
 import org.apache.tajo.catalog.statistics.FreqHistogram.Bucket;
 import org.apache.tajo.common.TajoDataTypes;
@@ -33,10 +36,13 @@ import org.apache.tajo.util.StringUtils;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.math.MathContext;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 
 public class HistogramUtil {
+
+  private static final Log LOG = LogFactory.getLog(HistogramUtil.class);
 
 //  public final static MathContext MATH_CONTEXT = new MathContext(50, RoundingMode.HALF_DOWN);
 
@@ -121,7 +127,7 @@ public class HistogramUtil {
    * @param count increment count. If this value is negative, this method works as decrement.
    * @return incremented tuple
    */
-  public static Tuple increment(final SortSpec[] sortSpecs, final List<ColumnStats> columnStatsList,
+  public static Tuple increment(final SortSpec[] sortSpecs, @Nullable  final List<ColumnStats> columnStatsList,
                                 final Tuple operand, final Tuple baseTuple, long count) {
     Tuple result = new VTuple(sortSpecs.length);
     BigDecimal max, min, add, temp;
@@ -144,8 +150,13 @@ public class HistogramUtil {
           result.put(i, carryAndReminder[1].longValue() % 2 == 0 ? BooleanDatum.FALSE : BooleanDatum.TRUE);
           break;
         case CHAR:
-          max = BigDecimal.valueOf(columnStatsList.get(i).getMaxValue().asChar());
-          min = BigDecimal.valueOf(columnStatsList.get(i).getMinValue().asChar());
+          if (columnStatsList != null) {
+            max = BigDecimal.valueOf(columnStatsList.get(i).getMaxValue().asChar());
+            min = BigDecimal.valueOf(columnStatsList.get(i).getMinValue().asChar());
+          } else {
+            max = BigDecimal.valueOf(Character.MAX_VALUE);
+            min = BigDecimal.ZERO;
+          }
           // add = base * count
           add = BigDecimal.valueOf(baseTuple.getChar(i)).multiply(BigDecimal.valueOf(count));
           // result = carry + val + add
@@ -154,8 +165,13 @@ public class HistogramUtil {
           result.put(i, DatumFactory.createChar((char) carryAndReminder[1].longValue()));
         break;
         case INT2:
-          max = BigDecimal.valueOf(columnStatsList.get(i).getMaxValue().asInt2());
-          min = BigDecimal.valueOf(columnStatsList.get(i).getMinValue().asInt2());
+          if (columnStatsList != null) {
+            max = BigDecimal.valueOf(columnStatsList.get(i).getMaxValue().asInt2());
+            min = BigDecimal.valueOf(columnStatsList.get(i).getMinValue().asInt2());
+          } else {
+            max = BigDecimal.valueOf(Short.MAX_VALUE);
+            min = BigDecimal.ZERO;
+          }
           // add = base * count
           add = BigDecimal.valueOf(baseTuple.getInt2(i)).multiply(BigDecimal.valueOf(count));
           // result = carry + val + add
@@ -164,8 +180,13 @@ public class HistogramUtil {
           result.put(i, DatumFactory.createInt2(carryAndReminder[1].shortValue()));
           break;
         case INT4:
-          max = BigDecimal.valueOf(columnStatsList.get(i).getMaxValue().asInt4());
-          min = BigDecimal.valueOf(columnStatsList.get(i).getMinValue().asInt4());
+          if (columnStatsList != null) {
+            max = BigDecimal.valueOf(columnStatsList.get(i).getMaxValue().asInt4());
+            min = BigDecimal.valueOf(columnStatsList.get(i).getMinValue().asInt4());
+          } else {
+            max = BigDecimal.valueOf(Integer.MAX_VALUE);
+            min = BigDecimal.ZERO;
+          }
           // add = base * count
           add = BigDecimal.valueOf(baseTuple.getInt4(i)).multiply(BigDecimal.valueOf(count));
           // result = carry + val + add
@@ -174,8 +195,13 @@ public class HistogramUtil {
           result.put(i, DatumFactory.createInt4(carryAndReminder[1].intValue()));
           break;
         case INT8:
-          max = BigDecimal.valueOf(columnStatsList.get(i).getMaxValue().asInt8());
-          min = BigDecimal.valueOf(columnStatsList.get(i).getMinValue().asInt8());
+          if (columnStatsList != null) {
+            max = BigDecimal.valueOf(columnStatsList.get(i).getMaxValue().asInt8());
+            min = BigDecimal.valueOf(columnStatsList.get(i).getMinValue().asInt8());
+          } else {
+            max = BigDecimal.valueOf(Long.MAX_VALUE);
+            min = BigDecimal.ZERO;
+          }
           // add = base * count
           add = BigDecimal.valueOf(baseTuple.getInt8(i)).multiply(BigDecimal.valueOf(count));
           // result = carry + val + add
@@ -184,8 +210,13 @@ public class HistogramUtil {
           result.put(i, DatumFactory.createInt8(carryAndReminder[1].longValue()));
           break;
         case FLOAT4:
-          max = BigDecimal.valueOf(columnStatsList.get(i).getMaxValue().asFloat4());
-          min = BigDecimal.valueOf(columnStatsList.get(i).getMinValue().asFloat4());
+          if (columnStatsList != null) {
+            max = BigDecimal.valueOf(columnStatsList.get(i).getMaxValue().asFloat4());
+            min = BigDecimal.valueOf(columnStatsList.get(i).getMinValue().asFloat4());
+          } else {
+            max = BigDecimal.valueOf(Float.MAX_VALUE);
+            min = BigDecimal.ZERO;
+          }
           // add = base * count
           add = BigDecimal.valueOf(baseTuple.getFloat4(i)).multiply(BigDecimal.valueOf(count));
           // result = carry + val + add
@@ -194,8 +225,13 @@ public class HistogramUtil {
           result.put(i, DatumFactory.createFloat4(carryAndReminder[1].floatValue()));
           break;
         case FLOAT8:
-          max = BigDecimal.valueOf(columnStatsList.get(i).getMaxValue().asFloat8());
-          min = BigDecimal.valueOf(columnStatsList.get(i).getMinValue().asFloat8());
+          if (columnStatsList != null) {
+            max = BigDecimal.valueOf(columnStatsList.get(i).getMaxValue().asFloat8());
+            min = BigDecimal.valueOf(columnStatsList.get(i).getMinValue().asFloat8());
+          } else {
+            max = BigDecimal.valueOf(Double.MAX_VALUE);
+            min = BigDecimal.ZERO;
+          }
           // add = base * count
           add = BigDecimal.valueOf(baseTuple.getFloat8(i)).multiply(BigDecimal.valueOf(count));
           // result = carry + val + add
@@ -204,11 +240,20 @@ public class HistogramUtil {
           result.put(i, DatumFactory.createFloat8(carryAndReminder[1].doubleValue()));
           break;
         case TEXT:
-          boolean isPureAscii = StringUtils.isPureAscii(columnStatsList.get(i).getMinValue().asChars()) &&
-              StringUtils.isPureAscii(columnStatsList.get(i).getMaxValue().asChars());
+          boolean isPureAscii = StringUtils.isPureAscii(baseTuple.getText(i)) &&
+              StringUtils.isPureAscii(operand.getText(i));
           if (isPureAscii) {
-            max = new BigDecimal(new BigInteger(columnStatsList.get(i).getMaxValue().asByteArray()));
-            min = new BigDecimal(new BigInteger(columnStatsList.get(i).getMinValue().asByteArray()));
+            if (columnStatsList != null) {
+              max = new BigDecimal(new BigInteger(columnStatsList.get(i).getMaxValue().asByteArray()));
+              min = new BigDecimal(new BigInteger(columnStatsList.get(i).getMinValue().asByteArray()));
+            } else {
+              byte[] maxBytes = new byte[baseTuple.getByte(i)];
+              byte[] minBytes = new byte[baseTuple.getByte(i)];
+              Arrays.fill(maxBytes, (byte) 255);
+              Bytes.zero(minBytes);
+              max = new BigDecimal(new BigInteger(maxBytes));
+              min = new BigDecimal(new BigInteger(minBytes));
+            }
             // add = base * count
             add = new BigDecimal(new BigInteger(baseTuple.getBytes(i))).multiply(BigDecimal.valueOf(count));
             // result = carry + val + add
@@ -221,8 +266,13 @@ public class HistogramUtil {
           }
           break;
         case DATE:
-          max = BigDecimal.valueOf(columnStatsList.get(i).getMaxValue().asInt4());
-          min = BigDecimal.valueOf(columnStatsList.get(i).getMinValue().asInt4());
+          if (columnStatsList != null) {
+            max = BigDecimal.valueOf(columnStatsList.get(i).getMaxValue().asInt4());
+            min = BigDecimal.valueOf(columnStatsList.get(i).getMinValue().asInt4());
+          } else {
+            max = BigDecimal.valueOf(Integer.MAX_VALUE);
+            min = BigDecimal.ZERO;
+          }
           // add = base * count
           add = BigDecimal.valueOf(baseTuple.getInt4(i)).multiply(BigDecimal.valueOf(count));
           // result = carry + val + add
@@ -231,8 +281,13 @@ public class HistogramUtil {
           result.put(i, DatumFactory.createDate(carryAndReminder[1].intValue()));
           break;
         case TIME:
-          max = BigDecimal.valueOf(columnStatsList.get(i).getMaxValue().asInt8());
-          min = BigDecimal.valueOf(columnStatsList.get(i).getMinValue().asInt8());
+          if (columnStatsList != null) {
+            max = BigDecimal.valueOf(columnStatsList.get(i).getMaxValue().asInt8());
+            min = BigDecimal.valueOf(columnStatsList.get(i).getMinValue().asInt8());
+          } else {
+            max = BigDecimal.valueOf(Long.MAX_VALUE);
+            min = BigDecimal.ZERO;
+          }
           // add = base * count
           add = BigDecimal.valueOf(baseTuple.getInt8(i)).multiply(BigDecimal.valueOf(count));
           // result = carry + val + add
@@ -241,8 +296,13 @@ public class HistogramUtil {
           result.put(i, DatumFactory.createTime(carryAndReminder[1].longValue()));
           break;
         case TIMESTAMP:
-          max = BigDecimal.valueOf(columnStatsList.get(i).getMaxValue().asInt8());
-          min = BigDecimal.valueOf(columnStatsList.get(i).getMinValue().asInt8());
+          if (columnStatsList != null) {
+            max = BigDecimal.valueOf(columnStatsList.get(i).getMaxValue().asInt8());
+            min = BigDecimal.valueOf(columnStatsList.get(i).getMinValue().asInt8());
+          } else {
+            max = BigDecimal.valueOf(Long.MAX_VALUE);
+            min = BigDecimal.ZERO;
+          }
           // add = base * count
           add = BigDecimal.valueOf(baseTuple.getInt8(i)).multiply(BigDecimal.valueOf(count));
           // result = carry + val + add
@@ -251,8 +311,13 @@ public class HistogramUtil {
           result.put(i, DatumFactory.createTimestmpDatumWithJavaMillis(carryAndReminder[1].longValue()));
           break;
         case INET4:
-          max = BigDecimal.valueOf(columnStatsList.get(i).getMaxValue().asInt8());
-          min = BigDecimal.valueOf(columnStatsList.get(i).getMinValue().asInt8());
+          if (columnStatsList != null) {
+            max = BigDecimal.valueOf(columnStatsList.get(i).getMaxValue().asInt8());
+            min = BigDecimal.valueOf(columnStatsList.get(i).getMinValue().asInt8());
+          } else {
+            max = BigDecimal.valueOf(Long.MAX_VALUE);
+            min = BigDecimal.ZERO;
+          }
           // add = base * count
           add = BigDecimal.valueOf(baseTuple.getInt8(i)).multiply(BigDecimal.valueOf(count));
           // result = carry + val + add
@@ -385,7 +450,7 @@ public class HistogramUtil {
 
 //  public static void refineToEquiLength(FreqHistogram normalizedHistogram, BigInteger avgCard, Comparator<Tuple> comparator) {
   public static void refineToEquiLength(final FreqHistogram histogram,
-                                        final BigInteger avgCard,
+                                        final BigDecimal avgCard,
                                         final List<ColumnStats> columnStatsList) {
 //    List<Bucket> buckets = normalizedHistogram.getSortedBuckets();
     List<Bucket> buckets = histogram.getSortedBuckets();
@@ -401,15 +466,18 @@ public class HistogramUtil {
         current.merge(passed);
         passed = null;
       }
-      int compare = BigInteger.valueOf(current.getCount()).compareTo(avgCard);
-      if (compare < 0) {
-        // Take the lacking range from the next partition.
-        long require = avgCard.subtract(BigInteger.valueOf(current.getCount())).longValue();
-        for (int j = i - 1; j >= 0 && require > 0; j--) {
-          Bucket nextBucket = buckets.get(j);
-          long takeAmount = require < nextBucket.getCount() ? require : nextBucket.getCount();
 
-          Tuple newStart = increment(sortSpecs, columnStatsList, current.getStartKey(), nextBucket.getBase(), -1 * takeAmount);
+      if (!increment(sortSpecs, columnStatsList, current.getStartKey(), current.getBase(), 1).equals(current.getEndKey())) {
+        LOG.info("start refine from the last");
+        int compare = BigDecimal.valueOf(current.getCount()).compareTo(avgCard);
+        if (compare < 0) {
+          // Take the lacking range from the next partition.
+          long require = avgCard.subtract(BigDecimal.valueOf(current.getCount())).round(MathContext.DECIMAL128).longValue();
+          for (int j = i - 1; j >= 0 && require > 0; j--) {
+            Bucket nextBucket = buckets.get(j);
+            long takeAmount = require < nextBucket.getCount() ? require : nextBucket.getCount();
+
+            Tuple newStart = increment(sortSpecs, columnStatsList, current.getStartKey(), nextBucket.getBase(), -1 * takeAmount);
 
 //          Tuple newEnd = new VTuple(new Datum[] {
 //              DatumFactory.createFloat8(
@@ -423,18 +491,18 @@ public class HistogramUtil {
 //          nextBucket.getKey().setStart(newEnd);
 //          nextBucket.incCount(-1 * takeAmount);
 
-          current.getKey().setStart(newStart);
-          current.incCount(takeAmount);
-          nextBucket.getKey().setEnd(newStart);
-          nextBucket.incCount(-1 * takeAmount);
-          require -= takeAmount;
-        }
+            current.getKey().setStart(newStart);
+            current.incCount(takeAmount);
+            nextBucket.getKey().setEnd(newStart);
+            nextBucket.incCount(-1 * takeAmount);
+            require -= takeAmount;
+          }
 
-      } else if (compare > 0) {
-        // Pass the remaining range to the next partition.
-        long passAmount = BigInteger.valueOf(current.getCount()).subtract(avgCard).longValue();
+        } else if (compare > 0) {
+          // Pass the remaining range to the next partition.
+          long passAmount = BigDecimal.valueOf(current.getCount()).subtract(avgCard).round(MathContext.DECIMAL128).longValue();
 
-        Tuple newStart = increment(sortSpecs, columnStatsList, current.getStartKey(), current.getBase(), passAmount);
+          Tuple newStart = increment(sortSpecs, columnStatsList, current.getStartKey(), current.getBase(), passAmount);
 
 //        Tuple newEnd = new VTuple(new Datum[] {
 //            DatumFactory.createFloat8(
@@ -445,9 +513,10 @@ public class HistogramUtil {
 //        });
 //        passed = histogram.createBucket(new TupleRange(newEnd, current.getEndKey(), current.getKey().getBase(), comparator), passAmount);
 //        current.getKey().setEnd(newEnd);
-        passed = histogram.createBucket(new TupleRange(current.getStartKey(), newStart, current.getBase(), comparator), passAmount);
-        current.getKey().setStart(newStart);
-        current.incCount(-1 * passAmount);
+          passed = histogram.createBucket(new TupleRange(current.getStartKey(), newStart, current.getBase(), comparator), passAmount);
+          current.getKey().setStart(newStart);
+          current.incCount(-1 * passAmount);
+        }
       }
     }
 
@@ -459,14 +528,16 @@ public class HistogramUtil {
         current.merge(passed);
         passed = null;
       }
-      int compare = BigInteger.valueOf(current.getCount()).compareTo(avgCard);
-      if (compare < 0) {
-        // Take the lacking range from the next partition.
-        long require = avgCard.subtract(BigInteger.valueOf(current.getCount())).longValue();
-        for (int j = i + 1; j < buckets.size() && require > 0; j++) {
-          Bucket nextBucket = buckets.get(j);
-          long takeAmount = require < nextBucket.getCount() ? require : nextBucket.getCount();
-          Tuple newEnd = increment(sortSpecs, columnStatsList, current.getEndKey(), current.getBase(), takeAmount);
+      if (!increment(sortSpecs, columnStatsList, current.getStartKey(), current.getBase(), 1).equals(current.getEndKey())) {
+        LOG.info("start refine from the first");
+        int compare = BigDecimal.valueOf(current.getCount()).compareTo(avgCard);
+        if (compare < 0) {
+          // Take the lacking range from the next partition.
+          long require = avgCard.subtract(BigDecimal.valueOf(current.getCount())).round(MathContext.DECIMAL128).longValue();
+          for (int j = i + 1; j < buckets.size() && require > 0; j++) {
+            Bucket nextBucket = buckets.get(j);
+            long takeAmount = require < nextBucket.getCount() ? require : nextBucket.getCount();
+            Tuple newEnd = increment(sortSpecs, columnStatsList, current.getEndKey(), current.getBase(), takeAmount);
 
 //          Tuple newEnd = new VTuple(new Datum[] {
 //              DatumFactory.createFloat8(
@@ -475,16 +546,16 @@ public class HistogramUtil {
 //                      .multiply(new BigDecimal(takeAmount))
 //                      .divide(new BigDecimal(nextBucket.getCount()), MathContext.DECIMAL128).doubleValue())
 //          });
-          current.getKey().setEnd(newEnd);
-          current.incCount(takeAmount);
-          nextBucket.getKey().setStart(newEnd);
-          nextBucket.incCount(-1 * takeAmount);
-          require -= takeAmount;
-        }
+            current.getKey().setEnd(newEnd);
+            current.incCount(takeAmount);
+            nextBucket.getKey().setStart(newEnd);
+            nextBucket.incCount(-1 * takeAmount);
+            require -= takeAmount;
+          }
 
-      } else if (compare > 0) {
-        // Pass the remaining range to the next partition.
-        long passAmount = BigInteger.valueOf(current.getCount()).subtract(avgCard).longValue();
+        } else if (compare > 0) {
+          // Pass the remaining range to the next partition.
+          long passAmount = BigDecimal.valueOf(current.getCount()).subtract(avgCard).round(MathContext.DECIMAL128).longValue();
 //        Tuple newEnd = new VTuple(new Datum[] {
 //            DatumFactory.createFloat8(
 //                // current.endKey * (passAmount / current.count)
@@ -492,10 +563,11 @@ public class HistogramUtil {
 //                    .multiply(new BigDecimal(passAmount))
 //                    .divide(new BigDecimal(current.getCount()), MathContext.DECIMAL128).doubleValue())
 //        });
-        Tuple newEnd = increment(sortSpecs, columnStatsList, current.getEndKey(), current.getBase(), -1 * passAmount);
-        passed = histogram.createBucket(new TupleRange(newEnd, current.getEndKey(), current.getKey().getBase(), comparator), passAmount);
-        current.getKey().setEnd(newEnd);
-        current.incCount(-1 * passAmount);
+          Tuple newEnd = increment(sortSpecs, columnStatsList, current.getEndKey(), current.getBase(), -1 * passAmount);
+          passed = histogram.createBucket(new TupleRange(newEnd, current.getEndKey(), current.getKey().getBase(), comparator), passAmount);
+          current.getKey().setEnd(newEnd);
+          current.incCount(-1 * passAmount);
+        }
       }
     }
   }

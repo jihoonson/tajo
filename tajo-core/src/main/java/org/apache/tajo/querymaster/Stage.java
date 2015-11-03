@@ -65,7 +65,9 @@ import org.apache.tajo.util.history.TaskHistory;
 import org.apache.tajo.worker.FetchImpl;
 
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.math.MathContext;
 import java.net.InetSocketAddress;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -772,11 +774,31 @@ public class Stage implements EventHandler<StageEvent> {
    * It computes all stats and sets the intermediate result.
    */
   private void finalizeStats() {
-    TableStats[] statsArray;
+//    TableStats[] statsArray;
+//    if (block.isUnionOnly()) {
+//      statsArray = computeStatFromUnionBlock(this);
+//    } else {
+//      statsArray = computeStatFromTasks();
+//    }
+//
+//    DataChannel channel = masterPlan.getOutgoingChannels(getId()).get(0);
+//
+//    // if store plan (i.e., CREATE or INSERT OVERWRITE)
+//    String dataFormat = PlannerUtil.getDataFormat(masterPlan.getLogicalPlan());
+//    if (dataFormat == null) {
+//      // get final output store type (i.e., SELECT)
+//      dataFormat = channel.getDataFormat();
+//    }
+//
+//    schema = channel.getSchema();
+//    meta = CatalogUtil.newTableMeta(dataFormat, new KeyValueSet());
+//    inputStatistics = statsArray[0];
+//    resultStatistics = statsArray[1];
+
     if (block.isUnionOnly()) {
-      statsArray = computeStatFromUnionBlock(this);
-    } else {
-      statsArray = computeStatFromTasks();
+      TableStats[] statsArray = computeStatFromUnionBlock(this);
+      inputStatistics = statsArray[0];
+      resultStatistics = statsArray[1];
     }
 
     DataChannel channel = masterPlan.getOutgoingChannels(getId()).get(0);
@@ -787,11 +809,21 @@ public class Stage implements EventHandler<StageEvent> {
       // get final output store type (i.e., SELECT)
       dataFormat = channel.getDataFormat();
     }
-
     schema = channel.getSchema();
     meta = CatalogUtil.newTableMeta(dataFormat, new KeyValueSet());
-    inputStatistics = statsArray[0];
-    resultStatistics = statsArray[1];
+  }
+
+  private static void updateStats(Stage stage, Task task) {
+    if (stage.inputStatistics == null) {
+      stage.inputStatistics = new TableStats();
+    }
+    if (stage.resultStatistics == null) {
+      stage.resultStatistics = new TableStats();
+    }
+    if (task.getLastAttempt().getInputStats() != null) {
+      StatisticsUtil.aggregateTableStat(stage.inputStatistics, task.getLastAttempt().getInputStats());
+    }
+    StatisticsUtil.aggregateTableStat(stage.resultStatistics, task.getStats());
   }
 
   @Override
@@ -1215,8 +1247,7 @@ public class Stage implements EventHandler<StageEvent> {
     return unit;
   }
 
-  List<ColumnStats> sortKeyStats = null;
-  private static void updateHistogram(Stage stage, StageTaskEvent taskEvent, int n) {
+  private static void updateHistogram(Stage stage, StageTaskEvent taskEvent, int maxSize) {
     // 1) Update histograms of range partitions using the report
     // TODO: should handle buckets of different bases
     stage.histogramForRangeShuffle.merge(taskEvent.getHistogram());
@@ -1225,17 +1256,17 @@ public class Stage implements EventHandler<StageEvent> {
     List<Bucket> buckets = histogram.getSortedBuckets();
 
     // 2) Calculate ​Θ, the average count of range partitions
-    BigInteger avgCard = buckets.stream().map(bucket ->
-            BigInteger.valueOf(bucket.getCount())
-    ).reduce(BigInteger.ZERO, (a, b) -> a.add(b))
-        .divide(BigInteger.valueOf(histogram.size()));
+    BigDecimal avgCard = buckets.stream().map(bucket ->
+        BigDecimal.valueOf(bucket.getCount())
+    ).reduce(BigDecimal.ZERO, (a, b) -> a.add(b))
+        .divide(BigDecimal.valueOf(histogram.size()), MathContext.DECIMAL128);
 
     // 3) Refine ranges of the selected partition and its adjacent partitions to make their counts not to exceed ​Θ
-    if (stage.sortKeyStats == null) {
-      stage.sortKeyStats = TupleUtil.extractSortColumnStats(histogram.getSortSpecs(),
-          Repartitioner.computeChildBlocksStats(stage.context, stage.masterPlan, stage.getId()).getColumnStats(), false);
-    }
-    HistogramUtil.refineToEquiLength(histogram, avgCard, stage.sortKeyStats);
+    List<ColumnStats> sortColumnStats = TupleUtil.extractSortColumnStats(
+        histogram.getSortSpecs(),
+        TupleUtil.extractSortColumnStats(histogram.getSortSpecs(), stage.resultStatistics.getColumnStats(), false),
+        false);
+    HistogramUtil.refineToEquiLength(histogram, avgCard, sortColumnStats);
   }
 
   private static class TaskCompletedTransition implements SingleArcTransition<Stage, StageEvent> {
@@ -1258,7 +1289,10 @@ public class Stage implements EventHandler<StageEvent> {
 
         if (taskEvent.getState() == TaskState.SUCCEEDED) {
           stage.succeededObjectCount++;
-          // update histogram
+          // Incremental statistics update
+          updateStats(stage, task);
+
+          // Incremental histogram update
           if (stage.histogramForRangeShuffle != null) {
             updateHistogram(stage, taskEvent, 100000);
           }
