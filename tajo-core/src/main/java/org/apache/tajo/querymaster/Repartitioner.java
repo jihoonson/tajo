@@ -700,7 +700,7 @@ public class Repartitioner {
 //
 //      // The merged histogram can contain partitions of various lengths.
 //      // Thus, they need to be refined to be equal in length.
-//      HistogramUtil.refineToEquiLength(normalizedHistogram, avgCard, sortKeyStats);
+//      HistogramUtil.refineToEquiDepth(normalizedHistogram, avgCard, sortKeyStats);
 //
 //      // Restore ranges from the normalized one
 //      FreqHistogram denormalized = HistogramUtil.denormalize(normalizedHistogram, histogram.getKeySchema(),
@@ -711,6 +711,13 @@ public class Repartitioner {
       ranges = new TupleRange[buckets.size()];
       for (int i = 0; i < buckets.size(); i++) {
         ranges[i] = buckets.get(i).getKey();
+        for (int j = 0; j < sortKeyStats.size(); j++) {
+          if (ranges[i].getEnd().isBlankOrNull(j)) {
+            ranges[i].getEnd().put(j, sortKeyStats.get(i).getMaxValue());
+          } else {
+            ranges[i].setEnd(HistogramUtil.increment(sortSpecs, sortKeyStats, ranges[i].getEnd(), ranges[i].getBase(), -1));
+          }
+        }
       }
     }
 

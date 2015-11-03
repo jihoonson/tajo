@@ -66,7 +66,6 @@ import org.apache.tajo.worker.FetchImpl;
 
 import java.io.IOException;
 import java.math.BigDecimal;
-import java.math.BigInteger;
 import java.math.MathContext;
 import java.net.InetSocketAddress;
 import java.util.*;
@@ -1266,7 +1265,8 @@ public class Stage implements EventHandler<StageEvent> {
         histogram.getSortSpecs(),
         TupleUtil.extractSortColumnStats(histogram.getSortSpecs(), stage.resultStatistics.getColumnStats(), false),
         false);
-    HistogramUtil.refineToEquiLength(histogram, avgCard, sortColumnStats);
+    HistogramUtil.normalize(histogram, sortColumnStats);
+    HistogramUtil.refineToEquiDepth(histogram, avgCard, sortColumnStats);
   }
 
   private static class TaskCompletedTransition implements SingleArcTransition<Stage, StageEvent> {

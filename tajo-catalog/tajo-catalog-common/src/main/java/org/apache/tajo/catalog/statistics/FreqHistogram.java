@@ -287,5 +287,10 @@ public class FreqHistogram implements ProtoObject<FreqHistogramProto>, Cloneable
       }
       return false;
     }
+
+    @Override
+    public String toString() {
+      return key + " (" + count + ")";
+    }
   }
 }

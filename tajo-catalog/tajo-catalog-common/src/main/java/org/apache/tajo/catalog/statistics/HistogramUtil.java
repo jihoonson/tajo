@@ -28,6 +28,8 @@ import org.apache.tajo.common.TajoDataTypes.Type;
 import org.apache.tajo.datum.BooleanDatum;
 import org.apache.tajo.datum.Datum;
 import org.apache.tajo.datum.DatumFactory;
+import org.apache.tajo.datum.NullDatum;
+import org.apache.tajo.exception.TajoInternalError;
 import org.apache.tajo.storage.Tuple;
 import org.apache.tajo.storage.VTuple;
 import org.apache.tajo.util.Bytes;
@@ -247,8 +249,8 @@ public class HistogramUtil {
               max = new BigDecimal(new BigInteger(columnStatsList.get(i).getMaxValue().asByteArray()));
               min = new BigDecimal(new BigInteger(columnStatsList.get(i).getMinValue().asByteArray()));
             } else {
-              byte[] maxBytes = new byte[baseTuple.getByte(i)];
-              byte[] minBytes = new byte[baseTuple.getByte(i)];
+              byte[] maxBytes = new byte[baseTuple.getBytes(i).length];
+              byte[] minBytes = new byte[baseTuple.getBytes(i).length];
               Arrays.fill(maxBytes, (byte) 255);
               Bytes.zero(minBytes);
               max = new BigDecimal(new BigInteger(maxBytes));
@@ -330,6 +332,10 @@ public class HistogramUtil {
       }
     }
 
+    if (!carryAndReminder[0].equals(BigDecimal.ZERO)) {
+      throw new TajoInternalError("Overflow");
+    }
+
     return result;
   }
 
@@ -353,6 +359,79 @@ public class HistogramUtil {
       carryAndReminder[1] = val;
     }
     return carryAndReminder;
+  }
+
+  public static void normalize(FreqHistogram histogram, List<ColumnStats> columnStatsList) {
+    List<Bucket> buckets = histogram.getSortedBuckets();
+    Tuple[] candidates = new Tuple[] {buckets.get(0).getEndKey(), buckets.get(buckets.size() - 1).getEndKey()};
+    for (int i = 0; i < columnStatsList.size(); i++) {
+      for (Tuple key : candidates) {
+        ColumnStats columnStats = columnStatsList.get(i);
+        switch (columnStats.getColumn().getDataType().getType()) {
+          case BOOLEAN:
+            // ignore
+            break;
+          case INT2:
+            if (key.getInt2(i) > columnStats.getMaxValue().asInt2()) {
+              key.put(i, NullDatum.get());
+            }
+            break;
+          case INT4:
+            if (key.getInt4(i) > columnStats.getMaxValue().asInt4()) {
+              key.put(i, NullDatum.get());
+            }
+            break;
+          case INT8:
+            if (key.getInt8(i) > columnStats.getMaxValue().asInt8()) {
+              key.put(i, NullDatum.get());
+            }
+            break;
+          case FLOAT4:
+            if (key.getFloat4(i) > columnStats.getMaxValue().asFloat4()) {
+              key.put(i, NullDatum.get());
+            }
+            break;
+          case FLOAT8:
+            if (key.getFloat8(i) > columnStats.getMaxValue().asFloat8()) {
+              key.put(i, NullDatum.get());
+            }
+            break;
+          case CHAR:
+            if (key.getChar(i) > columnStats.getMaxValue().asChar()) {
+              key.put(i, NullDatum.get());
+            }
+            break;
+          case TEXT:
+            if (key.getText(i).compareTo(columnStats.getMaxValue().asChars()) > 0) {
+              key.put(i, NullDatum.get());
+            }
+            break;
+          case DATE:
+            if (key.getInt4(i) > columnStats.getMaxValue().asInt4()) {
+              key.put(i, NullDatum.get());
+            }
+            break;
+          case TIME:
+            if (key.getInt8(i) > columnStats.getMaxValue().asInt8()) {
+              key.put(i, NullDatum.get());
+            }
+            break;
+          case TIMESTAMP:
+            if (key.getInt8(i) > columnStats.getMaxValue().asInt8()) {
+              key.put(i, NullDatum.get());
+            }
+            break;
+          case INET4:
+            if (key.getInt4(i) > columnStats.getMaxValue().asInt4()) {
+              key.put(i, NullDatum.get());
+            }
+            break;
+          default:
+            throw new UnsupportedOperationException(columnStats.getColumn().getDataType().getType()
+                + " is not supported yet");
+        }
+      }
+    }
   }
 
   /**
@@ -448,10 +527,19 @@ public class HistogramUtil {
     }
   }
 
-//  public static void refineToEquiLength(FreqHistogram normalizedHistogram, BigInteger avgCard, Comparator<Tuple> comparator) {
-  public static void refineToEquiLength(final FreqHistogram histogram,
-                                        final BigDecimal avgCard,
-                                        final List<ColumnStats> columnStatsList) {
+  public static boolean hasBlankOrNullDatum(Tuple tuple) {
+    for (int i = 0; i < tuple.size(); i++) {
+      if (tuple.isBlankOrNull(i)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+//  public static void refineToEquiDepth(FreqHistogram normalizedHistogram, BigInteger avgCard, Comparator<Tuple> comparator) {
+  public static void refineToEquiDepth(final FreqHistogram histogram,
+                                       final BigDecimal avgCard,
+                                       final List<ColumnStats> columnStatsList) {
 //    List<Bucket> buckets = normalizedHistogram.getSortedBuckets();
     List<Bucket> buckets = histogram.getSortedBuckets();
     Comparator<Tuple> comparator = histogram.comparator;
@@ -467,7 +555,8 @@ public class HistogramUtil {
         passed = null;
       }
 
-      if (!increment(sortSpecs, columnStatsList, current.getStartKey(), current.getBase(), 1).equals(current.getEndKey())) {
+      if (!hasBlankOrNullDatum(current.getEndKey()) &&
+          !increment(sortSpecs, columnStatsList, current.getStartKey(), current.getBase(), 1).equals(current.getEndKey())) {
         LOG.info("start refine from the last");
         int compare = BigDecimal.valueOf(current.getCount()).compareTo(avgCard);
         if (compare < 0) {
@@ -520,6 +609,8 @@ public class HistogramUtil {
       }
     }
 
+    // TODO: if there are remaining passed bucket,
+
     // Refine from the first to the right direction
     for (int i = 0; i < buckets.size(); i++) {
       Bucket current = buckets.get(i);
@@ -528,7 +619,8 @@ public class HistogramUtil {
         current.merge(passed);
         passed = null;
       }
-      if (!increment(sortSpecs, columnStatsList, current.getStartKey(), current.getBase(), 1).equals(current.getEndKey())) {
+      if (!hasBlankOrNullDatum(current.getEndKey()) &&
+          !increment(sortSpecs, columnStatsList, current.getStartKey(), current.getBase(), 1).equals(current.getEndKey())) {
         LOG.info("start refine from the first");
         int compare = BigDecimal.valueOf(current.getCount()).compareTo(avgCard);
         if (compare < 0) {
