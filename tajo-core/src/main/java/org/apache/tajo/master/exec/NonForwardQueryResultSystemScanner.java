@@ -450,7 +450,7 @@ public class NonForwardQueryResultSystemScanner implements NonForwardQueryResult
           aTuple.put(fieldId, DatumFactory.createInt4(aNodeStatus.getNumRunningQueryMaster()));
         } else if ("last_heartbeat_ts".equalsIgnoreCase(column.getSimpleName())) {
           if (aNodeStatus.getLastHeartbeatTime() > 0) {
-            aTuple.put(fieldId, DatumFactory.createTimestmpDatumWithJavaMillis(aNodeStatus.getLastHeartbeatTime()));
+            aTuple.put(fieldId, DatumFactory.createTimestampDatumWithJavaMillis(aNodeStatus.getLastHeartbeatTime()));
           } else {
             aTuple.put(fieldId, DatumFactory.createNullDatum());
           }
@@ -504,7 +504,7 @@ public class NonForwardQueryResultSystemScanner implements NonForwardQueryResult
           aTuple.put(fieldId, DatumFactory.createInt4(aNodeStatus.getNumRunningTasks()));
         } else if ("last_heartbeat_ts".equalsIgnoreCase(column.getSimpleName())) {
           if (aNodeStatus.getLastHeartbeatTime() > 0) {
-            aTuple.put(fieldId, DatumFactory.createTimestmpDatumWithJavaMillis(aNodeStatus.getLastHeartbeatTime()));
+            aTuple.put(fieldId, DatumFactory.createTimestampDatumWithJavaMillis(aNodeStatus.getLastHeartbeatTime()));
           } else {
             aTuple.put(fieldId, DatumFactory.createNullDatum());
           }

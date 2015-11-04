@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -16,38 +16,47 @@
  * limitations under the License.
  */
 
-package org.apache.tajo.tuple.memory;
+package org.apache.tajo.datum;
 
-import org.apache.tajo.common.TajoDataTypes.DataType;
-import org.apache.tajo.storage.Tuple;
+import org.apache.tajo.common.TajoDataTypes.Type;
 
-public abstract class ZeroCopyTuple implements Tuple {
+public class NegativeInfiniteDatum extends Datum {
+  private static NegativeInfiniteDatum instance;
 
-  protected int relativePos;
-  protected int length;
-
-  public abstract void set(MemoryBlock memoryBlock, int relativePos, int length, DataType[] types);
-
-  void set(int relativePos, int length) {
-    this.relativePos = relativePos;
-    this.length = length;
+  static {
+    instance = new NegativeInfiniteDatum();
   }
 
-  public int getRelativePos() {
-    return relativePos;
+  public static NegativeInfiniteDatum get() {
+    return instance;
   }
 
-  public int getLength() {
-    return length;
+  private NegativeInfiniteDatum() {
+    super(Type.NEGATIVE_INFINITE);
   }
 
   @Override
-  public boolean isInfinite(int fieldId) {
-    return false;
+  public int size() {
+    return 0;
   }
 
   @Override
-  public Tuple clone() throws CloneNotSupportedException {
-    return (Tuple) super.clone();
+  public int compareTo(Datum datum) {
+    return -1;
+  }
+
+  @Override
+  public boolean equals(Object o) {
+    return o instanceof NegativeInfiniteDatum;
+  }
+
+  @Override
+  public int hashCode() {
+    return Integer.MIN_VALUE;
+  }
+
+  @Override
+  public String toString() {
+    return "-INF";
   }
 }

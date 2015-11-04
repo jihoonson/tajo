@@ -31,6 +31,9 @@ import org.apache.tajo.catalog.*;
 import org.apache.tajo.catalog.statistics.*;
 import org.apache.tajo.catalog.statistics.FreqHistogram.Bucket;
 import org.apache.tajo.conf.TajoConf.ConfVars;
+import org.apache.tajo.datum.Datum;
+import org.apache.tajo.datum.NegativeInfiniteDatum;
+import org.apache.tajo.datum.PositiveInfiniteDatum;
 import org.apache.tajo.engine.planner.PhysicalPlannerImpl;
 import org.apache.tajo.engine.planner.enforce.Enforcer;
 import org.apache.tajo.engine.planner.global.DataChannel;
@@ -47,7 +50,10 @@ import org.apache.tajo.plan.serder.PlanProto.DistinctGroupbyEnforcer.MultipleAgg
 import org.apache.tajo.plan.serder.PlanProto.EnforceProperty;
 import org.apache.tajo.plan.util.PlannerUtil;
 import org.apache.tajo.querymaster.Task.IntermediateEntry;
-import org.apache.tajo.storage.*;
+import org.apache.tajo.storage.FileTablespace;
+import org.apache.tajo.storage.RowStoreUtil;
+import org.apache.tajo.storage.Tablespace;
+import org.apache.tajo.storage.TablespaceManager;
 import org.apache.tajo.storage.fragment.FileFragment;
 import org.apache.tajo.storage.fragment.Fragment;
 import org.apache.tajo.unit.StorageUnit;
@@ -58,7 +64,9 @@ import org.apache.tajo.worker.FetchImpl;
 
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
+import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.math.MathContext;
 import java.net.URI;
 import java.util.*;
 import java.util.Map.Entry;
@@ -680,27 +688,39 @@ public class Repartitioner {
         determinedTaskNum = maxNum;
       }
 
-//      LOG.info(stage.getId() + ", Try to divide " + totalCard + " values into " + determinedTaskNum +
-//          " sub ranges (total units: " + determinedTaskNum + ")");
-//
-//      // Merge ranges of the histogram until the number of ranges becomes determinedTaskNum.
-//      while (buckets.size() > determinedTaskNum) {
-//        buckets.get(buckets.size()-2).merge(buckets.get(buckets.size()-1));
-//        buckets.remove(buckets.size()-1);
-//      }
-//
-//      // The merged histogram contains the range partitions (buckets).
-//      FreqHistogram mergedHistogram = new FreqHistogram(histogram.getKeySchema(), histogram.getSortSpecs(), buckets);
+      LOG.info(stage.getId() + ", Try to divide " + totalCard + " values into " + determinedTaskNum +
+          " sub ranges (total units: " + determinedTaskNum + ")");
+
+      if (determinedTaskNum < buckets.size()) {
+        // Merge ranges of the histogram until the number of ranges becomes determinedTaskNum.
+        while (buckets.size() > determinedTaskNum) {
+          buckets.get(buckets.size()-2).merge(buckets.get(buckets.size()-1));
+          buckets.remove(buckets.size()-1);
+        }
+
+        // The merged histogram contains the range partitions (buckets).
+        histogram = new FreqHistogram(histogram.getKeySchema(), histogram.getSortSpecs(), buckets);
+
+
+      } else if (determinedTaskNum > buckets.size()) {
+        // TODO: split buckets
+        throw new TajoInternalError("# of tasks is larger than # of buckets");
+      }
+
+      // The average cardinality of the original histogram must be same with normalized one.
+      BigDecimal avgCard = new BigDecimal(totalCard).divide(BigDecimal.valueOf(histogram.size()), MathContext.DECIMAL128);
+
+      // The merged histogram can contain partitions of various lengths.
+      // Thus, they need to be refined to be equal in length.
+      HistogramUtil.normalize(histogram, sortKeyStats);
+      HistogramUtil.refineToEquiDepth(histogram, avgCard, sortKeyStats);
+      buckets = histogram.getSortedBuckets();
+
+
 //
 //      // Normalize ranges of the histogram
 //      FreqHistogram normalizedHistogram = HistogramUtil.normalize(mergedHistogram, totalRange, totalCard);
 //
-//      // The average cardinality of the original histogram must be same with normalized one.
-//      BigInteger avgCard = totalCard.divide(BigInteger.valueOf(mergedHistogram.size()));
-//
-//      // The merged histogram can contain partitions of various lengths.
-//      // Thus, they need to be refined to be equal in length.
-//      HistogramUtil.refineToEquiDepth(normalizedHistogram, avgCard, sortKeyStats);
 //
 //      // Restore ranges from the normalized one
 //      FreqHistogram denormalized = HistogramUtil.denormalize(normalizedHistogram, histogram.getKeySchema(),
@@ -708,15 +728,31 @@ public class Repartitioner {
 //
 //      // create new partitions with the remaining passed ranges
 //      buckets = denormalized.getSortedBuckets();
+
+      // Adjust ranges to be last inclusive
       ranges = new TupleRange[buckets.size()];
       for (int i = 0; i < buckets.size(); i++) {
         ranges[i] = buckets.get(i).getKey();
         for (int j = 0; j < sortKeyStats.size(); j++) {
-          if (ranges[i].getEnd().isBlankOrNull(j)) {
-            ranges[i].getEnd().put(j, sortKeyStats.get(i).getMaxValue());
-          } else {
-            ranges[i].setEnd(HistogramUtil.increment(sortSpecs, sortKeyStats, ranges[i].getEnd(), ranges[i].getBase(), -1));
+          Datum val = ranges[i].getEnd().asDatum(j);
+          if (val instanceof PositiveInfiniteDatum) {
+            ranges[i].getEnd().put(j, sortKeyStats.get(j).getMaxValue());
+//          } else {
+//            ranges[i].setEnd(HistogramUtil.increment(sortSpecs, sortKeyStats, ranges[i].getEnd(), ranges[i].getBase(), -2));
+          } else if (val instanceof NegativeInfiniteDatum) {
+            ranges[i].getEnd().put(j, sortKeyStats.get(j).getMinValue());
           }
+
+//        for (int j = 0; j < sortSpecs.length; j++) {
+//          if (!sortSpecs[j].isAscending()) {
+//            Datum tmp;
+//            Tuple start = ranges[i].getStart();
+//            Tuple end = ranges[i].getEnd();
+//            tmp = end.asDatum(j);
+//            end.put(j, start.asDatum(j));
+//            start.put(j, tmp);
+//          }
+//        }
         }
       }
     }

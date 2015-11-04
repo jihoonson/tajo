@@ -34,46 +34,46 @@ import java.math.MathContext;
 
 public class TupleRangeUtil {
 
-  public static Datum minBase(DataType dataType) {
+  public static Datum minBase(DataType dataType, int inc) {
     switch (dataType.getType()) {
       case NULL_TYPE:
         return NullDatum.get();
       case BOOLEAN:
       case BIT:
-        return DatumFactory.createBit((byte) 1);
+        return DatumFactory.createBit((byte) inc);
       case INT1:
       case INT2:
-        return DatumFactory.createInt2((short) 1);
+        return DatumFactory.createInt2((short) inc);
       case INT4:
-        return DatumFactory.createInt4(1);
+        return DatumFactory.createInt4(inc);
       case INT8:
-        return DatumFactory.createInt8(1);
+        return DatumFactory.createInt8(inc);
       case FLOAT4:
-        return DatumFactory.createFloat4(1.f);
+        return DatumFactory.createFloat4(1.f * inc);
       case FLOAT8:
-        return DatumFactory.createFloat8(1.d);
+        return DatumFactory.createFloat8(1.d * inc);
       case CHAR:
-        return DatumFactory.createChar((byte) 1);
+        return DatumFactory.createChar((byte) inc);
       case TEXT: {
         byte[] bytes = new byte[1];
-        bytes[0] = 1;
+        bytes[0] = (byte) inc;
         return DatumFactory.createText(bytes);
       }
       case DATE:
-        return DatumFactory.createDate(1);
+        return DatumFactory.createDate(inc);
       case TIME:
-        return DatumFactory.createTime(1);
+        return DatumFactory.createTime(inc);
       case TIMESTAMP:
-        return DatumFactory.createTimestamp(1);
+        return DatumFactory.createTimestamp(inc);
       case INTERVAL:
-        return DatumFactory.createInterval(1);
+        return DatumFactory.createInterval(inc);
       case BLOB: {
         byte[] bytes = new byte[1];
-        bytes[0] = 1;
+        bytes[0] = (byte) inc;
         return DatumFactory.createBlob(bytes);
       }
       case INET4:
-        return DatumFactory.createInet4(1);
+        return DatumFactory.createInet4(inc);
       default:
         throw new TajoInternalError(new NotImplementedException(dataType.getType().name()));
     }
@@ -81,9 +81,11 @@ public class TupleRangeUtil {
 
   public static Tuple createMinBaseTuple(SortSpec[] sortSpecs) {
     Tuple base = new VTuple(sortSpecs.length);
-    for (int i = 0; i < sortSpecs.length; i++) {
-      base.put(i, minBase(sortSpecs[i].getSortKey().getDataType()));
+    int i = 0;
+    for (i = 0; i < sortSpecs.length - 1; i++) {
+      base.put(i, minBase(sortSpecs[i].getSortKey().getDataType(), 0));
     }
+    base.put(i, minBase(sortSpecs[i].getSortKey().getDataType(), 1));
     return base;
   }
 

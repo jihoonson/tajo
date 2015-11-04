@@ -63,6 +63,11 @@ public class NullTuple implements Tuple, Cloneable {
   }
 
   @Override
+  public boolean isInfinite(int fieldId) {
+    return false;
+  }
+
+  @Override
   public void clear() {
   }
 

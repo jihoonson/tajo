@@ -18,6 +18,7 @@
 
 package org.apache.tajo.catalog.statistics;
 
+import com.sun.tools.javac.util.Convert;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.tajo.annotation.Nullable;
@@ -25,19 +26,18 @@ import org.apache.tajo.catalog.*;
 import org.apache.tajo.catalog.statistics.FreqHistogram.Bucket;
 import org.apache.tajo.common.TajoDataTypes;
 import org.apache.tajo.common.TajoDataTypes.Type;
-import org.apache.tajo.datum.BooleanDatum;
-import org.apache.tajo.datum.Datum;
-import org.apache.tajo.datum.DatumFactory;
-import org.apache.tajo.datum.NullDatum;
+import org.apache.tajo.datum.*;
 import org.apache.tajo.exception.TajoInternalError;
 import org.apache.tajo.storage.Tuple;
 import org.apache.tajo.storage.VTuple;
 import org.apache.tajo.util.Bytes;
 import org.apache.tajo.util.StringUtils;
+import org.apache.tajo.util.datetime.DateTimeUtil;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.math.MathContext;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
@@ -135,9 +135,15 @@ public class HistogramUtil {
     BigDecimal max, min, add, temp;
     BigDecimal[] carryAndReminder = new BigDecimal[] {BigDecimal.ZERO, BigDecimal.ZERO};
     for (int i = sortSpecs.length-1; i >= 0; i--) {
+      if (operand.isBlankOrNull(i)) {
+        result.put(i, NullDatum.get());
+        continue;
+      }
+
       // result = carry * max + val1 + val2
       // result > max ? result = reminder; update carry;
 
+      count *= sortSpecs[i].isAscending() ? 1 : -1;
       Column column = sortSpecs[i].getSortKey();
       switch (column.getDataType().getType()) {
         case BOOLEAN:
@@ -249,9 +255,10 @@ public class HistogramUtil {
               max = new BigDecimal(new BigInteger(columnStatsList.get(i).getMaxValue().asByteArray()));
               min = new BigDecimal(new BigInteger(columnStatsList.get(i).getMinValue().asByteArray()));
             } else {
-              byte[] maxBytes = new byte[baseTuple.getBytes(i).length];
-              byte[] minBytes = new byte[baseTuple.getBytes(i).length];
-              Arrays.fill(maxBytes, (byte) 255);
+              byte[] maxBytes = new byte[baseTuple.getBytes(i).length > operand.getBytes(i).length ?
+                  baseTuple.getBytes(i).length : operand.getBytes(i).length];
+              byte[] minBytes = new byte[maxBytes.length];
+              Arrays.fill(maxBytes, (byte) 127);
               Bytes.zero(minBytes);
               max = new BigDecimal(new BigInteger(maxBytes));
               min = new BigDecimal(new BigInteger(minBytes));
@@ -263,8 +270,25 @@ public class HistogramUtil {
             carryAndReminder = calculateCarryAndReminder(temp, max, min);
             result.put(i, DatumFactory.createText(carryAndReminder[1].toBigInteger().toByteArray()));
           } else {
-            // TODO
-            throw new UnsupportedOperationException(column.getDataType() + " is not supported yet");
+            if (columnStatsList != null) {
+              max = unicodeCharsToBigDecimal(columnStatsList.get(i).getMaxValue().asUnicodeChars());
+              min = unicodeCharsToBigDecimal(columnStatsList.get(i).getMinValue().asUnicodeChars());
+            } else {
+              char[] maxChars = new char[baseTuple.getBytes(i).length > operand.getBytes(i).length ?
+                  baseTuple.getBytes(i).length : operand.getBytes(i).length];
+              char[] minChars = new char[maxChars.length];
+              Arrays.fill(maxChars, Character.MAX_VALUE);
+              Arrays.fill(minChars, Character.MIN_VALUE);
+              max = unicodeCharsToBigDecimal(maxChars);
+              min = unicodeCharsToBigDecimal(minChars);
+            }
+
+            // add = base * count
+            add = unicodeCharsToBigDecimal(baseTuple.getUnicodeChars(i)).multiply(BigDecimal.valueOf(count));
+            // result = carry + val + add
+            temp = carryAndReminder[0].add(unicodeCharsToBigDecimal(operand.getUnicodeChars(i))).add(add);
+            carryAndReminder = calculateCarryAndReminder(temp, max, min);
+            result.put(i, DatumFactory.createText(Convert.chars2utf(bigDecimalToUnicodeChars(carryAndReminder[1]))));
           }
           break;
         case DATE:
@@ -299,18 +323,18 @@ public class HistogramUtil {
           break;
         case TIMESTAMP:
           if (columnStatsList != null) {
-            max = BigDecimal.valueOf(columnStatsList.get(i).getMaxValue().asInt8());
-            min = BigDecimal.valueOf(columnStatsList.get(i).getMinValue().asInt8());
+            max = BigDecimal.valueOf(((TimestampDatum)columnStatsList.get(i).getMaxValue()).getJavaTimestamp());
+            min = BigDecimal.valueOf(((TimestampDatum)columnStatsList.get(i).getMinValue()).getJavaTimestamp());
           } else {
-            max = BigDecimal.valueOf(Long.MAX_VALUE);
-            min = BigDecimal.ZERO;
+            max = BigDecimal.valueOf(DateTimeUtil.julianTimeToJavaTime(Long.MAX_VALUE));
+            min = BigDecimal.valueOf(DateTimeUtil.julianTimeToJavaTime(0));
           }
           // add = base * count
-          add = BigDecimal.valueOf(baseTuple.getInt8(i)).multiply(BigDecimal.valueOf(count));
+          add = BigDecimal.valueOf(((TimestampDatum)baseTuple.asDatum(i)).getJavaTimestamp()).multiply(BigDecimal.valueOf(count));
           // result = carry + val + add
-          temp = carryAndReminder[0].add(BigDecimal.valueOf(operand.getInt8(i))).add(add);
+          temp = carryAndReminder[0].add(BigDecimal.valueOf(((TimestampDatum)operand.asDatum(i)).getJavaTimestamp())).add(add);
           carryAndReminder = calculateCarryAndReminder(temp, max, min);
-          result.put(i, DatumFactory.createTimestmpDatumWithJavaMillis(carryAndReminder[1].longValue()));
+          result.put(i, DatumFactory.createTimestampDatumWithJavaMillis(carryAndReminder[1].longValue()));
           break;
         case INET4:
           if (columnStatsList != null) {
@@ -339,6 +363,32 @@ public class HistogramUtil {
     return result;
   }
 
+  public static BigDecimal unicodeCharsToBigDecimal(char[] unicodeChars) {
+    BigDecimal result = BigDecimal.ZERO;
+    final BigDecimal base = BigDecimal.valueOf(TextDatum.UNICODE_CHAR_BITS_NUM);
+    for (int i = unicodeChars.length-1; i >= 0; i--) {
+      result = result.add(BigDecimal.valueOf(unicodeChars[i]).multiply(base.pow(unicodeChars.length-1-i)));
+    }
+    return result;
+  }
+
+  public static char[] bigDecimalToUnicodeChars(BigDecimal val) {
+    final BigDecimal base = BigDecimal.valueOf(TextDatum.UNICODE_CHAR_BITS_NUM);
+    List<Character> characters = new ArrayList<>();
+    BigDecimal divisor = val;
+    while (divisor.compareTo(base) > 0) {
+      BigDecimal[] quoteAndReminder = divisor.divideAndRemainder(base, MathContext.DECIMAL128);
+      divisor = quoteAndReminder[0];
+      characters.add(0, (char) quoteAndReminder[1].intValue());
+    }
+    characters.add(0, (char) divisor.intValue());
+    char[] chars = new char[characters.size()];
+    for (int i = 0; i < characters.size(); i++) {
+      chars[i] = characters.get(i);
+    }
+    return chars;
+  }
+
   /**
    *
    * @param val
@@ -363,67 +413,95 @@ public class HistogramUtil {
 
   public static void normalize(FreqHistogram histogram, List<ColumnStats> columnStatsList) {
     List<Bucket> buckets = histogram.getSortedBuckets();
-    Tuple[] candidates = new Tuple[] {buckets.get(0).getEndKey(), buckets.get(buckets.size() - 1).getEndKey()};
+    Tuple[] candidates = new Tuple[] {
+        buckets.get(0).getEndKey(),
+        buckets.get(buckets.size() - 1).getEndKey()
+    };
     for (int i = 0; i < columnStatsList.size(); i++) {
+      ColumnStats columnStats = columnStatsList.get(i);
       for (Tuple key : candidates) {
-        ColumnStats columnStats = columnStatsList.get(i);
+        if (key.isInfinite(i) || key.isBlankOrNull(i)) {
+          continue;
+        }
         switch (columnStats.getColumn().getDataType().getType()) {
           case BOOLEAN:
             // ignore
             break;
           case INT2:
             if (key.getInt2(i) > columnStats.getMaxValue().asInt2()) {
-              key.put(i, NullDatum.get());
+              key.put(i, PositiveInfiniteDatum.get());
+            } else if (key.getInt2(i) < columnStats.getMinValue().asInt2()) {
+              key.put(i, NegativeInfiniteDatum.get());
             }
             break;
           case INT4:
             if (key.getInt4(i) > columnStats.getMaxValue().asInt4()) {
-              key.put(i, NullDatum.get());
+              key.put(i, PositiveInfiniteDatum.get());
+            } else if (key.getInt4(i) < columnStats.getMinValue().asInt4()) {
+              key.put(i, NegativeInfiniteDatum.get());
             }
             break;
           case INT8:
             if (key.getInt8(i) > columnStats.getMaxValue().asInt8()) {
-              key.put(i, NullDatum.get());
+              key.put(i, PositiveInfiniteDatum.get());
+            } else if (key.getInt8(i) < columnStats.getMinValue().asInt8()) {
+              key.put(i, NegativeInfiniteDatum.get());
             }
             break;
           case FLOAT4:
             if (key.getFloat4(i) > columnStats.getMaxValue().asFloat4()) {
-              key.put(i, NullDatum.get());
+              key.put(i, PositiveInfiniteDatum.get());
+            } else if (key.getFloat4(i) < columnStats.getMinValue().asFloat4()) {
+              key.put(i, NegativeInfiniteDatum.get());
             }
             break;
           case FLOAT8:
             if (key.getFloat8(i) > columnStats.getMaxValue().asFloat8()) {
-              key.put(i, NullDatum.get());
+              key.put(i, PositiveInfiniteDatum.get());
+            } else if (key.getFloat8(i) < columnStats.getMinValue().asFloat8()) {
+              key.put(i, NegativeInfiniteDatum.get());
             }
             break;
           case CHAR:
             if (key.getChar(i) > columnStats.getMaxValue().asChar()) {
-              key.put(i, NullDatum.get());
+              key.put(i, PositiveInfiniteDatum.get());
+            } else if (key.getChar(i) < columnStats.getMinValue().asChar()) {
+              key.put(i, NegativeInfiniteDatum.get());
             }
             break;
           case TEXT:
             if (key.getText(i).compareTo(columnStats.getMaxValue().asChars()) > 0) {
-              key.put(i, NullDatum.get());
+              key.put(i, PositiveInfiniteDatum.get());
+            } else if (key.getText(i).compareTo(columnStats.getMinValue().asChars()) < 0) {
+              key.put(i, NegativeInfiniteDatum.get());
             }
             break;
           case DATE:
             if (key.getInt4(i) > columnStats.getMaxValue().asInt4()) {
-              key.put(i, NullDatum.get());
+              key.put(i, PositiveInfiniteDatum.get());
+            } else if (key.getInt4(i) < columnStats.getMinValue().asInt4()) {
+              key.put(i, NegativeInfiniteDatum.get());
             }
             break;
           case TIME:
             if (key.getInt8(i) > columnStats.getMaxValue().asInt8()) {
-              key.put(i, NullDatum.get());
+              key.put(i, PositiveInfiniteDatum.get());
+            } else if (key.getInt8(i) < columnStats.getMinValue().asInt8()) {
+              key.put(i, NegativeInfiniteDatum.get());
             }
             break;
           case TIMESTAMP:
             if (key.getInt8(i) > columnStats.getMaxValue().asInt8()) {
-              key.put(i, NullDatum.get());
+              key.put(i, PositiveInfiniteDatum.get());
+            } else if (key.getInt8(i) < columnStats.getMinValue().asInt8()) {
+              key.put(i, NegativeInfiniteDatum.get());
             }
             break;
           case INET4:
             if (key.getInt4(i) > columnStats.getMaxValue().asInt4()) {
-              key.put(i, NullDatum.get());
+              key.put(i, PositiveInfiniteDatum.get());
+            } else if (key.getInt4(i) < columnStats.getMinValue().asInt4()) {
+              key.put(i, NegativeInfiniteDatum.get());
             }
             break;
           default:
@@ -451,12 +529,20 @@ public class HistogramUtil {
 
     int[] maxLenOfTextCols = new int[sortSpecs.length];
     boolean[] pureAscii = new boolean[sortSpecs.length];
+    Arrays.fill(pureAscii, true);
 
     for (Bucket bucket : histogram.getAllBuckets()) {
       for (int i = 0; i < sortSpecs.length; i++) {
         if (sortSpecs[i].getSortKey().getDataType().getType() == TajoDataTypes.Type.TEXT) {
-          pureAscii[i] = StringUtils.isPureAscii(bucket.getStartKey().getText(i)) &&
+          pureAscii[i] &= StringUtils.isPureAscii(bucket.getStartKey().getText(i)) &&
               StringUtils.isPureAscii(bucket.getEndKey().getText(i));
+        }
+      }
+    }
+
+    for (Bucket bucket : histogram.getAllBuckets()) {
+      for (int i = 0; i < sortSpecs.length; i++) {
+        if (sortSpecs[i].getSortKey().getDataType().getType() == TajoDataTypes.Type.TEXT) {
           if (pureAscii[i]) {
             if (maxLenOfTextCols[i] < bucket.getStartKey().getText(i).length()) {
               maxLenOfTextCols[i] = bucket.getStartKey().getText(i).length();
@@ -483,53 +569,55 @@ public class HistogramUtil {
       for (int i = 0; i < sortSpecs.length; i++) {
         if (sortSpecs[i].getSortKey().getDataType().getType() == TajoDataTypes.Type.TEXT) {
           if (pureAscii[i]) {
-            byte[] startBytes;
-            byte[] endBytes;
-            if (range.getStart().isBlankOrNull(i)) {
-              startBytes = BigInteger.ZERO.toByteArray();
-            } else {
+            byte[] startBytes = null;
+            byte[] endBytes = null;
+            if (!range.getStart().isBlankOrNull(i)) {
               startBytes = range.getStart().getBytes(i);
             }
 
-            if (range.getEnd().isBlankOrNull(i)) {
-              endBytes = BigInteger.ZERO.toByteArray();
-            } else {
+            if (!range.getEnd().isBlankOrNull(i)) {
               endBytes = range.getEnd().getBytes(i);
             }
 
-            startBytes = Bytes.padTail(startBytes, maxLenOfTextCols[i] - startBytes.length);
-            endBytes = Bytes.padTail(endBytes, maxLenOfTextCols[i] - endBytes.length);
-            range.getStart().put(i, DatumFactory.createText(startBytes));
-            range.getEnd().put(i, DatumFactory.createText(endBytes));
+            if (startBytes != null) {
+              startBytes = Bytes.padTail(startBytes, maxLenOfTextCols[i] - startBytes.length);
+            }
+            if (endBytes != null) {
+              endBytes = Bytes.padTail(endBytes, maxLenOfTextCols[i] - endBytes.length);
+            }
+            range.getStart().put(i, startBytes == null ? NullDatum.get() : DatumFactory.createText(startBytes));
+            range.getEnd().put(i, endBytes == null ? NullDatum.get() : DatumFactory.createText(endBytes));
 
           } else {
-            char[] startChars;
-            char[] endChars;
-            if (range.getStart().isBlankOrNull(i)) {
-              startChars = new char[]{0};
-            } else {
+            char[] startChars = null;
+            char[] endChars = null;
+            if (!range.getStart().isBlankOrNull(i)) {
               startChars = range.getStart().getUnicodeChars(i);
             }
 
-            if (range.getEnd().isBlankOrNull(i)) {
-              endChars = new char[]{0};
-            } else {
+            if (!range.getEnd().isBlankOrNull(i)) {
               endChars = range.getEnd().getUnicodeChars(i);
             }
 
-            startChars = StringUtils.padTail(startChars, maxLenOfTextCols[i] - startChars.length);
-            endChars = StringUtils.padTail(endChars, maxLenOfTextCols[i] - endChars.length);
-            range.getStart().put(i, DatumFactory.createText(new String(startChars)));
-            range.getEnd().put(i, DatumFactory.createText(new String(endChars)));
+            if (startChars != null) {
+              startChars = StringUtils.padTail(startChars, maxLenOfTextCols[i] - startChars.length + 1);
+            }
+            if (endChars != null) {
+              endChars = StringUtils.padTail(endChars, maxLenOfTextCols[i] - endChars.length + 1);
+            }
+            range.getStart().put(i, startChars == null ? NullDatum.get() :
+                DatumFactory.createText(Convert.chars2utf(startChars)));
+            range.getEnd().put(i, endChars == null ? NullDatum.get() :
+                DatumFactory.createText(Convert.chars2utf(endChars)));
           }
         }
       }
     }
   }
 
-  public static boolean hasBlankOrNullDatum(Tuple tuple) {
+  public static boolean hasInfiniteDatum(Tuple tuple) {
     for (int i = 0; i < tuple.size(); i++) {
-      if (tuple.isBlankOrNull(i)) {
+      if (tuple.isInfinite(i)) {
         return true;
       }
     }
@@ -555,7 +643,8 @@ public class HistogramUtil {
         passed = null;
       }
 
-      if (!hasBlankOrNullDatum(current.getEndKey()) &&
+      // TODO: handle infinite in increment
+      if (!hasInfiniteDatum(current.getEndKey()) &&
           !increment(sortSpecs, columnStatsList, current.getStartKey(), current.getBase(), 1).equals(current.getEndKey())) {
         LOG.info("start refine from the last");
         int compare = BigDecimal.valueOf(current.getCount()).compareTo(avgCard);
@@ -619,7 +708,7 @@ public class HistogramUtil {
         current.merge(passed);
         passed = null;
       }
-      if (!hasBlankOrNullDatum(current.getEndKey()) &&
+      if (!hasInfiniteDatum(current.getEndKey()) &&
           !increment(sortSpecs, columnStatsList, current.getStartKey(), current.getBase(), 1).equals(current.getEndKey())) {
         LOG.info("start refine from the first");
         int compare = BigDecimal.valueOf(current.getCount()).compareTo(avgCard);

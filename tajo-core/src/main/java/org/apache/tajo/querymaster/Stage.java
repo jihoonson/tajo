@@ -1255,18 +1255,18 @@ public class Stage implements EventHandler<StageEvent> {
     List<Bucket> buckets = histogram.getSortedBuckets();
 
     // 2) Calculate ​Θ, the average count of range partitions
-    BigDecimal avgCard = buckets.stream().map(bucket ->
-        BigDecimal.valueOf(bucket.getCount())
-    ).reduce(BigDecimal.ZERO, (a, b) -> a.add(b))
-        .divide(BigDecimal.valueOf(histogram.size()), MathContext.DECIMAL128);
+//    BigDecimal avgCard = buckets.stream().map(bucket ->
+//        BigDecimal.valueOf(bucket.getCount())
+//    ).reduce(BigDecimal.ZERO, (a, b) -> a.add(b))
+//        .divide(BigDecimal.valueOf(histogram.size()), MathContext.DECIMAL128);
 
     // 3) Refine ranges of the selected partition and its adjacent partitions to make their counts not to exceed ​Θ
-    List<ColumnStats> sortColumnStats = TupleUtil.extractSortColumnStats(
-        histogram.getSortSpecs(),
-        TupleUtil.extractSortColumnStats(histogram.getSortSpecs(), stage.resultStatistics.getColumnStats(), false),
-        false);
-    HistogramUtil.normalize(histogram, sortColumnStats);
-    HistogramUtil.refineToEquiDepth(histogram, avgCard, sortColumnStats);
+//    List<ColumnStats> sortColumnStats = TupleUtil.extractSortColumnStats(
+//        histogram.getSortSpecs(),
+//        TupleUtil.extractSortColumnStats(histogram.getSortSpecs(), stage.resultStatistics.getColumnStats(), false),
+//        false);
+//    HistogramUtil.normalize(histogram, sortColumnStats);
+//    HistogramUtil.refineToEquiDepth(histogram, avgCard, sortColumnStats);
   }
 
   private static class TaskCompletedTransition implements SingleArcTransition<Stage, StageEvent> {

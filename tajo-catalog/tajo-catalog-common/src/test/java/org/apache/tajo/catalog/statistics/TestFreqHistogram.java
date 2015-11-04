@@ -24,11 +24,14 @@ import org.apache.tajo.catalog.statistics.FreqHistogram.Bucket;
 import org.apache.tajo.common.TajoDataTypes.Type;
 import org.apache.tajo.datum.Datum;
 import org.apache.tajo.datum.DatumFactory;
+import org.apache.tajo.datum.NullDatum;
+import org.apache.tajo.datum.TextDatum;
 import org.apache.tajo.storage.Tuple;
 import org.apache.tajo.storage.VTuple;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.List;
@@ -69,6 +72,7 @@ public class TestFreqHistogram {
     double maxDouble = 0;
     long maxLong = 0;
     long card = 0;
+    histogram.updateBucket(getTuple(NullDatum.get(), NullDatum.get()), getTuple(NullDatum.get(), NullDatum.get()), totalBase, 1);
     for (int i = 0; i < 20; i++) {
       long count = (i + 1) * 10;
       end = getTuple(DatumFactory.createFloat8(start.getFloat8(0) + count * 0.5),
@@ -146,5 +150,13 @@ public class TestFreqHistogram {
 
     assertEquals(0.1, result.getFloat8(0), 0.0001);
     assertEquals(2, result.getInt8(1));
+  }
+
+  @Test
+  public void testUnicodeConvert() {
+    TextDatum datum = new TextDatum("가가가가");
+    BigDecimal decimal = HistogramUtil.unicodeCharsToBigDecimal(datum.asUnicodeChars());
+    String result = new String(HistogramUtil.bigDecimalToUnicodeChars(decimal));
+    assertEquals(datum.asChars(), result);
   }
 }

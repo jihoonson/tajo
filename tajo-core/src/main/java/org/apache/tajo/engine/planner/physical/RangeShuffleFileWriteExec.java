@@ -101,7 +101,7 @@ public class RangeShuffleFileWriteExec extends UnaryPhysicalExec {
     Tuple tuple;
     Tuple keyTuple;
     Tuple prevKeyTuple = new VTuple(keySchema.size());
-    Tuple keyBase = TupleRangeUtil.createMinBaseTuple(sortSpecs);
+    final Tuple keyBase = TupleRangeUtil.createMinBaseTuple(sortSpecs);
     Tuple endKeyTuple = null;
     long offset;
 
