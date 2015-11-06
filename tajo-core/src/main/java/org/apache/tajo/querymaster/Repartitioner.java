@@ -668,7 +668,7 @@ public class Repartitioner {
     } else {
       // TODO: create partitions by merging the ranges of the histogram
       FreqHistogram histogram = schedulerContext.getMasterContext().getQuery().getStage(sampleChildBlock.getId()).getHistogramForRangeShuffle();
-//      HistogramUtil.normalizeLength(histogram);
+      HistogramUtil.normalize(histogram, sortKeyStats);
       List<Bucket> buckets = histogram.getSortedBuckets();
 
       // Compute the total cardinality of sort keys.
@@ -712,7 +712,6 @@ public class Repartitioner {
 
       // The merged histogram can contain partitions of various lengths.
       // Thus, they need to be refined to be equal in length.
-      HistogramUtil.normalize(histogram, sortKeyStats);
       HistogramUtil.refineToEquiDepth(histogram, avgCard, sortKeyStats);
       buckets = histogram.getSortedBuckets();
 
