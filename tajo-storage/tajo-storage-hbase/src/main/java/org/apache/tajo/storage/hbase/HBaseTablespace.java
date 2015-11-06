@@ -1012,7 +1012,7 @@ public class HBaseTablespace extends Tablespace {
         } else {
           tupleRanges.remove(tupleRanges.size() - 1);
         }
-        return tupleRanges.toArray(new TupleRange[]{});
+        return tupleRanges.toArray(new TupleRange[tupleRanges.size()]);
       } finally {
         htable.close();
       }
