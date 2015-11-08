@@ -593,6 +593,7 @@ public class HistogramUtil {
           case INET4:
             // add = (base - min) * count
             add = normalize(column.getDataType(), baseTuple.asDatum(i), sortSpecs[i].isNullFirst(), min, max)
+                .subtract(min)
                 .multiply(BigDecimal.valueOf(count));
             // result = carry + (val - min) + add
             temp = carryAndRemainder[0]
@@ -743,6 +744,7 @@ public class HistogramUtil {
       carryAndRemainder[0] = quotAndRem[0]; // set carry as quotient
       carryAndRemainder[1] = quotAndRem[1].add(min);
     } else if (val.compareTo(min) < 0) {
+      // val = val - min
       // quote = ceil( (min - val) / max )
       // remainder = max * quote - (min - val)
       carryAndRemainder[0] = min.subtract(val).divide(max, BigDecimal.ROUND_CEILING);

@@ -239,6 +239,7 @@ public class FreqHistogram implements ProtoObject<FreqHistogramProto>, Cloneable
     // [start key, end key)
     private final TupleRange key;
     private long count;
+    private boolean isInclusive = false; // set for only the last bucket
 
     public Bucket(TupleRange key) {
       this(key, 0);

@@ -192,8 +192,15 @@ public class RangeShuffleFileWriteExec extends UnaryPhysicalExec {
           freqHistogram.getComparator()), current.getSecond());
     }
     if (next != null) {
-      freqHistogram.updateBucket(new TupleRange(next.getFirst(), next.getFirst(),
-          HistogramUtil.diff(sortSpecs, sortKeyStats, next.getFirst(), next.getFirst(), isPureAscii, maxLength),
+      Tuple interval = TupleRangeUtil.createMinBaseTuple(sortSpecs);
+      Tuple lastEnd;
+      if (sortSpecs[0].isAscending()) {
+       lastEnd = HistogramUtil.increment(sortSpecs, sortKeyStats, next.getFirst(), interval, 1, isPureAscii, maxLength);
+      } else {
+        lastEnd = HistogramUtil.increment(sortSpecs, sortKeyStats, next.getFirst(), interval, -1, isPureAscii, maxLength);
+      }
+      freqHistogram.updateBucket(new TupleRange(next.getFirst(), lastEnd,
+          interval,
           freqHistogram.getComparator()), next.getSecond());
     }
     context.setFreqHistogram(freqHistogram);
