@@ -25,6 +25,7 @@ import org.apache.tajo.annotation.Nullable;
 import org.apache.tajo.catalog.Column;
 import org.apache.tajo.catalog.SortSpec;
 import org.apache.tajo.catalog.TupleRange;
+import org.apache.tajo.catalog.TupleRangeUtil;
 import org.apache.tajo.catalog.statistics.FreqHistogram.Bucket;
 import org.apache.tajo.common.TajoDataTypes;
 import org.apache.tajo.common.TajoDataTypes.DataType;
@@ -126,7 +127,8 @@ public class HistogramUtil {
     Comparator<Tuple> comparator = histogram.comparator;
     List<Bucket> splits = new ArrayList<>();
 
-    if (bucket.getCount() == 1) {
+    if (bucket.getCount() == 1 ||
+        bucket.getBase().equals(TupleRangeUtil.createMinBaseTuple(histogram.sortSpecs))) {
       splits.add(bucket);
     } else {
       long remaining = bucket.getCount();
@@ -136,13 +138,19 @@ public class HistogramUtil {
       BigDecimal totalDiff = normalize(bucket.getEndKey(), histogram.sortSpecs, columnStatsList).subtract(normalizedStart);
       BigDecimal totalCount = BigDecimal.valueOf(bucket.getCount());
 
-      while (comparator.compare(end, bucket.getEndKey()) <= 0) {
+      while (comparator.compare(end, bucket.getEndKey()) < 0) {
         // count = totalCount * (end - start) / totalDiff
         long count = totalCount.multiply(normalize(end, histogram.sortSpecs, columnStatsList).subtract(normalizedStart))
             .divide(totalDiff, MathContext.DECIMAL128).longValue();
         splits.add(histogram.createBucket(new TupleRange(start, end, interval, comparator), count));
         start = end;
-        end = HistogramUtil.increment(histogram.sortSpecs, columnStatsList, start, interval, 1, isPureAscii, maxLength);
+        try {
+          end = HistogramUtil.increment(histogram.sortSpecs, columnStatsList, start, interval, 1, isPureAscii, maxLength);
+        } catch (TajoInternalError e) {
+          // TODO
+          break;
+        }
+        normalizedStart = normalize(start, histogram.sortSpecs, columnStatsList);
         remaining -= count;
       }
 
@@ -183,65 +191,40 @@ public class HistogramUtil {
     // TODO: min value may not be zero
     switch (dataType.getType()) {
       case BOOLEAN:
-        max = BigDecimal.valueOf(2); // include null
-        min = BigDecimal.ZERO;
+        if (columnStats.hasNullValue()) {
+          max = nullFirst ? BigDecimal.valueOf(2) : BigDecimal.ONE; // include null
+          min = nullFirst ? BigDecimal.ONE : BigDecimal.ZERO;
+        } else {
+          max = BigDecimal.ONE;
+          min = BigDecimal.ZERO;
+        }
         break;
       case INT2:
-        if (nullFirst) {
-          max = BigDecimal.valueOf(columnStats.getMaxValue().asInt2());
-          min = BigDecimal.valueOf(columnStats.getMinValue().asInt2() - 1);
-        } else {
-          max = BigDecimal.valueOf(columnStats.getMaxValue().asInt2() + 1);
-          min = BigDecimal.valueOf(columnStats.getMinValue().asInt2());
-        }
+        max = BigDecimal.valueOf(columnStats.getMaxValue().asInt2());
+        min = BigDecimal.valueOf(columnStats.getMinValue().asInt2());
         break;
       case INT4:
       case DATE:
       case INET4:
-        if (nullFirst) {
-          max = BigDecimal.valueOf(columnStats.getMaxValue().asInt4());
-          min = BigDecimal.valueOf(columnStats.getMinValue().asInt4() - 1);
-        } else {
-          max = BigDecimal.valueOf(columnStats.getMaxValue().asInt4() + 1);
-          min = BigDecimal.valueOf(columnStats.getMinValue().asInt4());
-        }
+        max = BigDecimal.valueOf(columnStats.getMaxValue().asInt4());
+        min = BigDecimal.valueOf(columnStats.getMinValue().asInt4());
         break;
       case INT8:
       case TIME:
-        if (nullFirst) {
-          max = BigDecimal.valueOf(columnStats.getMaxValue().asInt8());
-          min = BigDecimal.valueOf(columnStats.getMinValue().asInt8() - 1);
-        } else {
-          max = BigDecimal.valueOf(columnStats.getMaxValue().asInt8() + 1);
-          min = BigDecimal.valueOf(columnStats.getMinValue().asInt8());
-        }
+        max = BigDecimal.valueOf(columnStats.getMaxValue().asInt8());
+        min = BigDecimal.valueOf(columnStats.getMinValue().asInt8());
         break;
       case FLOAT4:
-        if (nullFirst) {
-          max = BigDecimal.valueOf(columnStats.getMaxValue().asFloat4());
-          min = BigDecimal.valueOf(columnStats.getMinValue().asFloat4() - 1.f);
-        } else {
-          max = BigDecimal.valueOf(columnStats.getMaxValue().asFloat4() + 1.f);
-          min = BigDecimal.valueOf(columnStats.getMinValue().asFloat4());
-        }
+        max = BigDecimal.valueOf(columnStats.getMaxValue().asFloat4());
+        min = BigDecimal.valueOf(columnStats.getMinValue().asFloat4());
         break;
       case FLOAT8:
-        if (nullFirst) {
-          max = BigDecimal.valueOf(columnStats.getMaxValue().asFloat8());
-          min = BigDecimal.valueOf(columnStats.getMinValue().asFloat8() - 1.d);
-        } else {
-          max = BigDecimal.valueOf(columnStats.getMaxValue().asFloat8() + 1.d);
-          min = BigDecimal.valueOf(columnStats.getMinValue().asFloat8());
-        }
+        max = BigDecimal.valueOf(columnStats.getMaxValue().asFloat8());
+        min = BigDecimal.valueOf(columnStats.getMinValue().asFloat8());
         break;
       case CHAR:
-        if (nullFirst) {
-          max = BigDecimal.valueOf(columnStats.getMaxValue().asChar());
-          min = BigDecimal.valueOf(columnStats.getMinValue().asChar() - 1);
-        } else {
-          max = BigDecimal.valueOf(columnStats.getMaxValue().asChar() + 1);
-          min = BigDecimal.valueOf(columnStats.getMinValue().asChar());
-        }
+        max = BigDecimal.valueOf(columnStats.getMaxValue().asChar());
+        min = BigDecimal.valueOf(columnStats.getMinValue().asChar());
         break;
       case TEXT:
         if (isPureAscii) {
@@ -251,23 +234,18 @@ public class HistogramUtil {
           max = unicodeCharsToBigDecimal(columnStats.getMaxValue().asUnicodeChars());
           min = unicodeCharsToBigDecimal(columnStats.getMinValue().asUnicodeChars());
         }
-        if (nullFirst) {
-          min = min.subtract(BigDecimal.ONE);
-        } else {
-          max = max.add(BigDecimal.ONE);
-        }
         break;
       case TIMESTAMP:
-        if (nullFirst) {
-          max = BigDecimal.valueOf(((TimestampDatum) columnStats.getMaxValue()).getJavaTimestamp());
-          min = BigDecimal.valueOf(((TimestampDatum) columnStats.getMinValue()).getJavaTimestamp() - 1);
-        } else {
-          max = BigDecimal.valueOf(((TimestampDatum) columnStats.getMaxValue()).getJavaTimestamp() + 1);
-          min = BigDecimal.valueOf(((TimestampDatum) columnStats.getMinValue()).getJavaTimestamp());
-        }
+        max = BigDecimal.valueOf(((TimestampDatum) columnStats.getMaxValue()).getJavaTimestamp());
+        min = BigDecimal.valueOf(((TimestampDatum) columnStats.getMinValue()).getJavaTimestamp());
         break;
       default:
         throw new UnsupportedOperationException(dataType.getType() + " is not supported yet");
+    }
+    if (nullFirst) {
+      min = min.subtract(BigDecimal.ONE);
+    } else {
+      max = max.add(BigDecimal.ONE);
     }
     return new BigDecimal[] {min, max};
   }
@@ -309,7 +287,7 @@ public class HistogramUtil {
     }
   }
 
-  private static Datum denormalize(final DataType dataType,
+  public static Datum denormalize(final DataType dataType,
                                    final BigDecimal val,
                                    final boolean isPureAscii,
                                    final boolean nullFirst,
@@ -448,14 +426,15 @@ public class HistogramUtil {
           columnStatsList.get(i), isPureAscii[i]);
 
       BigDecimal min = minMax[0];
+      BigDecimal max = minMax[1];
       BigDecimal normalizedMax = minMax[1].subtract(min);
 
       if (large.isBlankOrNull(i)) {
-        normalizedLarge = sortSpecs[i].isNullFirst() ? min : normalizedMax;
+        normalizedLarge = sortSpecs[i].isNullFirst() ? BigDecimal.ZERO : normalizedMax;
       } else {
         switch (column.getDataType().getType()) {
           case BOOLEAN:
-            normalizedLarge = large.getBool(i) ? normalizedMax : min;
+            normalizedLarge = large.getBool(i) ? BigDecimal.ZERO : BigDecimal.ONE;
             break;
           case CHAR:
           case INT2:
@@ -467,7 +446,7 @@ public class HistogramUtil {
           case TIME:
           case TIMESTAMP:
           case INET4:
-            normalizedLarge = normalize(column.getDataType(), large.asDatum(i), sortSpecs[i].isNullFirst(), min, normalizedMax);
+            normalizedLarge = normalize(column.getDataType(), large.asDatum(i), sortSpecs[i].isNullFirst(), min, max);
             break;
           case TEXT:
             if (isPureAscii[i]) {
@@ -484,11 +463,11 @@ public class HistogramUtil {
       }
 
       if (small.isBlankOrNull(i)) {
-        normalizedSmall = sortSpecs[i].isNullFirst() ? min : normalizedMax;
+        normalizedSmall = sortSpecs[i].isNullFirst() ? BigDecimal.ZERO : normalizedMax;
       } else {
         switch (column.getDataType().getType()) {
           case BOOLEAN:
-            normalizedSmall = small.getBool(i) ? normalizedMax : min;
+            normalizedSmall = small.getBool(i) ? BigDecimal.ZERO : BigDecimal.ONE;
             break;
           case CHAR:
           case INT2:
@@ -500,7 +479,7 @@ public class HistogramUtil {
           case TIME:
           case TIMESTAMP:
           case INET4:
-            normalizedSmall = normalize(column.getDataType(), small.asDatum(i), sortSpecs[i].isNullFirst(), min, normalizedMax);
+            normalizedSmall = normalize(column.getDataType(), small.asDatum(i), sortSpecs[i].isNullFirst(), min, max);
             break;
           case TEXT:
             if (isPureAscii[i]) {
@@ -516,10 +495,14 @@ public class HistogramUtil {
         }
       }
 
+      normalizedLarge = normalizedLarge.subtract(min);
+      normalizedSmall = normalizedSmall.subtract(min);
+
       temp = carryAndRemainder[0]
           .add(normalizedLarge)
           .subtract(normalizedSmall);
-      carryAndRemainder = calculateCarryAndRemainder(temp, normalizedMax, BigDecimal.ZERO);
+      carryAndRemainder = calculateCarryAndRemainder(temp, normalizedMax);
+      carryAndRemainder[1] = carryAndRemainder[1].add(min);
       result.put(i, denormalize(column.getDataType(), carryAndRemainder[1], isPureAscii[i], sortSpecs[i].isNullFirst(), min, normalizedMax));
     }
 
@@ -571,15 +554,16 @@ public class HistogramUtil {
         BigDecimal min = minMax[0];
         BigDecimal max = minMax[1];
         BigDecimal normalizedMax = max.subtract(min);
+        BigDecimal normalizedOp, normalizedBase;
 
         switch (column.getDataType().getType()) {
           case BOOLEAN:
             // add = base * count
             add = BigDecimal.valueOf(count);
             // result = carry + val + add
-            temp = operand.getBool(i) ? max : min;
+            temp = operand.getBool(i) ? BigDecimal.ONE : BigDecimal.ZERO;
             temp = carryAndRemainder[0].add(temp).add(add);
-            carryAndRemainder = calculateCarryAndRemainder(temp, max, min);
+            carryAndRemainder = calculateCarryAndRemainder(temp, normalizedMax);
             break;
           case CHAR:
           case INT2:
@@ -591,28 +575,21 @@ public class HistogramUtil {
           case TIME:
           case TIMESTAMP:
           case INET4:
+            normalizedOp = normalize(column.getDataType(), operand.asDatum(i), sortSpecs[i].isNullFirst(), min, max)
+                .subtract(min);
+            normalizedBase = normalize(column.getDataType(), baseTuple.asDatum(i), sortSpecs[i].isNullFirst(), min, max);
+//                .subtract(min);
             // add = (base - min) * count
-            add = normalize(column.getDataType(), baseTuple.asDatum(i), sortSpecs[i].isNullFirst(), min, max)
-                .subtract(min)
+            add = normalizedBase
                 .multiply(BigDecimal.valueOf(count));
             // result = carry + (val - min) + add
             temp = carryAndRemainder[0]
-                .add(normalize(column.getDataType(), operand.asDatum(i), sortSpecs[i].isNullFirst(), min, max))
-                .add(add).subtract(min);
-            carryAndRemainder = calculateCarryAndRemainder(temp, normalizedMax, BigDecimal.ZERO);
-            carryAndRemainder[1] = carryAndRemainder[1].add(min);
-            if (carryAndRemainder[1].equals(max)) {
-              carryAndRemainder[0] = carryAndRemainder[0].add(BigDecimal.ONE);
-              carryAndRemainder[1] = min;
-            }
-            if (carryAndRemainder[1].compareTo(max) > 0 ||
-                carryAndRemainder[1].compareTo(min) < 0) {
-              throw new TajoInternalError("Invalid remainder");
-            }
+                .add(normalizedOp)
+                .add(add);
+            carryAndRemainder = calculateCarryAndRemainder(temp, normalizedMax);
             break;
           case TEXT:
             if (isPureAscii[i]) {
-              BigDecimal normalizedOp, normalizedBase;
               if (operand.isBlankOrNull(i)) {
                 normalizedOp = sortSpecs[i].isNullFirst() ? min : max;
               } else {
@@ -625,24 +602,7 @@ public class HistogramUtil {
                 byte[] base = baseTuple.getBytes(i);
                 normalizedBase = normalizeBytes(base, maxLength[i]);
               }
-
-              add = normalizedBase
-                  .multiply(BigDecimal.valueOf(count));
-              temp = carryAndRemainder[0]
-                  .add(normalizedOp)
-                  .add(add).subtract(min);
-              carryAndRemainder = calculateCarryAndRemainder(temp, normalizedMax, BigDecimal.ZERO);
-              carryAndRemainder[1] = carryAndRemainder[1].add(min);
-              if (carryAndRemainder[1].equals(max)) {
-                carryAndRemainder[0] = carryAndRemainder[0].add(BigDecimal.ONE);
-                carryAndRemainder[1] = min;
-              }
-              if (carryAndRemainder[1].compareTo(max) > 0 ||
-                  carryAndRemainder[1].compareTo(min) < 0) {
-                throw new TajoInternalError("Invalid remainder");
-              }
             } else {
-              BigDecimal normalizedOp, normalizedBase;
               if (operand.isBlankOrNull(i)) {
                 normalizedOp = sortSpecs[i].isNullFirst() ? min : max;
               } else {
@@ -655,38 +615,41 @@ public class HistogramUtil {
                 char[] base = baseTuple.getUnicodeChars(i);
                 normalizedBase = normalizeUnicodeChars(base, maxLength[i]);
               }
-
-              add = normalizedBase
-                  .multiply(BigDecimal.valueOf(count));
-              temp = carryAndRemainder[0]
-                  .add(normalizedOp)
-                  .add(add).subtract(min);
-              carryAndRemainder = calculateCarryAndRemainder(temp, normalizedMax, BigDecimal.ZERO);
-              carryAndRemainder[1] = carryAndRemainder[1].add(min);
-              if (carryAndRemainder[1].equals(max)) {
-                carryAndRemainder[0] = carryAndRemainder[0].add(BigDecimal.ONE);
-                carryAndRemainder[1] = min;
-              }
-              if (carryAndRemainder[1].compareTo(max) > 0 ||
-                  carryAndRemainder[1].compareTo(min) < 0) {
-                throw new TajoInternalError("Invalid remainder");
-              }
             }
+            normalizedOp = normalizedOp.subtract(min);
+//            normalizedBase = normalizedBase.subtract(min);
+
+            add = normalizedBase
+                .multiply(BigDecimal.valueOf(count));
+            temp = carryAndRemainder[0]
+                .add(normalizedOp)
+                .add(add);
+            carryAndRemainder = calculateCarryAndRemainder(temp, normalizedMax);
             break;
           default:
             throw new UnsupportedOperationException(column.getDataType() + " is not supported yet");
         }
 
-        if (columnStatsList.get(i).hasNullValue() && carryAndRemainder[0].compareTo(BigDecimal.ZERO) > 0) {
-          // null last ? carry--;
-          // remainder == 0 ? put null
-          if (!sortSpecs[i].isNullFirst()) {
-            carryAndRemainder[0] = carryAndRemainder[0].subtract(BigDecimal.ONE);
-          }
-          if (carryAndRemainder[1].equals(BigDecimal.ZERO)) {
-            result.put(i, NullDatum.get());
-          }
+        carryAndRemainder[1] = carryAndRemainder[1].add(min);
+        if (carryAndRemainder[1].compareTo(max) >= 0) {
+          carryAndRemainder[0] = carryAndRemainder[0].add(BigDecimal.ONE);
+          carryAndRemainder[1] = carryAndRemainder[1].subtract(max);
         }
+        if (carryAndRemainder[1].compareTo(max) > 0 ||
+            carryAndRemainder[1].compareTo(min) < 0) {
+          throw new TajoInternalError("Invalid remainder");
+        }
+
+//        if (columnStatsList.get(i).hasNullValue() && carryAndRemainder[0].compareTo(BigDecimal.ZERO) > 0) {
+//          // null last ? carry--;
+//          // remainder == 0 ? put null
+//          if (!sortSpecs[i].isNullFirst()) {
+//            carryAndRemainder[0] = carryAndRemainder[0].subtract(BigDecimal.ONE);
+//          }
+//          if (carryAndRemainder[1].equals(BigDecimal.ZERO)) {
+//            result.put(i, NullDatum.get());
+//          }
+//        }
 
         if (result.isBlank(i)) {
           result.put(i, denormalize(column.getDataType(), carryAndRemainder[1], isPureAscii[i], sortSpecs[i].isNullFirst(), min, max));
@@ -729,30 +692,28 @@ public class HistogramUtil {
 
   /**
    *
-   * @param val
-   * @param max
-   * @param min
+   * @param normalizedVal
+   * @param normalizedMax
    * @return
    */
-  private static BigDecimal[] calculateCarryAndRemainder(BigDecimal val, BigDecimal max, BigDecimal min) {
+  private static BigDecimal[] calculateCarryAndRemainder(BigDecimal normalizedVal, BigDecimal normalizedMax) {
     // TODO: if val is negative??
     BigDecimal[] carryAndRemainder = new BigDecimal[2];
-    if (val.compareTo(max) > 0) {
-      // quote = (val - min) / (max - min)
-      // remainder = ((val - min) % (max - min)) + min
-      BigDecimal[] quotAndRem = val.subtract(min).divideAndRemainder(max.subtract(min), MathContext.DECIMAL128);
+    if (normalizedVal.compareTo(normalizedMax) > 0) {
+      // quote = val / max
+      // remainder = val % max
+      BigDecimal[] quotAndRem = normalizedVal.divideAndRemainder(normalizedMax, MathContext.DECIMAL128);
       carryAndRemainder[0] = quotAndRem[0]; // set carry as quotient
-      carryAndRemainder[1] = quotAndRem[1].add(min);
-    } else if (val.compareTo(min) < 0) {
-      // val = val - min
-      // quote = ceil( (min - val) / max )
-      // remainder = max * quote - (min - val)
-      carryAndRemainder[0] = min.subtract(val).divide(max, BigDecimal.ROUND_CEILING);
-      carryAndRemainder[1] = max.multiply(carryAndRemainder[0]).subtract(min).add(val);
+      carryAndRemainder[1] = quotAndRem[1];
+    } else if (normalizedVal.compareTo(BigDecimal.ZERO) < 0) {
+      // quote = -1 * ceil( -val / max )
+      // remainder = max * -quote + val
+      carryAndRemainder[0] = normalizedVal.abs().divide(normalizedMax, BigDecimal.ROUND_CEILING);
+      carryAndRemainder[1] = normalizedMax.multiply(carryAndRemainder[0]).add(normalizedVal);
       carryAndRemainder[0] = carryAndRemainder[0].multiply(BigDecimal.valueOf(-1));
     } else {
       carryAndRemainder[0] = BigDecimal.ZERO;
-      carryAndRemainder[1] = val;
+      carryAndRemainder[1] = normalizedVal;
     }
     return carryAndRemainder;
   }

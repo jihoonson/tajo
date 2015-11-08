@@ -18,6 +18,7 @@
 
 package org.apache.tajo.catalog;
 
+import org.apache.tajo.catalog.statistics.ColumnStats;
 import org.apache.tajo.common.TajoDataTypes.DataType;
 import org.apache.tajo.datum.Datum;
 import org.apache.tajo.datum.DatumFactory;
@@ -34,6 +35,7 @@ import org.apache.tajo.util.StringUtils;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.math.MathContext;
+import java.util.List;
 
 public class TupleRangeUtil {
 
@@ -85,12 +87,19 @@ public class TupleRangeUtil {
   public static Tuple createMinBaseTuple(SortSpec[] sortSpecs) {
     Tuple base = new VTuple(sortSpecs.length);
     int i = 0;
-    for (i = 0; i < sortSpecs.length - 1; i++) {
+    for (i = 0; i < sortSpecs.length; i++) {
       base.put(i, minBase(sortSpecs[i].getSortKey().getDataType(), 0));
     }
-    base.put(i, minBase(sortSpecs[i].getSortKey().getDataType(), 1));
     return base;
   }
+
+//  public static Tuple createMinTuple(List<ColumnStats> columnStatsList) {
+//    Tuple tuple = new VTuple(columnStatsList.size());
+//    for (int i = 0; i < columnStatsList.size(); i++) {
+//      tuple.put(i, columnStatsList.get(i).getMinValue());
+//    }
+//    return tuple;
+//  }
 
   /**
    * It computes the value cardinality of a tuple range.

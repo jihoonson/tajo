@@ -134,7 +134,7 @@ public class RangeShuffleFileWriteExec extends UnaryPhysicalExec {
 
     if (count > 0) {
 //      Tuple infiniteTuple = HistogramUtil.getPositiveInfiniteTuple(keySchema.size());
-//      Tuple interval = freqHistogram.getMinInterval();
+//      Tuple interval = freqHistogram.getNonZeroMinInterval();
 //      freqHistogram.updateBucket(prevKeyTuple, HistogramUtil.increment(sortSpecs, null, prevKeyTuple, interval, 1), interval, count);
       countPerTuples.add(new Pair<>(prevKeyTuple, count));
     }
@@ -183,25 +183,25 @@ public class RangeShuffleFileWriteExec extends UnaryPhysicalExec {
     List<ColumnStats> sortKeyStats = TupleUtil.extractSortColumnStats(sortSpecs, context.getResultStats().getColumnStats(), false);
     FreqHistogram freqHistogram = new FreqHistogram(keySchema, sortSpecs);
     Pair<Tuple, Long> current, next = null;
+    Tuple interval = null;
     for (int i = 0; i < countPerTuples.size() - 1; i++) {
       current = countPerTuples.get(i);
       next = countPerTuples.get(i + 1);
-      Tuple interval = HistogramUtil.diff(sortSpecs, sortKeyStats, current.getFirst(), next.getFirst(), isPureAscii, maxLength);
+      interval = HistogramUtil.diff(sortSpecs, sortKeyStats, current.getFirst(), next.getFirst(), isPureAscii, maxLength);
       freqHistogram.updateBucket(new TupleRange(current.getFirst(), next.getFirst(),
           interval,
           freqHistogram.getComparator()), current.getSecond());
     }
     if (next != null) {
-      Tuple interval = TupleRangeUtil.createMinBaseTuple(sortSpecs);
-      Tuple lastEnd;
-      if (sortSpecs[0].isAscending()) {
-       lastEnd = HistogramUtil.increment(sortSpecs, sortKeyStats, next.getFirst(), interval, 1, isPureAscii, maxLength);
-      } else {
-        lastEnd = HistogramUtil.increment(sortSpecs, sortKeyStats, next.getFirst(), interval, -1, isPureAscii, maxLength);
-      }
-      freqHistogram.updateBucket(new TupleRange(next.getFirst(), lastEnd,
-          interval,
-          freqHistogram.getComparator()), next.getSecond());
+//      Tuple lastEnd;
+//      if (sortSpecs[0].isAscending()) {
+//       lastEnd = HistogramUtil.increment(sortSpecs, sortKeyStats, next.getFirst(), interval, 1, isPureAscii, maxLength);
+//      } else {
+//        lastEnd = HistogramUtil.increment(sortSpecs, sortKeyStats, next.getFirst(), interval, -1, isPureAscii, maxLength);
+//      }
+      freqHistogram.updateBucket(new TupleRange(next.getFirst(), next.getFirst(),
+          HistogramUtil.diff(sortSpecs, sortKeyStats, next.getFirst(), next.getFirst(), isPureAscii, maxLength),
+          freqHistogram.getComparator()), next.getSecond(), true);
     }
     context.setFreqHistogram(freqHistogram);
     appender = null;
