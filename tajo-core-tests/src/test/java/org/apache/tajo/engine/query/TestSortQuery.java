@@ -102,7 +102,6 @@ public class TestSortQuery extends QueryTestCaseBase {
     cleanupQuery(res);
   }
 
-
   @Test
   public final void testSortFirstDesc() throws Exception {
     try {

@@ -18,7 +18,6 @@
 
 package org.apache.tajo.catalog.statistics;
 
-import org.apache.tajo.catalog.BaseTupleComparator;
 import org.apache.tajo.catalog.Column;
 import org.apache.tajo.catalog.Schema;
 import org.apache.tajo.catalog.SortSpec;
@@ -37,7 +36,6 @@ import org.junit.Test;
 import java.math.BigDecimal;
 import java.math.MathContext;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
@@ -85,8 +83,8 @@ public class TestHistogramUtil {
       start = end;
       card += count;
     }
-    histogram.updateBucket(start, getTuple(NullDatum.get(), NullDatum.get()), totalBase, 1);
-    totalCount = BigDecimal.valueOf(card);
+    histogram.updateBucket(start, getTuple(NullDatum.get(), NullDatum.get()), totalBase, 50);
+    totalCount = BigDecimal.valueOf(card + 50);
     columnStatsList.get(0).setMinValue(DatumFactory.createFloat8(0.1));
     columnStatsList.get(0).setMaxValue(DatumFactory.createFloat8(maxDouble));
     columnStatsList.get(1).setMinValue(DatumFactory.createInt8(2));
@@ -169,9 +167,8 @@ public class TestHistogramUtil {
     schema.addColumn("col2", Type.TEXT);
 
     SortSpec[] sortSpecs = new SortSpec[2];
-    sortSpecs[0] = new SortSpec(schema.getColumn(0), true, false);
+    sortSpecs[0] = new SortSpec(schema.getColumn(0), false, false);
     sortSpecs[1] = new SortSpec(schema.getColumn(1));
-    Comparator<Tuple> comparator = new BaseTupleComparator(schema, sortSpecs);
 
     List<ColumnStats> columnStatsList = new ArrayList<>(2);
     ColumnStats stats = new ColumnStats(schema.getColumn(0));
@@ -186,7 +183,6 @@ public class TestHistogramUtil {
 
     Tuple tuple1 = getTuple(NullDatum.get(), DatumFactory.createText("가가가가가"));
     Tuple tuple2 = getTuple(DatumFactory.createText("하하하"), NullDatum.get());
-    assertTrue(comparator.compare(tuple1, tuple2) > 0);
     BigDecimal n1 = HistogramUtil.normalize(tuple1, sortSpecs, columnStatsList);
     BigDecimal n2 = HistogramUtil.normalize(tuple2, sortSpecs, columnStatsList);
     assertTrue(n1.compareTo(n2) > 0);
@@ -227,8 +223,47 @@ public class TestHistogramUtil {
 
   @Test
   public void testRefineToEquiDepth() {
-    BigDecimal avgCount = totalCount.divide(BigDecimal.valueOf(20), MathContext.DECIMAL128);
+    BigDecimal avgCount = totalCount.divide(BigDecimal.valueOf(21), MathContext.DECIMAL128);
     HistogramUtil.refineToEquiDepth(histogram, avgCount, columnStatsList, new boolean[] {false, false}, new int[] {0, 0});
     List<Bucket> buckets = histogram.getSortedBuckets();
+    assertEquals(21, buckets.size());
+    for (Bucket bucket : buckets) {
+      assertTrue(bucket.getCount() == avgCount.longValue() ||
+          bucket.getCount() == avgCount.longValue() + 1);
+    }
+  }
+
+  @Test
+  public void testDiff() {
+    Tuple tuple = getTuple(DatumFactory.createFloat8(0.1), DatumFactory.createInt8(2));
+    Tuple result = HistogramUtil.increment(sortSpecs, columnStatsList, tuple, totalBase, 1,
+        new boolean[] {false, false}, new int[] {0, 0});
+
+    Tuple diff = HistogramUtil.diff(histogram.comparator,
+        sortSpecs, columnStatsList, tuple, result, new boolean[] {false, false}, new int[] {0, 0});
+    assertEquals(totalBase, diff);
+
+    diff = HistogramUtil.diff(histogram.comparator,
+        sortSpecs, columnStatsList, result, tuple, new boolean[] {false, false}, new int[] {0, 0});
+    assertEquals(totalBase, diff);
+  }
+
+  @Test
+  public void testDiff2() {
+    SortSpec[] sortSpecs = new SortSpec[2];
+    sortSpecs[0] = new SortSpec(schema.getColumn(0), false, true);
+    sortSpecs[1] = new SortSpec(schema.getColumn(1));
+
+    Tuple tuple = getTuple(DatumFactory.createFloat8(0.1), DatumFactory.createInt8(2));
+    Tuple result = HistogramUtil.increment(sortSpecs, columnStatsList, tuple, totalBase, 1,
+        new boolean[] {false, false}, new int[] {0, 0});
+
+    Tuple diff = HistogramUtil.diff(histogram.comparator,
+        sortSpecs, columnStatsList, tuple, result, new boolean[] {false, false}, new int[] {0, 0});
+    assertEquals(totalBase, diff);
+
+    diff = HistogramUtil.diff(histogram.comparator,
+        sortSpecs, columnStatsList, result, tuple, new boolean[] {false, false}, new int[] {0, 0});
+    assertEquals(totalBase, diff);
   }
 }

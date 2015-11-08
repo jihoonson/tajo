@@ -398,7 +398,8 @@ public class HistogramUtil {
     return result;
   }
 
-  public static Tuple diff(final SortSpec[] sortSpecs,
+  public static Tuple diff(final Comparator<Tuple> comparator,
+                           final SortSpec[] sortSpecs,
                            List<ColumnStats> columnStatsList,
                            final Tuple first, final Tuple second,
                            boolean[] isPureAscii, int[] maxLength) {
@@ -410,7 +411,7 @@ public class HistogramUtil {
     BigDecimal[] carryAndRemainder = new BigDecimal[] {BigDecimal.ZERO, BigDecimal.ZERO};
 
     Tuple large, small;
-    if (sortSpecs[0].isAscending()) {
+    if (comparator.compare(first, second) < 0) {
       large = second;
       small = first;
     } else {
@@ -427,10 +428,10 @@ public class HistogramUtil {
 
       BigDecimal min = minMax[0];
       BigDecimal max = minMax[1];
-      BigDecimal normalizedMax = minMax[1].subtract(min);
+      BigDecimal normalizedMax = max.subtract(min);
 
       if (large.isBlankOrNull(i)) {
-        normalizedLarge = sortSpecs[i].isNullFirst() ? BigDecimal.ZERO : normalizedMax;
+        normalizedLarge = sortSpecs[i].isNullFirst() ? min : max;
       } else {
         switch (column.getDataType().getType()) {
           case BOOLEAN:
@@ -463,7 +464,7 @@ public class HistogramUtil {
       }
 
       if (small.isBlankOrNull(i)) {
-        normalizedSmall = sortSpecs[i].isNullFirst() ? BigDecimal.ZERO : normalizedMax;
+        normalizedSmall = sortSpecs[i].isNullFirst() ? min : max;
       } else {
         switch (column.getDataType().getType()) {
           case BOOLEAN:
@@ -502,8 +503,7 @@ public class HistogramUtil {
           .add(normalizedLarge)
           .subtract(normalizedSmall);
       carryAndRemainder = calculateCarryAndRemainder(temp, normalizedMax);
-      carryAndRemainder[1] = carryAndRemainder[1].add(min);
-      result.put(i, denormalize(column.getDataType(), carryAndRemainder[1], isPureAscii[i], sortSpecs[i].isNullFirst(), min, normalizedMax));
+      result.put(i, denormalize(column.getDataType(), carryAndRemainder[1], isPureAscii[i], sortSpecs[i].isNullFirst(), BigDecimal.ZERO, normalizedMax));
     }
 
     if (!carryAndRemainder[0].equals(BigDecimal.ZERO)) {
