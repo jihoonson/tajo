@@ -32,6 +32,7 @@ import org.apache.tajo.catalog.*;
 import org.apache.tajo.catalog.proto.CatalogProtos.PartitionDescProto;
 import org.apache.tajo.catalog.statistics.*;
 import org.apache.tajo.catalog.statistics.FreqHistogram.Bucket;
+import org.apache.tajo.common.TajoDataTypes.Type;
 import org.apache.tajo.conf.TajoConf;
 import org.apache.tajo.engine.planner.PhysicalPlannerImpl;
 import org.apache.tajo.engine.planner.enforce.Enforcer;
@@ -56,10 +57,12 @@ import org.apache.tajo.rpc.protocolrecords.PrimitiveProtos;
 import org.apache.tajo.storage.FileTablespace;
 import org.apache.tajo.storage.Tablespace;
 import org.apache.tajo.storage.TablespaceManager;
+import org.apache.tajo.storage.Tuple;
 import org.apache.tajo.storage.fragment.Fragment;
 import org.apache.tajo.unit.StorageUnit;
 import org.apache.tajo.util.KeyValueSet;
 import org.apache.tajo.util.RpcParameterFactory;
+import org.apache.tajo.util.StringUtils;
 import org.apache.tajo.util.history.StageHistory;
 import org.apache.tajo.util.history.TaskHistory;
 import org.apache.tajo.worker.FetchImpl;
@@ -1247,12 +1250,39 @@ public class Stage implements EventHandler<StageEvent> {
   }
 
   private static void updateHistogram(Stage stage, StageTaskEvent taskEvent, int maxSize) {
-    // 1) Update histograms of range partitions using the report
-    // TODO: should handle buckets of different bases
-    stage.histogramForRangeShuffle.merge(taskEvent.getHistogram());
-    FreqHistogram histogram = stage.histogramForRangeShuffle;
-    HistogramUtil.normalizeLength(histogram);
+    FreqHistogram histogram = taskEvent.getHistogram();
     List<Bucket> buckets = histogram.getSortedBuckets();
+
+    boolean[] isPureAscii = new boolean[histogram.getKeySchema().size()];
+    int[] maxLength = new int[histogram.getKeySchema().size()];
+    Arrays.fill(isPureAscii, true);
+    Arrays.fill(maxLength, 0);
+    for (Bucket bucket : buckets) {
+      Tuple tuple = bucket.getStartKey();
+      for (int i = 0; i < histogram.getKeySchema().size(); i++) {
+        if (histogram.getKeySchema().getColumn(i).getDataType().getType().equals(Type.TEXT)) {
+          boolean isCurrentPureAscii = StringUtils.isPureAscii(tuple.getText(i));
+          if (isPureAscii[i]) {
+            isPureAscii[i] &= isCurrentPureAscii;
+          }
+          if (isCurrentPureAscii) {
+            maxLength[i] = Math.max(maxLength[i], tuple.getText(i).length());
+          } else {
+            maxLength[i] = Math.max(maxLength[i], tuple.getUnicodeChars(i).length);
+          }
+        }
+      }
+    }
+
+    List<ColumnStats> sortKeyStats = TupleUtil.extractSortColumnStats(
+        histogram.getSortSpecs(),
+        stage.resultStatistics.getColumnStats(),
+        false);
+    // 1) Update histograms of range partitions using the report
+    stage.histogramForRangeShuffle.merge(histogram, sortKeyStats, isPureAscii, maxLength);
+//    FreqHistogram histogram = stage.histogramForRangeShuffle;
+//    HistogramUtil.normalizeLength(histogram);
+//    List<Bucket> buckets = histogram.getSortedBuckets();
 
     // 2) Calculate ​Θ, the average count of range partitions
 //    BigDecimal avgCard = buckets.stream().map(bucket ->

@@ -40,6 +40,7 @@ public class FreqHistogram implements ProtoObject<FreqHistogramProto>, Cloneable
   protected final SortSpec[] sortSpecs;
   protected final Map<TupleRange, Bucket> buckets = new HashMap<>();
   protected final TupleComparator comparator;
+  protected Tuple minInterval;
 
   public FreqHistogram(Schema keySchema, SortSpec[] sortSpec) {
     this.keySchema = keySchema;
@@ -65,6 +66,23 @@ public class FreqHistogram implements ProtoObject<FreqHistogramProto>, Cloneable
       Bucket bucket = new Bucket(eachBucketProto);
       buckets.put(bucket.key, bucket);
     }
+  }
+
+  public Tuple getMinInterval() {
+    if (this.minInterval == null) {
+      for (Bucket eachBucket : buckets.values()) {
+        if (minInterval == null) {
+          minInterval = eachBucket.getBase();
+        } else if (comparator.compare(minInterval, eachBucket.getBase()) > 0) {
+          minInterval = eachBucket.getBase();
+        }
+      }
+    }
+    return minInterval;
+  }
+
+  public void setMinInterval(Tuple interval) {
+    this.minInterval = interval;
   }
 
   public Schema getKeySchema() {
@@ -106,10 +124,46 @@ public class FreqHistogram implements ProtoObject<FreqHistogramProto>, Cloneable
    *
    * @param other
    */
-  public void merge(FreqHistogram other) {
-    for (Bucket eachBucket: other.getAllBuckets()) {
-      updateBucket(eachBucket.key, eachBucket.count);
+  public void merge(FreqHistogram other, List<ColumnStats> columnStatsList,
+                    boolean[] isPureAscii, int[] maxLength) {
+    // Find the min interval from both histograms
+    Tuple minInterval;
+    if (this.size() > 0 && other.size() > 0) {
+      minInterval = comparator.compare(this.getMinInterval(), other.getMinInterval()) > 0 ?
+          other.getMinInterval() : this.getMinInterval();
+    } else if (this.size() > 0) {
+      minInterval = this.getMinInterval();
+    } else if (other.size() > 0) {
+      minInterval = other.getMinInterval();
+    } else {
+      return;
     }
+
+    // Split buckets with the min interval
+    this.buckets.clear();
+    for (Bucket eachBucket : this.buckets.values()) {
+      if (comparator.compare(eachBucket.getBase(), minInterval) > 0) {
+        // Split the bucket
+        for (Bucket split : HistogramUtil.splitBucket(this, columnStatsList, eachBucket, minInterval, isPureAscii, maxLength)) {
+          this.buckets.put(split.key, split);
+        }
+      } else {
+        this.buckets.put(eachBucket.key, eachBucket);
+      }
+    }
+
+    for (Bucket eachBucket: other.buckets.values()) {
+      if (comparator.compare(eachBucket.getBase(), minInterval) > 0) {
+        // Split the bucket
+        for (Bucket split : HistogramUtil.splitBucket(this, columnStatsList, eachBucket, minInterval, isPureAscii, maxLength)) {
+          this.buckets.put(split.key, split);
+        }
+      } else {
+        this.buckets.put(eachBucket.key, eachBucket);
+      }
+    }
+
+    this.minInterval = other.minInterval = minInterval;
   }
 
   public Bucket getBucket(Tuple startKey, Tuple endKey, Tuple base) {

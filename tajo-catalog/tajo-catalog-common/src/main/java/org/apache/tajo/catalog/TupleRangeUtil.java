@@ -19,7 +19,10 @@
 package org.apache.tajo.catalog;
 
 import org.apache.tajo.common.TajoDataTypes.DataType;
-import org.apache.tajo.datum.*;
+import org.apache.tajo.datum.Datum;
+import org.apache.tajo.datum.DatumFactory;
+import org.apache.tajo.datum.NullDatum;
+import org.apache.tajo.datum.TextDatum;
 import org.apache.tajo.exception.NotImplementedException;
 import org.apache.tajo.exception.TajoInternalError;
 import org.apache.tajo.storage.Tuple;

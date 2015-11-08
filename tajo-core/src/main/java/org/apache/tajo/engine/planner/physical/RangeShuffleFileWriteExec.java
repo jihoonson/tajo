@@ -25,17 +25,25 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.RawLocalFileSystem;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.tajo.catalog.*;
+import org.apache.tajo.catalog.statistics.ColumnStats;
 import org.apache.tajo.catalog.statistics.FreqHistogram;
 import org.apache.tajo.catalog.statistics.HistogramUtil;
+import org.apache.tajo.common.TajoDataTypes.Type;
 import org.apache.tajo.conf.TajoConf;
 import org.apache.tajo.engine.planner.KeyProjector;
+import org.apache.tajo.engine.utils.TupleUtil;
 import org.apache.tajo.plan.logical.ShuffleFileWriteNode;
 import org.apache.tajo.plan.util.PlannerUtil;
 import org.apache.tajo.storage.*;
 import org.apache.tajo.storage.index.bst.BSTIndex;
+import org.apache.tajo.util.Pair;
+import org.apache.tajo.util.StringUtils;
 import org.apache.tajo.worker.TaskAttemptContext;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 
 /**
  * <code>RangeShuffleFileWriteExec</code> is a physical executor to store intermediate data into a number of
@@ -55,7 +63,9 @@ public class RangeShuffleFileWriteExec extends UnaryPhysicalExec {
 
   private KeyProjector keyProjector;
 
-  private FreqHistogram freqHistogram;
+//  private FreqHistogram freqHistogram;
+
+  private List<Pair<Tuple, Long>> countPerTuples;
 
   public RangeShuffleFileWriteExec(final TaskAttemptContext context,
                                    final ShuffleFileWriteNode plan,
@@ -91,7 +101,8 @@ public class RangeShuffleFileWriteExec extends UnaryPhysicalExec {
     this.indexWriter.setLoadNum(100);
     this.indexWriter.open();
 
-    this.freqHistogram = new FreqHistogram(keySchema, sortSpecs);
+//    this.freqHistogram = new FreqHistogram(keySchema, sortSpecs);
+    countPerTuples = new ArrayList<>();
 
     super.init();
   }
@@ -99,22 +110,33 @@ public class RangeShuffleFileWriteExec extends UnaryPhysicalExec {
   @Override
   public Tuple next() throws IOException {
     Tuple tuple;
-    Tuple keyTuple;
+    Tuple keyTuple = null;
     Tuple prevKeyTuple = new VTuple(keySchema.size());
-    final Tuple keyBase = TupleRangeUtil.createMinBaseTuple(sortSpecs);
-    Tuple endKeyTuple = null;
     long offset;
+    long count = 0;
 
     while(!context.isStopped() && (tuple = child.next()) != null) {
       offset = appender.getOffset();
       appender.addTuple(tuple);
       keyTuple = keyProjector.project(tuple);
       if (!prevKeyTuple.equals(keyTuple)) {
+        if (!prevKeyTuple.isBlank(0)) {
+          // [prevKeyTuple, keyTuple)
+//          freqHistogram.updateBucket(prevKeyTuple, keyTuple, HistogramUtil.increment(sortSpecs, null, keyTuple, prevKeyTuple, -1), count);
+          countPerTuples.add(new Pair<>(new VTuple(prevKeyTuple.getValues()), count));
+        }
         indexWriter.write(keyTuple, offset);
         prevKeyTuple.put(keyTuple.getValues());
-        endKeyTuple = HistogramUtil.increment(sortSpecs, null, keyTuple, keyBase, 1);
+        count = 0;
       }
-      freqHistogram.updateBucket(keyTuple, endKeyTuple, keyBase, 1);
+      count++;
+    }
+
+    if (count > 0) {
+//      Tuple infiniteTuple = HistogramUtil.getPositiveInfiniteTuple(keySchema.size());
+//      Tuple interval = freqHistogram.getMinInterval();
+//      freqHistogram.updateBucket(prevKeyTuple, HistogramUtil.increment(sortSpecs, null, prevKeyTuple, interval, 1), interval, count);
+      countPerTuples.add(new Pair<>(prevKeyTuple, count));
     }
 
     return null;
@@ -135,6 +157,45 @@ public class RangeShuffleFileWriteExec extends UnaryPhysicalExec {
     // Collect statistics data
     context.setResultStats(appender.getStats());
     context.addShuffleFileOutput(0, context.getTaskId().toString());
+
+    // Check isPureAscii and find the maxLength
+    boolean[] isPureAscii = new boolean[keySchema.size()];
+    int[] maxLength = new int[keySchema.size()];
+    Arrays.fill(isPureAscii, true);
+    Arrays.fill(maxLength, 0);
+    for (Pair<Tuple, Long> eachPair : countPerTuples) {
+      Tuple tuple = eachPair.getFirst();
+      for (int i = 0; i < keySchema.size(); i++) {
+        if (keySchema.getColumn(i).getDataType().getType().equals(Type.TEXT)) {
+          boolean isCurrentPureAscii = StringUtils.isPureAscii(tuple.getText(i));
+          if (isPureAscii[i]) {
+            isPureAscii[i] &= isCurrentPureAscii;
+          }
+          if (isCurrentPureAscii) {
+            maxLength[i] = Math.max(maxLength[i], tuple.getText(i).length());
+          } else {
+            maxLength[i] = Math.max(maxLength[i], tuple.getUnicodeChars(i).length);
+          }
+        }
+      }
+    }
+
+    List<ColumnStats> sortKeyStats = TupleUtil.extractSortColumnStats(sortSpecs, context.getResultStats().getColumnStats(), false);
+    FreqHistogram freqHistogram = new FreqHistogram(keySchema, sortSpecs);
+    Pair<Tuple, Long> current, next = null;
+    for (int i = 0; i < countPerTuples.size() - 1; i++) {
+      current = countPerTuples.get(i);
+      next = countPerTuples.get(i + 1);
+      Tuple interval = HistogramUtil.diff(sortSpecs, sortKeyStats, current.getFirst(), next.getFirst(), isPureAscii, maxLength);
+      freqHistogram.updateBucket(new TupleRange(current.getFirst(), next.getFirst(),
+          interval,
+          freqHistogram.getComparator()), current.getSecond());
+    }
+    if (next != null) {
+      freqHistogram.updateBucket(new TupleRange(next.getFirst(), next.getFirst(),
+          HistogramUtil.diff(sortSpecs, sortKeyStats, next.getFirst(), next.getFirst(), isPureAscii, maxLength),
+          freqHistogram.getComparator()), next.getSecond());
+    }
     context.setFreqHistogram(freqHistogram);
     appender = null;
     indexWriter = null;

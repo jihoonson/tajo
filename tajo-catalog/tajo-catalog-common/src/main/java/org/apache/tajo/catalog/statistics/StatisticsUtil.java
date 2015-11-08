@@ -111,45 +111,49 @@ public class StatisticsUtil {
       }
     }
 
-    for (TableStats ts : tableStatses) {
-      // if there is empty stats
-      if (ts.getColumnStats().size() > 0) {
-        // aggregate column stats for each table
-        for (int i = 0; i < ts.getColumnStats().size(); i++) {
-          ColumnStats cs = ts.getColumnStats().get(i);
-          if (cs == null) {
-            LOG.warn("ERROR: One of column stats is NULL (expected column: " + css[i].getColumn() + ")");
-            continue;
-          }
-          try {
-            css[i].setNumDistVals(css[i].getNumDistValues() + cs.getNumDistValues());
-            css[i].setNumNulls(css[i].getNumNulls() + cs.getNumNulls());
-            if (!cs.minIsNotSet() && (css[i].minIsNotSet() ||
-                css[i].getMinValue().compareTo(cs.getMinValue()) > 0)) {
-              css[i].setMinValue(cs.getMinValue());
-            }
-            if (!cs.maxIsNotSet() && (css[i].maxIsNotSet() ||
-                css[i].getMaxValue().compareTo(cs.getMaxValue()) < 0)) {
-              css[i].setMaxValue(ts.getColumnStats().get(i).getMaxValue());
-            }
-          } catch (Exception e) {
-            LOG.warn(e.getMessage(), e);
-          }
-        }
-      }
-
-      // aggregate table stats for each table
-      aggregated.setNumRows(aggregated.getNumRows() + ts.getNumRows());
-      aggregated.setNumBytes(aggregated.getNumBytes() + ts.getNumBytes());
-      aggregated.setReadBytes(aggregated.getReadBytes() + ts.getReadBytes());
-      aggregated.setNumBlocks(aggregated.getNumBlocks() + ts.getNumBlocks());
-      aggregated.setNumShuffleOutputs(aggregated.getNumShuffleOutputs() + ts.getNumShuffleOutputs());
+    for (TableStats tableStats : tableStatses) {
+      aggregateTableStat(aggregated, tableStats);
     }
 
-    //aggregated.setAvgRows(aggregated.getNumRows() / tableStats.size());
-    if (css != null) {
-      aggregated.setColumnStats(Lists.newArrayList(css));
-    }
+//    for (TableStats ts : tableStatses) {
+//      // if there is empty stats
+//      if (ts.getColumnStats().size() > 0) {
+//        // aggregate column stats for each table
+//        for (int i = 0; i < ts.getColumnStats().size(); i++) {
+//          ColumnStats cs = ts.getColumnStats().get(i);
+//          if (cs == null) {
+//            LOG.warn("ERROR: One of column stats is NULL (expected column: " + css[i].getColumn() + ")");
+//            continue;
+//          }
+//          try {
+//            css[i].setNumDistVals(css[i].getNumDistValues() + cs.getNumDistValues());
+//            css[i].setNumNulls(css[i].getNumNulls() + cs.getNumNulls());
+//            if (!cs.minIsNotSet() && (css[i].minIsNotSet() ||
+//                css[i].getMinValue().compareTo(cs.getMinValue()) > 0)) {
+//              css[i].setMinValue(cs.getMinValue());
+//            }
+//            if (!cs.maxIsNotSet() && (css[i].maxIsNotSet() ||
+//                css[i].getMaxValue().compareTo(cs.getMaxValue()) < 0)) {
+//              css[i].setMaxValue(ts.getColumnStats().get(i).getMaxValue());
+//            }
+//          } catch (Exception e) {
+//            LOG.warn(e.getMessage(), e);
+//          }
+//        }
+//      }
+//
+//      // aggregate table stats for each table
+//      aggregated.setNumRows(aggregated.getNumRows() + ts.getNumRows());
+//      aggregated.setNumBytes(aggregated.getNumBytes() + ts.getNumBytes());
+//      aggregated.setReadBytes(aggregated.getReadBytes() + ts.getReadBytes());
+//      aggregated.setNumBlocks(aggregated.getNumBlocks() + ts.getNumBlocks());
+//      aggregated.setNumShuffleOutputs(aggregated.getNumShuffleOutputs() + ts.getNumShuffleOutputs());
+//    }
+//
+//    //aggregated.setAvgRows(aggregated.getNumRows() / tableStats.size());
+//    if (css != null) {
+//      aggregated.setColumnStats(Lists.newArrayList(css));
+//    }
 
     return aggregated;
   }

@@ -190,6 +190,8 @@ message ColumnStatsProto {
   optional int64 num_nulls = 3;
   optional bytes min_value = 4;
   optional bytes max_value = 5;
+  optional bool is_pure_ascii = 6;
+  optional int32 max_byte_length = 7;
 }
 
 message FreqHistogramProto {

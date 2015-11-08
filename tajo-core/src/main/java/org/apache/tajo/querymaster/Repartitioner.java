@@ -30,6 +30,7 @@ import org.apache.tajo.algebra.JoinType;
 import org.apache.tajo.catalog.*;
 import org.apache.tajo.catalog.statistics.*;
 import org.apache.tajo.catalog.statistics.FreqHistogram.Bucket;
+import org.apache.tajo.common.TajoDataTypes.Type;
 import org.apache.tajo.conf.TajoConf.ConfVars;
 import org.apache.tajo.datum.Datum;
 import org.apache.tajo.datum.NegativeInfiniteDatum;
@@ -50,14 +51,12 @@ import org.apache.tajo.plan.serder.PlanProto.DistinctGroupbyEnforcer.MultipleAgg
 import org.apache.tajo.plan.serder.PlanProto.EnforceProperty;
 import org.apache.tajo.plan.util.PlannerUtil;
 import org.apache.tajo.querymaster.Task.IntermediateEntry;
-import org.apache.tajo.storage.FileTablespace;
-import org.apache.tajo.storage.RowStoreUtil;
-import org.apache.tajo.storage.Tablespace;
-import org.apache.tajo.storage.TablespaceManager;
+import org.apache.tajo.storage.*;
 import org.apache.tajo.storage.fragment.FileFragment;
 import org.apache.tajo.storage.fragment.Fragment;
 import org.apache.tajo.unit.StorageUnit;
 import org.apache.tajo.util.Pair;
+import org.apache.tajo.util.StringUtils;
 import org.apache.tajo.util.TUtil;
 import org.apache.tajo.util.TajoIdUtils;
 import org.apache.tajo.worker.FetchImpl;
@@ -668,8 +667,29 @@ public class Repartitioner {
     } else {
       // TODO: create partitions by merging the ranges of the histogram
       FreqHistogram histogram = schedulerContext.getMasterContext().getQuery().getStage(sampleChildBlock.getId()).getHistogramForRangeShuffle();
-      HistogramUtil.normalize(histogram, sortKeyStats);
+//      HistogramUtil.normalize(histogram, sortKeyStats);
       List<Bucket> buckets = histogram.getSortedBuckets();
+
+      boolean[] isPureAscii = new boolean[sortSchema.size()];
+      int[] maxLength = new int[sortSchema.size()];
+      Arrays.fill(isPureAscii, true);
+      Arrays.fill(maxLength, 0);
+      for (Bucket bucket : buckets) {
+        Tuple tuple = bucket.getStartKey();
+        for (int i = 0; i < sortSchema.size(); i++) {
+          if (sortSchema.getColumn(i).getDataType().getType().equals(Type.TEXT)) {
+            boolean isCurrentPureAscii = StringUtils.isPureAscii(tuple.getText(i));
+            if (isPureAscii[i]) {
+              isPureAscii[i] &= isCurrentPureAscii;
+            }
+            if (isCurrentPureAscii) {
+              maxLength[i] = Math.max(maxLength[i], tuple.getText(i).length());
+            } else {
+              maxLength[i] = Math.max(maxLength[i], tuple.getUnicodeChars(i).length);
+            }
+          }
+        }
+      }
 
       // Compute the total cardinality of sort keys.
       BigInteger totalCard = histogram.getAllBuckets().stream().map(
@@ -703,8 +723,18 @@ public class Repartitioner {
 
 
       } else if (determinedTaskNum > buckets.size()) {
-        // TODO: split buckets
-        throw new TajoInternalError("# of tasks is larger than # of buckets");
+        while (determinedTaskNum > buckets.size()) {
+          Bucket maxBucket = null;
+          for (Bucket eachBucket : buckets) {
+            maxBucket = maxBucket == null || maxBucket.getCount() < eachBucket.getCount() ?
+                eachBucket : maxBucket;
+          }
+          if (maxBucket.getCount() < 2) {
+            throw new TajoInternalError("Cannot split the bucket");
+          }
+          buckets.addAll(HistogramUtil.splitBucket(histogram, sortKeyStats, maxBucket, maxBucket.getBase(), isPureAscii, maxLength));
+        }
+        histogram = new FreqHistogram(histogram.getKeySchema(), histogram.getSortSpecs(), buckets);
       }
 
       // The average cardinality of the original histogram must be same with normalized one.
@@ -712,7 +742,7 @@ public class Repartitioner {
 
       // The merged histogram can contain partitions of various lengths.
       // Thus, they need to be refined to be equal in length.
-      HistogramUtil.refineToEquiDepth(histogram, avgCard, sortKeyStats);
+      HistogramUtil.refineToEquiDepth(histogram, avgCard, sortKeyStats, isPureAscii, maxLength);
       buckets = histogram.getSortedBuckets();
 
 
@@ -735,11 +765,11 @@ public class Repartitioner {
         for (int j = 0; j < sortKeyStats.size(); j++) {
           Datum val = ranges[i].getEnd().asDatum(j);
           if (val instanceof PositiveInfiniteDatum) {
-            ranges[i].getEnd().put(j, sortKeyStats.get(j).getMaxValue());
+            ranges[i].getEnd().put(j, HistogramUtil.getLastValue(sortSpecs, sortKeyStats, j));
 //          } else {
 //            ranges[i].setEnd(HistogramUtil.increment(sortSpecs, sortKeyStats, ranges[i].getEnd(), ranges[i].getBase(), -2));
           } else if (val instanceof NegativeInfiniteDatum) {
-            ranges[i].getEnd().put(j, sortKeyStats.get(j).getMinValue());
+            ranges[i].getEnd().put(j, HistogramUtil.getFirstValue(sortSpecs, sortKeyStats, j));
           }
 
 //        for (int j = 0; j < sortSpecs.length; j++) {
