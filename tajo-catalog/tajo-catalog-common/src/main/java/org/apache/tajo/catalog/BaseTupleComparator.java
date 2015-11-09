@@ -26,7 +26,6 @@ import org.apache.tajo.storage.Tuple;
 
 import java.util.Arrays;
 
-
 /**
  * The Comparator class for Tuples
  * 
