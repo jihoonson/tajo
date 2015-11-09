@@ -218,7 +218,7 @@ public class HistogramUtil {
         : columnStatsList.get(i).getMinValue();
   }
 
-  private static BigDecimal[] getMinMaxIncludeNull(final AnalyzedSortSpec sortSpec) {
+  public static BigDecimal[] getMinMaxIncludeNull(final AnalyzedSortSpec sortSpec) {
     BigDecimal min, max;
     // TODO: min value may not be zero
     switch (sortSpec.getType()) {
@@ -279,95 +279,140 @@ public class HistogramUtil {
     return new BigDecimal[] {min, max};
   }
 
-  private static Datum denormalize(final AnalyzedSortSpec sortSpec,
-                                   final BigDecimal val) {
+  private static BigDecimal denormalizeVal(final AnalyzedSortSpec sortSpec,
+                                        final BigDecimal val) {
+    return val.multiply(sortSpec.getTransformedMax()).add(sortSpec.getMin());
+  }
+
+  private static Datum denormalizeToDatum(final AnalyzedSortSpec sortSpec,
+                                          final BigDecimal val) {
+    if (sortSpec.isNullFirst() && val.equals(BigDecimal.ZERO)) {
+      return NullDatum.get();
+    } else if (!sortSpec.isNullFirst() && val.equals(BigDecimal.ONE)) {
+      return NullDatum.get();
+    }
+
+    BigDecimal denormalized = denormalizeVal(sortSpec, val);
+
     switch (sortSpec.getType()) {
       case BOOLEAN:
-        return val.longValue() % 2 == 0 ? BooleanDatum.FALSE : BooleanDatum.TRUE;
+        return denormalized.longValue() % 2 == 0 ? BooleanDatum.FALSE : BooleanDatum.TRUE;
       case CHAR:
-        return DatumFactory.createChar((char) val.longValue());
+        return DatumFactory.createChar((char) denormalized.longValue());
       case INT2:
-        return DatumFactory.createInt2(val.shortValue());
+        return DatumFactory.createInt2(denormalized.shortValue());
       case INT4:
-        return DatumFactory.createInt4(val.intValue());
+        return DatumFactory.createInt4(denormalized.intValue());
       case INT8:
-        return DatumFactory.createInt8(val.longValue());
+        return DatumFactory.createInt8(denormalized.longValue());
       case FLOAT4:
-        return DatumFactory.createFloat4(val.floatValue());
+        return DatumFactory.createFloat4(denormalized.floatValue());
       case FLOAT8:
-        return DatumFactory.createFloat8(val.doubleValue());
+        return DatumFactory.createFloat8(denormalized.doubleValue());
       case TEXT:
         if (sortSpec.isPureAscii()) {
-          return DatumFactory.createText(val.toBigInteger().toByteArray());
+          return DatumFactory.createText(denormalized.toBigInteger().toByteArray());
         } else {
-          return DatumFactory.createText(Convert.chars2utf(bigDecimalToUnicodeChars(val)));
+          return DatumFactory.createText(Convert.chars2utf(bigDecimalToUnicodeChars(denormalized)));
         }
       case DATE:
-        return DatumFactory.createDate(val.intValue());
+        return DatumFactory.createDate(denormalized.intValue());
       case TIME:
-        return DatumFactory.createTime(val.longValue());
+        return DatumFactory.createTime(denormalized.longValue());
       case TIMESTAMP:
-        return DatumFactory.createTimestampDatumWithJavaMillis(val.longValue());
+        return DatumFactory.createTimestampDatumWithJavaMillis(denormalized.longValue());
       case INET4:
-        return DatumFactory.createInet4((int) val.longValue());
+        return DatumFactory.createInet4((int) denormalized.longValue());
       default:
         throw new UnsupportedOperationException(sortSpec.getType() + " is not supported yet");
     }
   }
 
-  public static Datum denormalize(final AnalyzedSortSpec sortSpec,
-                                  final BigDecimal val,
-                                  final BigDecimal min,
-                                  final BigDecimal max) {
-    if (sortSpec.isNullFirst() && min.equals(val)) {
-      return NullDatum.get();
-    } else if (!sortSpec.isNullFirst() && max.equals(val)) {
-      return NullDatum.get();
-    }
+  public static Tuple denormalize(final AnalyzedSortSpec[] analyzedSpecs,
+                                  final BigDecimal normTuple,
+                                  final BigDecimal normInterval) {
+    Tuple result = new VTuple(analyzedSpecs.length);
+    BigDecimal remainder = normTuple.divide(BigDecimal.TEN.pow(analyzedSpecs.length - 1), MathContext.DECIMAL128);
+    for (int i = 0; i < analyzedSpecs.length; i++) {
+      if (i > 0) {
+        remainder = remainder.multiply(BigDecimal.TEN);
+      }
 
-    return denormalize(sortSpec, val);
+      BigDecimal[] quotiAndRem = remainder.divideAndRemainder(normInterval, MathContext.DECIMAL128);
+      BigDecimal normDatum = quotiAndRem[0].multiply(normInterval);
+      result.put(i, denormalizeToDatum(analyzedSpecs[i], normDatum));
+      remainder = quotiAndRem[1];
+    }
+    return result;
   }
 
+  /**
+   * Normalize the given value into a real value in the range of [0, 1].
+   *
+   * @param sortSpec analyzed sort spec
+   * @param val denormalized value
+   * @return normalized value
+   */
+  private static BigDecimal normalize(final AnalyzedSortSpec sortSpec, final BigDecimal val) {
+    return val.subtract(sortSpec.getMin()).divide(sortSpec.getTransformedMax(), MathContext.DECIMAL128);
+  }
+
+  /**
+   * Normalize the given datum into a real value in the range of [0, 1].
+   *
+   * @param sortSpec analyzed sort spec
+   * @param val non-text datum
+   * @return normalized value
+   */
   private static BigDecimal normalize(final AnalyzedSortSpec sortSpec,
-                                      final Datum val,
-                                      final BigDecimal min,
-                                      final BigDecimal max) {
+                                      final Datum val) {
     if (val.isNull()) {
-      if (sortSpec.isNullFirst()) {
-        return min;
-      } else {
-        return max;
-      }
+      return sortSpec.isNullFirst() ? BigDecimal.ZERO : BigDecimal.ONE;
     } else {
+      BigDecimal normNumber;
       switch (sortSpec.getType()) {
+        case BOOLEAN:
+          normNumber = val.isTrue() ? BigDecimal.ONE : BigDecimal.ZERO;
+          break;
         case CHAR:
-          return BigDecimal.valueOf(val.asChar());
+          normNumber = BigDecimal.valueOf(val.asChar());
+          break;
         case INT2:
-          return BigDecimal.valueOf(val.asInt2());
+          normNumber = BigDecimal.valueOf(val.asInt2());
+          break;
         case INT4:
-          return BigDecimal.valueOf(val.asInt4());
+          normNumber = BigDecimal.valueOf(val.asInt4());
+          break;
         case INT8:
-          return BigDecimal.valueOf(val.asInt8());
+          normNumber = BigDecimal.valueOf(val.asInt8());
+          break;
         case FLOAT4:
-          return BigDecimal.valueOf(val.asFloat4());
+          normNumber = BigDecimal.valueOf(val.asFloat4());
+          break;
         case FLOAT8:
-          return BigDecimal.valueOf(val.asFloat8());
+          normNumber = BigDecimal.valueOf(val.asFloat8());
+          break;
         case DATE:
-          return BigDecimal.valueOf(val.asInt4());
+          normNumber = BigDecimal.valueOf(val.asInt4());
+          break;
         case TIME:
-          return BigDecimal.valueOf(val.asInt8());
+          normNumber = BigDecimal.valueOf(val.asInt8());
+          break;
         case TIMESTAMP:
-          return BigDecimal.valueOf(((TimestampDatum) val).getJavaTimestamp());
+          normNumber = BigDecimal.valueOf(((TimestampDatum) val).getJavaTimestamp());
+          break;
         case INET4:
-          return BigDecimal.valueOf(val.asInt8());
+          normNumber = BigDecimal.valueOf(val.asInt8());
+          break;
         default:
           throw new UnsupportedOperationException(sortSpec.getType() + " is not supported yet");
       }
+      return normalize(sortSpec, normNumber);
     }
   }
 
-  private static BigDecimal normalizeBytes(final byte[] bytes,
-                                           final int length) {
+  private static BigDecimal bytesToBigDecimal(final byte[] bytes,
+                                              final int length) {
     if (bytes.length == 0) {
       return BigDecimal.ZERO;
     } else {
@@ -376,8 +421,8 @@ public class HistogramUtil {
     }
   }
 
-  private static BigDecimal normalizeUnicodeChars(final char[] unicodeChars,
-                                                  final int length) {
+  private static BigDecimal unicodeCharsToBigDecimal(final char[] unicodeChars,
+                                                     final int length) {
     if (unicodeChars.length == 0) {
       return BigDecimal.ZERO;
     } else {
@@ -386,37 +431,47 @@ public class HistogramUtil {
     }
   }
 
+  /**
+   * Normalize the given text datum into a real value in the range of [0, 1].
+   *
+   * @param sortSpec analyzed sort spec
+   * @param val text datum
+   * @return normalized value
+   */
   private static BigDecimal normalizeText(final AnalyzedSortSpec sortSpec,
-                                          final Datum val,
-                                          final BigDecimal min,
-                                          final BigDecimal max) {
+                                          final Datum val) {
     if (val.isNull()) {
-      return sortSpec.isNullFirst() ? min : max;
+      return sortSpec.isNullFirst() ? BigDecimal.ZERO : BigDecimal.ONE;
     } else if (val.size() == 0) {
       return BigDecimal.ZERO;
     } else {
       if (sortSpec.isPureAscii()) {
-        return normalizeBytes(val.asByteArray(), sortSpec.getMaxLength());
+        return normalize(sortSpec, bytesToBigDecimal(val.asByteArray(), sortSpec.getMaxLength()));
       } else {
-        return normalizeUnicodeChars(val.asUnicodeChars(), sortSpec.getMaxLength());
+        return normalize(sortSpec, unicodeCharsToBigDecimal(val.asUnicodeChars(), sortSpec.getMaxLength()));
       }
     }
   }
 
+  /**
+   * Normalize the given tuple into a real value.
+   *
+   * @param analyzedSpecs
+   * @param tuple
+   * @return
+   */
   public static BigDecimal normalize(AnalyzedSortSpec[] analyzedSpecs, Tuple tuple) {
     BigDecimal result = BigDecimal.ZERO;
     BigDecimal exponent = BigDecimal.ONE;
     for (int i = analyzedSpecs.length - 1; i >= 0; i--) {
-      DataType dataType = analyzedSpecs[i].getSortSpec().getSortKey().getDataType();
       BigDecimal normalized;
-      BigDecimal[] minMax = getMinMaxIncludeNull(analyzedSpecs[i]);
-      if (dataType.getType().equals(Type.TEXT)) {
-        normalized = normalizeText(analyzedSpecs[i], tuple.asDatum(i), minMax[0], minMax[1]);
+      if (analyzedSpecs[i].getType().equals(Type.TEXT)) {
+        normalized = normalizeText(analyzedSpecs[i], tuple.asDatum(i));
       } else {
-        normalized = normalize(analyzedSpecs[i], tuple.asDatum(i), minMax[0], minMax[1]);
+        normalized = normalize(analyzedSpecs[i], tuple.asDatum(i));
       }
       result = result.add(normalized.multiply(exponent));
-      exponent = minMax[1];
+      exponent = exponent.multiply(BigDecimal.TEN);
     }
     return result;
   }
@@ -424,113 +479,114 @@ public class HistogramUtil {
   public static Tuple diff(final Comparator<Tuple> comparator,
                            final AnalyzedSortSpec[] sortSpecs,
                            final Tuple first, final Tuple second) {
-    // TODO: handle infinite datums
-    // TODO: handle null datums
-    Tuple result = new VTuple(sortSpecs.length);
-    BigDecimal temp;
-    BigDecimal[] minMax;
-    BigDecimal[] carryAndRemainder = new BigDecimal[] {BigDecimal.ZERO, BigDecimal.ZERO};
-
-    Tuple large, small;
-    if (comparator.compare(first, second) < 0) {
-      large = second;
-      small = first;
-    } else {
-      large = first;
-      small = second;
-    }
-
-    for (int i = sortSpecs.length-1; i >= 0; i--) {
-      BigDecimal normalizedLarge, normalizedSmall;
-      Column column = sortSpecs[i].getSortKey();
-
-      minMax = getMinMaxIncludeNull(sortSpecs[i]);
-
-      BigDecimal min = minMax[0];
-      BigDecimal max = minMax[1];
-      BigDecimal normalizedMax = max.subtract(min);
-
-      if (large.isBlankOrNull(i)) {
-        normalizedLarge = sortSpecs[i].isNullFirst() ? min : max;
-      } else {
-        switch (column.getDataType().getType()) {
-          case BOOLEAN:
-            normalizedLarge = large.getBool(i) ? BigDecimal.ZERO : BigDecimal.ONE;
-            break;
-          case CHAR:
-          case INT2:
-          case INT4:
-          case INT8:
-          case FLOAT4:
-          case FLOAT8:
-          case DATE:
-          case TIME:
-          case TIMESTAMP:
-          case INET4:
-            normalizedLarge = normalize(sortSpecs[i], large.asDatum(i), min, max);
-            break;
-          case TEXT:
-            if (sortSpecs[i].isPureAscii()) {
-              byte[] op = large.getBytes(i);
-              normalizedLarge = normalizeBytes(op, sortSpecs[i].getMaxLength());
-            } else {
-              char[] op = large.getUnicodeChars(i);
-              normalizedLarge = normalizeUnicodeChars(op, sortSpecs[i].getMaxLength());
-            }
-            break;
-          default:
-            throw new UnsupportedOperationException(column.getDataType() + " is not supported yet");
-        }
-      }
-
-      if (small.isBlankOrNull(i)) {
-        normalizedSmall = sortSpecs[i].isNullFirst() ? min : max;
-      } else {
-        switch (column.getDataType().getType()) {
-          case BOOLEAN:
-            normalizedSmall = small.getBool(i) ? BigDecimal.ZERO : BigDecimal.ONE;
-            break;
-          case CHAR:
-          case INT2:
-          case INT4:
-          case INT8:
-          case FLOAT4:
-          case FLOAT8:
-          case DATE:
-          case TIME:
-          case TIMESTAMP:
-          case INET4:
-            normalizedSmall = normalize(sortSpecs[i], small.asDatum(i), min, max);
-            break;
-          case TEXT:
-            if (sortSpecs[i].isPureAscii()) {
-              byte[] op = small.getBytes(i);
-              normalizedSmall = normalizeBytes(op, sortSpecs[i].getMaxLength());
-            } else {
-              char[] op = small.getUnicodeChars(i);
-              normalizedSmall = normalizeUnicodeChars(op, sortSpecs[i].getMaxLength());
-            }
-            break;
-          default:
-            throw new UnsupportedOperationException(column.getDataType() + " is not supported yet");
-        }
-      }
-
-      normalizedLarge = normalizedLarge.subtract(min);
-      normalizedSmall = normalizedSmall.subtract(min);
-
-      temp = carryAndRemainder[0]
-          .add(normalizedLarge)
-          .subtract(normalizedSmall);
-      carryAndRemainder = calculateCarryAndRemainder(temp, normalizedMax);
-      result.put(i, denormalize(sortSpecs[i], carryAndRemainder[1], BigDecimal.ZERO, normalizedMax));
-    }
-
-    if (!carryAndRemainder[0].equals(BigDecimal.ZERO)) {
-      throw new TajoInternalError("Overflow");
-    }
-
-    return result;
+    return null;
+//    // TODO: handle infinite datums
+//    // TODO: handle null datums
+//    Tuple result = new VTuple(sortSpecs.length);
+//    BigDecimal temp;
+//    BigDecimal[] minMax;
+//    BigDecimal[] carryAndRemainder = new BigDecimal[] {BigDecimal.ZERO, BigDecimal.ZERO};
+//
+//    Tuple large, small;
+//    if (comparator.compare(first, second) < 0) {
+//      large = second;
+//      small = first;
+//    } else {
+//      large = first;
+//      small = second;
+//    }
+//
+//    for (int i = sortSpecs.length-1; i >= 0; i--) {
+//      BigDecimal normalizedLarge, normalizedSmall;
+//      Column column = sortSpecs[i].getSortKey();
+//
+//      minMax = getMinMaxIncludeNull(sortSpecs[i]);
+//
+//      BigDecimal min = minMax[0];
+//      BigDecimal max = minMax[1];
+//      BigDecimal normalizedMax = max.subtract(min);
+//
+//      if (large.isBlankOrNull(i)) {
+//        normalizedLarge = sortSpecs[i].isNullFirst() ? min : max;
+//      } else {
+//        switch (column.getDataType().getType()) {
+//          case BOOLEAN:
+//            normalizedLarge = large.getBool(i) ? BigDecimal.ZERO : BigDecimal.ONE;
+//            break;
+//          case CHAR:
+//          case INT2:
+//          case INT4:
+//          case INT8:
+//          case FLOAT4:
+//          case FLOAT8:
+//          case DATE:
+//          case TIME:
+//          case TIMESTAMP:
+//          case INET4:
+//            normalizedLarge = normalize(sortSpecs[i], large.asDatum(i), min, max);
+//            break;
+//          case TEXT:
+//            if (sortSpecs[i].isPureAscii()) {
+//              byte[] op = large.getBytes(i);
+//              normalizedLarge = bytesToBigDecimal(op, sortSpecs[i].getMaxLength());
+//            } else {
+//              char[] op = large.getUnicodeChars(i);
+//              normalizedLarge = unicodeCharsToBigDecimal(op, sortSpecs[i].getMaxLength());
+//            }
+//            break;
+//          default:
+//            throw new UnsupportedOperationException(column.getDataType() + " is not supported yet");
+//        }
+//      }
+//
+//      if (small.isBlankOrNull(i)) {
+//        normalizedSmall = sortSpecs[i].isNullFirst() ? min : max;
+//      } else {
+//        switch (column.getDataType().getType()) {
+//          case BOOLEAN:
+//            normalizedSmall = small.getBool(i) ? BigDecimal.ZERO : BigDecimal.ONE;
+//            break;
+//          case CHAR:
+//          case INT2:
+//          case INT4:
+//          case INT8:
+//          case FLOAT4:
+//          case FLOAT8:
+//          case DATE:
+//          case TIME:
+//          case TIMESTAMP:
+//          case INET4:
+//            normalizedSmall = normalize(sortSpecs[i], small.asDatum(i), min, max);
+//            break;
+//          case TEXT:
+//            if (sortSpecs[i].isPureAscii()) {
+//              byte[] op = small.getBytes(i);
+//              normalizedSmall = bytesToBigDecimal(op, sortSpecs[i].getMaxLength());
+//            } else {
+//              char[] op = small.getUnicodeChars(i);
+//              normalizedSmall = unicodeCharsToBigDecimal(op, sortSpecs[i].getMaxLength());
+//            }
+//            break;
+//          default:
+//            throw new UnsupportedOperationException(column.getDataType() + " is not supported yet");
+//        }
+//      }
+//
+//      normalizedLarge = normalizedLarge.subtract(min);
+//      normalizedSmall = normalizedSmall.subtract(min);
+//
+//      temp = carryAndRemainder[0]
+//          .add(normalizedLarge)
+//          .subtract(normalizedSmall);
+//      carryAndRemainder = calculateCarryAndRemainder(temp, normalizedMax);
+//      result.put(i, denormalize(sortSpecs[i], carryAndRemainder[1], BigDecimal.ZERO, normalizedMax));
+//    }
+//
+//    if (!carryAndRemainder[0].equals(BigDecimal.ZERO)) {
+//      throw new TajoInternalError("Overflow");
+//    }
+//
+//    return result;
   }
 
   /**
@@ -544,139 +600,140 @@ public class HistogramUtil {
    * @return incremented tuple
    */
   public static Tuple increment(AnalyzedSortSpec[] sortSpecs, final Tuple operand, final Tuple baseTuple, long count) {
-    // TODO: handle infinite datums
-    // TODO: handle null datums
-    Tuple result = new VTuple(sortSpecs.length);
-    BigDecimal add, temp;
-    BigDecimal[] minMax;
-    BigDecimal[] carryAndRemainder = new BigDecimal[] {BigDecimal.ZERO, BigDecimal.ZERO};
-
-    for (int i = sortSpecs.length-1; i >= 0; i--) {
-      Column column = sortSpecs[i].getSortKey();
-
-      if (operand.isBlankOrNull(i)) {
-        // If the value is null,
-        minMax = getMinMaxIncludeNull(sortSpecs[i]);
-        result.put(i, denormalize(sortSpecs[i], minMax[0], minMax[0], minMax[1]));
-
-      } else {
-
-        minMax = getMinMaxIncludeNull(sortSpecs[i]);
-
-        // result = carry * max + val1 + val2
-        // result > max ? result = remainder; update carry;
-//        count *= sortSpecs[i].isAscending() ? 1 : -1;
-        BigDecimal min = minMax[0];
-        BigDecimal max = minMax[1];
-        BigDecimal normalizedMax = max.subtract(min);
-        BigDecimal normalizedOp, normalizedBase;
-
-        switch (column.getDataType().getType()) {
-          case BOOLEAN:
-            // add = base * count
-            add = BigDecimal.valueOf(count);
-            // result = carry + val + add
-            temp = operand.getBool(i) ? BigDecimal.ONE : BigDecimal.ZERO;
-            temp = carryAndRemainder[0].add(temp).add(add);
-            carryAndRemainder = calculateCarryAndRemainder(temp, normalizedMax);
-            break;
-          case CHAR:
-          case INT2:
-          case INT4:
-          case INT8:
-          case FLOAT4:
-          case FLOAT8:
-          case DATE:
-          case TIME:
-          case TIMESTAMP:
-          case INET4:
-            normalizedOp = normalize(sortSpecs[i], operand.asDatum(i), min, max)
-                .subtract(min);
-            normalizedBase = normalize(sortSpecs[i], baseTuple.asDatum(i), min, max);
+//    // TODO: handle infinite datums
+//    // TODO: handle null datums
+//    Tuple result = new VTuple(sortSpecs.length);
+//    BigDecimal add, temp;
+//    BigDecimal[] minMax;
+//    BigDecimal[] carryAndRemainder = new BigDecimal[] {BigDecimal.ZERO, BigDecimal.ZERO};
+//
+//    for (int i = sortSpecs.length-1; i >= 0; i--) {
+//      Column column = sortSpecs[i].getSortKey();
+//
+//      if (operand.isBlankOrNull(i)) {
+//        // If the value is null,
+//        minMax = getMinMaxIncludeNull(sortSpecs[i]);
+//        result.put(i, denormalize(sortSpecs[i], minMax[0], minMax[0], minMax[1]));
+//
+//      } else {
+//
+//        minMax = getMinMaxIncludeNull(sortSpecs[i]);
+//
+//        // result = carry * max + val1 + val2
+//        // result > max ? result = remainder; update carry;
+////        count *= sortSpecs[i].isAscending() ? 1 : -1;
+//        BigDecimal min = minMax[0];
+//        BigDecimal max = minMax[1];
+//        BigDecimal normalizedMax = max.subtract(min);
+//        BigDecimal normalizedOp, normalizedBase;
+//
+//        switch (column.getDataType().getType()) {
+//          case BOOLEAN:
+//            // add = base * count
+//            add = BigDecimal.valueOf(count);
+//            // result = carry + val + add
+//            temp = operand.getBool(i) ? BigDecimal.ONE : BigDecimal.ZERO;
+//            temp = carryAndRemainder[0].add(temp).add(add);
+//            carryAndRemainder = calculateCarryAndRemainder(temp, normalizedMax);
+//            break;
+//          case CHAR:
+//          case INT2:
+//          case INT4:
+//          case INT8:
+//          case FLOAT4:
+//          case FLOAT8:
+//          case DATE:
+//          case TIME:
+//          case TIMESTAMP:
+//          case INET4:
+//            normalizedOp = normalize(sortSpecs[i], operand.asDatum(i), min, max)
 //                .subtract(min);
-            // add = (base - min) * count
-            add = normalizedBase
-                .multiply(BigDecimal.valueOf(count));
-            // result = carry + (val - min) + add
-            temp = carryAndRemainder[0]
-                .add(normalizedOp)
-                .add(add);
-            carryAndRemainder = calculateCarryAndRemainder(temp, normalizedMax);
-            break;
-          case TEXT:
-            if (sortSpecs[i].isPureAscii()) {
-              if (operand.isBlankOrNull(i)) {
-                normalizedOp = sortSpecs[i].isNullFirst() ? min : max;
-              } else {
-                byte[] op = operand.getBytes(i);
-                normalizedOp = normalizeBytes(op, sortSpecs[i].getMaxLength());
-              }
-              if (baseTuple.isBlankOrNull(i)) {
-                normalizedBase = sortSpecs[i].isNullFirst() ? min : max;
-              } else {
-                byte[] base = baseTuple.getBytes(i);
-                normalizedBase = normalizeBytes(base, sortSpecs[i].getMaxLength());
-              }
-            } else {
-              if (operand.isBlankOrNull(i)) {
-                normalizedOp = sortSpecs[i].isNullFirst() ? min : max;
-              } else {
-                char[] op = operand.getUnicodeChars(i);
-                normalizedOp = normalizeUnicodeChars(op, sortSpecs[i].getMaxLength());
-              }
-              if (baseTuple.isBlankOrNull(i)) {
-                normalizedBase = sortSpecs[i].isNullFirst() ? min : max;
-              } else {
-                char[] base = baseTuple.getUnicodeChars(i);
-                normalizedBase = normalizeUnicodeChars(base, sortSpecs[i].getMaxLength());
-              }
-            }
-            normalizedOp = normalizedOp.subtract(min);
-//            normalizedBase = normalizedBase.subtract(min);
-
-            add = normalizedBase
-                .multiply(BigDecimal.valueOf(count));
-            temp = carryAndRemainder[0]
-                .add(normalizedOp)
-                .add(add);
-            carryAndRemainder = calculateCarryAndRemainder(temp, normalizedMax);
-            break;
-          default:
-            throw new UnsupportedOperationException(column.getDataType() + " is not supported yet");
-        }
-
-        carryAndRemainder[1] = carryAndRemainder[1].add(min);
-        if (carryAndRemainder[1].compareTo(max) >= 0) {
-          carryAndRemainder[0] = carryAndRemainder[0].add(BigDecimal.ONE);
-          carryAndRemainder[1] = carryAndRemainder[1].subtract(max);
-        }
-        if (carryAndRemainder[1].compareTo(max) > 0 ||
-            carryAndRemainder[1].compareTo(min) < 0) {
-          throw new TajoInternalError("Invalid remainder");
-        }
-
-//        if (columnStatsList.get(i).hasNullValue() && carryAndRemainder[0].compareTo(BigDecimal.ZERO) > 0) {
-//          // null last ? carry--;
-//          // remainder == 0 ? put null
-//          if (!sortSpecs[i].isNullFirst()) {
-//            carryAndRemainder[0] = carryAndRemainder[0].subtract(BigDecimal.ONE);
-//          }
-//          if (carryAndRemainder[1].equals(BigDecimal.ZERO)) {
-//            result.put(i, NullDatum.get());
-//          }
+//            normalizedBase = normalize(sortSpecs[i], baseTuple.asDatum(i), min, max);
+////                .subtract(min);
+//            // add = (base - min) * count
+//            add = normalizedBase
+//                .multiply(BigDecimal.valueOf(count));
+//            // result = carry + (val - min) + add
+//            temp = carryAndRemainder[0]
+//                .add(normalizedOp)
+//                .add(add);
+//            carryAndRemainder = calculateCarryAndRemainder(temp, normalizedMax);
+//            break;
+//          case TEXT:
+//            if (sortSpecs[i].isPureAscii()) {
+//              if (operand.isBlankOrNull(i)) {
+//                normalizedOp = sortSpecs[i].isNullFirst() ? min : max;
+//              } else {
+//                byte[] op = operand.getBytes(i);
+//                normalizedOp = bytesToBigDecimal(op, sortSpecs[i].getMaxLength());
+//              }
+//              if (baseTuple.isBlankOrNull(i)) {
+//                normalizedBase = sortSpecs[i].isNullFirst() ? min : max;
+//              } else {
+//                byte[] base = baseTuple.getBytes(i);
+//                normalizedBase = bytesToBigDecimal(base, sortSpecs[i].getMaxLength());
+//              }
+//            } else {
+//              if (operand.isBlankOrNull(i)) {
+//                normalizedOp = sortSpecs[i].isNullFirst() ? min : max;
+//              } else {
+//                char[] op = operand.getUnicodeChars(i);
+//                normalizedOp = unicodeCharsToBigDecimal(op, sortSpecs[i].getMaxLength());
+//              }
+//              if (baseTuple.isBlankOrNull(i)) {
+//                normalizedBase = sortSpecs[i].isNullFirst() ? min : max;
+//              } else {
+//                char[] base = baseTuple.getUnicodeChars(i);
+//                normalizedBase = unicodeCharsToBigDecimal(base, sortSpecs[i].getMaxLength());
+//              }
+//            }
+//            normalizedOp = normalizedOp.subtract(min);
+////            normalizedBase = normalizedBase.subtract(min);
+//
+//            add = normalizedBase
+//                .multiply(BigDecimal.valueOf(count));
+//            temp = carryAndRemainder[0]
+//                .add(normalizedOp)
+//                .add(add);
+//            carryAndRemainder = calculateCarryAndRemainder(temp, normalizedMax);
+//            break;
+//          default:
+//            throw new UnsupportedOperationException(column.getDataType() + " is not supported yet");
 //        }
-
-        if (result.isBlank(i)) {
-          result.put(i, denormalize(sortSpecs[i], carryAndRemainder[1], min, max));
-        }
-      }
-    }
-
-    if (!carryAndRemainder[0].equals(BigDecimal.ZERO)) {
-      throw new TajoInternalError("Overflow");
-    }
-
-    return result;
+//
+//        carryAndRemainder[1] = carryAndRemainder[1].add(min);
+//        if (carryAndRemainder[1].compareTo(max) >= 0) {
+//          carryAndRemainder[0] = carryAndRemainder[0].add(BigDecimal.ONE);
+//          carryAndRemainder[1] = carryAndRemainder[1].subtract(max);
+//        }
+//        if (carryAndRemainder[1].compareTo(max) > 0 ||
+//            carryAndRemainder[1].compareTo(min) < 0) {
+//          throw new TajoInternalError("Invalid remainder");
+//        }
+//
+////        if (columnStatsList.get(i).hasNullValue() && carryAndRemainder[0].compareTo(BigDecimal.ZERO) > 0) {
+////          // null last ? carry--;
+////          // remainder == 0 ? put null
+////          if (!sortSpecs[i].isNullFirst()) {
+////            carryAndRemainder[0] = carryAndRemainder[0].subtract(BigDecimal.ONE);
+////          }
+////          if (carryAndRemainder[1].equals(BigDecimal.ZERO)) {
+////            result.put(i, NullDatum.get());
+////          }
+////        }
+//
+//        if (result.isBlank(i)) {
+//          result.put(i, denormalize(sortSpecs[i], carryAndRemainder[1], min, max));
+//        }
+//      }
+//    }
+//
+//    if (!carryAndRemainder[0].equals(BigDecimal.ZERO)) {
+//      throw new TajoInternalError("Overflow");
+//    }
+//
+//    return result;
+    return null;
   }
 
   public static BigDecimal unicodeCharsToBigDecimal(char[] unicodeChars) {

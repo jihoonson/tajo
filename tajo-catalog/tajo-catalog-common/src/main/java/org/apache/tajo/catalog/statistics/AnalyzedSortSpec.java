@@ -23,6 +23,8 @@ import org.apache.tajo.catalog.SortSpec;
 import org.apache.tajo.common.TajoDataTypes.Type;
 import org.apache.tajo.datum.Datum;
 
+import java.math.BigDecimal;
+
 public class AnalyzedSortSpec {
 
   private final SortSpec sortSpec;
@@ -33,6 +35,9 @@ public class AnalyzedSortSpec {
   private boolean hasNullValue;
   private boolean isPureAscii;
   private int maxLength;
+
+  private BigDecimal min;
+  private BigDecimal normMax;
 
   public AnalyzedSortSpec(SortSpec sortSpec) {
     this.sortSpec = sortSpec;
@@ -109,5 +114,23 @@ public class AnalyzedSortSpec {
 
   public void setHasNullValue(boolean hasNullValue) {
     this.hasNullValue = hasNullValue;
+  }
+
+  public BigDecimal getTransformedMax() {
+    if (min == null) {
+      BigDecimal[] minMax = HistogramUtil.getMinMaxIncludeNull(this);
+      this.min = minMax[0];
+      this.normMax = minMax[1].subtract(min);
+    }
+    return normMax;
+  }
+
+  public BigDecimal getMin() {
+    if (min == null) {
+      BigDecimal[] minMax = HistogramUtil.getMinMaxIncludeNull(this);
+      this.min = minMax[0];
+      this.normMax = minMax[1].subtract(min);
+    }
+    return min;
   }
 }
