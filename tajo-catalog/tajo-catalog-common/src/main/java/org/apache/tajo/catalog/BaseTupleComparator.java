@@ -170,8 +170,6 @@ public class BaseTupleComparator extends TupleComparator implements ProtoObject<
 
       for (int i = 0; i < sortKeyIds.length; i++) {
         if (sortKeyIds[i] != other.sortKeyIds[i] ||
-//            asc[i] != other.asc[i] ||
-//            nullFirsts[i] != other.nullFirsts[i]) {
             sortSpecs[i].isAscending() != other.sortSpecs[i].isAscending() ||
             sortSpecs[i].isNullFirst() != other.sortSpecs[i].isNullFirst()) {
           return false;

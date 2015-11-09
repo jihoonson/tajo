@@ -188,6 +188,7 @@ public class RangeShuffleFileWriteExec extends UnaryPhysicalExec {
       current = countPerTuples.get(i);
       next = countPerTuples.get(i + 1);
       interval = HistogramUtil.diff(comp, sortSpecs, sortKeyStats, current.getFirst(), next.getFirst(), isPureAscii, maxLength);
+      // TODO: interval must be divided by count
       freqHistogram.updateBucket(new TupleRange(current.getFirst(), next.getFirst(),
           interval,
           freqHistogram.getComparator()), current.getSecond());
