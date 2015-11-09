@@ -46,48 +46,48 @@ public class TestFreqHistogram {
 
   @Before
   public void setup() {
-    schema = new Schema();
-    schema.addColumn(new Column("col1", Type.FLOAT8));
-    schema.addColumn(new Column("col2", Type.INT8));
-
-    sortSpecs = new SortSpec[2];
-    sortSpecs[0] = new SortSpec(schema.getColumn(0));
-    sortSpecs[1] = new SortSpec(schema.getColumn(1));
-
-    totalBase = getTuple(DatumFactory.createFloat8(0.5), DatumFactory.createInt8(10));
-
-    TupleComparator comparator = new BaseTupleComparator(schema, sortSpecs);
-    columnStatsList = new ArrayList<>(2);
-    ColumnStats stats = new ColumnStats(schema.getColumn(0));
-    columnStatsList.add(stats);
-    stats = new ColumnStats(schema.getColumn(1));
-    columnStatsList.add(stats);
-
-    Tuple start = getTuple(DatumFactory.createFloat8(0.1), DatumFactory.createInt8(2)), end;
-    histogram = new FreqHistogram(schema, sortSpecs);
-    double maxDouble = 0;
-    long maxLong = 0;
-    long card = 0;
-    histogram.updateBucket(getTuple(NullDatum.get(), NullDatum.get()), getTuple(NullDatum.get(), NullDatum.get()), totalBase, 1);
-    for (int i = 0; i < 20; i++) {
-      long count = (i + 1) * 10;
-      end = getTuple(DatumFactory.createFloat8(start.getFloat8(0) + count * 0.5),
-          DatumFactory.createInt8(start.getInt8(1) + count * 10));
-      maxDouble = end.getFloat8(0);
-      maxLong = end.getInt8(1);
-      histogram.updateBucket(start, end, totalBase, count);
-      start = end;
-      card += count;
-    }
-    columnStatsList.get(0).setMinValue(DatumFactory.createFloat8(0.1));
-    columnStatsList.get(0).setMaxValue(DatumFactory.createFloat8(maxDouble));
-    columnStatsList.get(1).setMinValue(DatumFactory.createInt8(2));
-    columnStatsList.get(1).setMaxValue(DatumFactory.createInt8(maxLong));
-
-    Tuple totalStart = getTuple(DatumFactory.createFloat8(0.1), DatumFactory.createInt8(2));
-    Tuple totalEnd = getTuple(DatumFactory.createFloat8(maxDouble), DatumFactory.createInt8(maxLong));
-    totalRange = new TupleRange(totalStart, totalEnd, totalBase, comparator);
-    totalCard = BigInteger.valueOf(card);
+//    schema = new Schema();
+//    schema.addColumn(new Column("col1", Type.FLOAT8));
+//    schema.addColumn(new Column("col2", Type.INT8));
+//
+//    sortSpecs = new SortSpec[2];
+//    sortSpecs[0] = new SortSpec(schema.getColumn(0));
+//    sortSpecs[1] = new SortSpec(schema.getColumn(1));
+//
+//    totalBase = getTuple(DatumFactory.createFloat8(0.5), DatumFactory.createInt8(10));
+//
+//    TupleComparator comparator = new BaseTupleComparator(schema, sortSpecs);
+//    columnStatsList = new ArrayList<>(2);
+//    ColumnStats stats = new ColumnStats(schema.getColumn(0));
+//    columnStatsList.add(stats);
+//    stats = new ColumnStats(schema.getColumn(1));
+//    columnStatsList.add(stats);
+//
+//    Tuple start = getTuple(DatumFactory.createFloat8(0.1), DatumFactory.createInt8(2)), end;
+//    histogram = new FreqHistogram(sortSpecs);
+//    double maxDouble = 0;
+//    long maxLong = 0;
+//    long card = 0;
+//    histogram.updateBucket(getTuple(NullDatum.get(), NullDatum.get()), getTuple(NullDatum.get(), NullDatum.get()), totalBase, 1);
+//    for (int i = 0; i < 20; i++) {
+//      long count = (i + 1) * 10;
+//      end = getTuple(DatumFactory.createFloat8(start.getFloat8(0) + count * 0.5),
+//          DatumFactory.createInt8(start.getInt8(1) + count * 10));
+//      maxDouble = end.getFloat8(0);
+//      maxLong = end.getInt8(1);
+//      histogram.updateBucket(start, end, totalBase, count);
+//      start = end;
+//      card += count;
+//    }
+//    columnStatsList.get(0).setMinValue(DatumFactory.createFloat8(0.1));
+//    columnStatsList.get(0).setMaxValue(DatumFactory.createFloat8(maxDouble));
+//    columnStatsList.get(1).setMinValue(DatumFactory.createInt8(2));
+//    columnStatsList.get(1).setMaxValue(DatumFactory.createInt8(maxLong));
+//
+//    Tuple totalStart = getTuple(DatumFactory.createFloat8(0.1), DatumFactory.createInt8(2));
+//    Tuple totalEnd = getTuple(DatumFactory.createFloat8(maxDouble), DatumFactory.createInt8(maxLong));
+//    totalRange = new TupleRange(totalStart, totalEnd, totalBase, comparator);
+//    totalCard = BigInteger.valueOf(card);
   }
 
   @Test

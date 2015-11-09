@@ -25,6 +25,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.RawLocalFileSystem;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.tajo.catalog.*;
+import org.apache.tajo.catalog.statistics.AnalyzedSortSpec;
 import org.apache.tajo.catalog.statistics.ColumnStats;
 import org.apache.tajo.catalog.statistics.FreqHistogram;
 import org.apache.tajo.catalog.statistics.HistogramUtil;
@@ -42,7 +43,6 @@ import org.apache.tajo.worker.TaskAttemptContext;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -159,35 +159,33 @@ public class RangeShuffleFileWriteExec extends UnaryPhysicalExec {
     context.addShuffleFileOutput(0, context.getTaskId().toString());
 
     // Check isPureAscii and find the maxLength
-    boolean[] isPureAscii = new boolean[keySchema.size()];
-    int[] maxLength = new int[keySchema.size()];
-    Arrays.fill(isPureAscii, true);
-    Arrays.fill(maxLength, 0);
+    List<ColumnStats> sortKeyStats = TupleUtil.extractSortColumnStats(sortSpecs, context.getResultStats().getColumnStats(), false);
+    AnalyzedSortSpec[] analyzedSpecs = HistogramUtil.toAnalyzedSortSpecs(sortSpecs, sortKeyStats);
+
     for (Pair<Tuple, Long> eachPair : countPerTuples) {
       Tuple tuple = eachPair.getFirst();
       for (int i = 0; i < keySchema.size(); i++) {
         if (keySchema.getColumn(i).getDataType().getType().equals(Type.TEXT)) {
           boolean isCurrentPureAscii = StringUtils.isPureAscii(tuple.getText(i));
-          if (isPureAscii[i]) {
-            isPureAscii[i] &= isCurrentPureAscii;
+          if (analyzedSpecs[i].isPureAscii()) {
+            analyzedSpecs[i].setPureAscii(isCurrentPureAscii);
           }
           if (isCurrentPureAscii) {
-            maxLength[i] = Math.max(maxLength[i], tuple.getText(i).length());
+            analyzedSpecs[i].setMaxLength(Math.max(analyzedSpecs[i].getMaxLength(), tuple.getText(i).length()));
           } else {
-            maxLength[i] = Math.max(maxLength[i], tuple.getUnicodeChars(i).length);
+            analyzedSpecs[i].setMaxLength(Math.max(analyzedSpecs[i].getMaxLength(), tuple.getUnicodeChars(i).length));
           }
         }
       }
     }
 
-    List<ColumnStats> sortKeyStats = TupleUtil.extractSortColumnStats(sortSpecs, context.getResultStats().getColumnStats(), false);
-    FreqHistogram freqHistogram = new FreqHistogram(keySchema, sortSpecs);
+    FreqHistogram freqHistogram = new FreqHistogram(sortSpecs);
     Pair<Tuple, Long> current, next = null;
     Tuple interval = null;
     for (int i = 0; i < countPerTuples.size() - 1; i++) {
       current = countPerTuples.get(i);
       next = countPerTuples.get(i + 1);
-      interval = HistogramUtil.diff(comp, sortSpecs, sortKeyStats, current.getFirst(), next.getFirst(), isPureAscii, maxLength);
+      interval = HistogramUtil.diff(comp, analyzedSpecs, current.getFirst(), next.getFirst());
       // TODO: interval must be divided by count
       freqHistogram.updateBucket(new TupleRange(current.getFirst(), next.getFirst(),
           interval,
@@ -201,7 +199,7 @@ public class RangeShuffleFileWriteExec extends UnaryPhysicalExec {
 //        lastEnd = HistogramUtil.increment(sortSpecs, sortKeyStats, next.getFirst(), interval, -1, isPureAscii, maxLength);
 //      }
       freqHistogram.updateBucket(new TupleRange(next.getFirst(), next.getFirst(),
-          HistogramUtil.diff(comp, sortSpecs, sortKeyStats, next.getFirst(), next.getFirst(), isPureAscii, maxLength),
+          HistogramUtil.diff(comp, analyzedSpecs, next.getFirst(), next.getFirst()),
           freqHistogram.getComparator()), next.getSecond(), true);
     }
     context.setFreqHistogram(freqHistogram);

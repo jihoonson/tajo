@@ -22,6 +22,7 @@ import com.google.protobuf.ByteString;
 import org.apache.tajo.catalog.*;
 import org.apache.tajo.catalog.proto.CatalogProtos.FreqBucketProto;
 import org.apache.tajo.catalog.proto.CatalogProtos.FreqHistogramProto;
+import org.apache.tajo.catalog.statistics.FreqHistogram.Bucket;
 import org.apache.tajo.common.ProtoObject;
 import org.apache.tajo.datum.DatumFactory;
 import org.apache.tajo.datum.NullDatum;
@@ -30,43 +31,46 @@ import org.apache.tajo.storage.Tuple;
 import org.apache.tajo.storage.VTuple;
 import org.apache.tajo.util.TUtil;
 
+import java.math.BigDecimal;
 import java.util.*;
 
 /**
  * Frequency histogram
  */
-public class FreqHistogram implements ProtoObject<FreqHistogramProto>, Cloneable, GsonObject {
-  protected final Schema keySchema; // TODO: remove
-  protected final SortSpec[] sortSpecs;
-  protected final Map<TupleRange, Bucket> buckets = new HashMap<>();
-  protected final TupleComparator comparator;
-  protected final TupleComparator baseComparator;
-  protected Tuple minInterval;
+public class FreqHistogram extends Histogram<TupleRange, Bucket>
+    implements ProtoObject<FreqHistogramProto>, Cloneable, GsonObject {
 
-  public FreqHistogram(Schema keySchema, SortSpec[] sortSpec) {
-    this.keySchema = keySchema;
-    this.sortSpecs = sortSpec;
-    this.comparator = new BaseTupleComparator(keySchema, sortSpec);
+  private final TupleComparator comparator;
+  private final SortSpec[] sortSpecs;
+  private final Map<TupleRange, Bucket> buckets = new HashMap<>();
+  private final TupleComparator intervalComparator;
+  private Tuple minInterval;
+
+  public FreqHistogram(SortSpec[] sortSpecs) {
+    Schema keySchema = HistogramUtil.sortSpecsToSchema(sortSpecs);
+    this.sortSpecs = sortSpecs;
+    this.comparator = new BaseTupleComparator(keySchema, sortSpecs);
     SortSpec[] baseSortSpecs = new SortSpec[keySchema.size()];
     for (int i = 0; i < keySchema.size(); i++) {
-      baseSortSpecs[i] = new SortSpec(keySchema.getColumn(i), true, sortSpec[i].isNullFirst());
+      baseSortSpecs[i] = new SortSpec(keySchema.getColumn(i), true, sortSpecs[i].isNullFirst());
     }
-    this.baseComparator = new BaseTupleComparator(keySchema, baseSortSpecs);
+    this.intervalComparator = new BaseTupleComparator(keySchema, baseSortSpecs);
   }
 
-  public FreqHistogram(Schema keySchema, SortSpec[] sortSpec, Collection<Bucket> buckets) {
-    this(keySchema, sortSpec);
+  public FreqHistogram(SortSpec[] sortSpec, Collection<Bucket> buckets) {
+    this(sortSpec);
     for (Bucket bucket : buckets) {
       this.buckets.put(bucket.key, bucket);
     }
   }
 
   public FreqHistogram(FreqHistogramProto proto) {
-    keySchema = new Schema(proto.getSchema());
-    sortSpecs = new SortSpec[proto.getSortSpecCount()];
+    SortSpec[] sortSpecs = new SortSpec[proto.getSortSpecCount()];
     for (int i = 0; i < sortSpecs.length; i++) {
       sortSpecs[i] = new SortSpec(proto.getSortSpec(i));
     }
+    Schema keySchema = HistogramUtil.sortSpecsToSchema(sortSpecs);
+    this.sortSpecs = sortSpecs;
     this.comparator = new BaseTupleComparator(keySchema, sortSpecs);
     for (FreqBucketProto eachBucketProto : proto.getBucketsList()) {
       Bucket bucket = new Bucket(eachBucketProto);
@@ -76,30 +80,22 @@ public class FreqHistogram implements ProtoObject<FreqHistogramProto>, Cloneable
     for (int i = 0; i < keySchema.size(); i++) {
       baseSortSpecs[i] = new SortSpec(keySchema.getColumn(i), true, sortSpecs[i].isNullFirst());
     }
-    this.baseComparator = new BaseTupleComparator(keySchema, baseSortSpecs);
+    this.intervalComparator = new BaseTupleComparator(keySchema, baseSortSpecs);
   }
 
-  public Tuple getNonZeroMinInterval() {
+  public Tuple getNonZeroMinInterval(AnalyzedSortSpec[] sortSpecs) {
     if (this.minInterval == null) {
-      Tuple zeroTuple = TupleRangeUtil.createMinBaseTuple(sortSpecs);
+//      Tuple zeroTuple = TupleRangeUtil.createMinBaseTuple(context.sortSpecs);
       for (Bucket eachBucket : buckets.values()) {
         if (minInterval == null) {
           minInterval = eachBucket.getBase();
-        } else if (!zeroTuple.equals(eachBucket.getBase())
-            && baseComparator.compare(minInterval, eachBucket.getBase()) > 0) {
+        } else if (!HistogramUtil.normalize(sortSpecs, eachBucket.getBase()).equals(BigDecimal.ZERO)
+            && intervalComparator.compare(minInterval, eachBucket.getBase()) > 0) {
           minInterval = eachBucket.getBase();
         }
       }
     }
     return minInterval;
-  }
-
-  public void setMinInterval(Tuple interval) {
-    this.minInterval = interval;
-  }
-
-  public Schema getKeySchema() {
-    return keySchema;
   }
 
   public SortSpec[] getSortSpecs() {
@@ -118,6 +114,7 @@ public class FreqHistogram implements ProtoObject<FreqHistogramProto>, Cloneable
     }
     TupleRange key = new TupleRange(startClone, endClone, baseClone, comparator);
     updateBucket(key, change);
+    minInterval = null;
   }
 
   /**
@@ -125,6 +122,7 @@ public class FreqHistogram implements ProtoObject<FreqHistogramProto>, Cloneable
    * @param key
    * @param change
    */
+  @Override
   public void updateBucket(TupleRange key, long change) {
     if (buckets.containsKey(key)) {
       getBucket(key).incCount(change);
@@ -142,18 +140,17 @@ public class FreqHistogram implements ProtoObject<FreqHistogramProto>, Cloneable
    *
    * @param other
    */
-  public void merge(FreqHistogram other, List<ColumnStats> columnStatsList,
-                    boolean[] isPureAscii, int[] maxLength) {
+  public void merge(AnalyzedSortSpec[] analyzedSpecs, FreqHistogram other) {
     // Find the min interval from both histograms
     Tuple minInterval;
     if (this.size() > 0 && other.size() > 0) {
-      minInterval = comparator.compare(this.getNonZeroMinInterval(),
-          other.getNonZeroMinInterval()) > 0 ?
-          other.getNonZeroMinInterval() : this.getNonZeroMinInterval();
+      minInterval = comparator.compare(this.getNonZeroMinInterval(analyzedSpecs),
+          other.getNonZeroMinInterval(analyzedSpecs)) > 0 ?
+          other.getNonZeroMinInterval(analyzedSpecs) : this.getNonZeroMinInterval(analyzedSpecs);
     } else if (this.size() > 0) {
-      minInterval = this.getNonZeroMinInterval();
+      minInterval = this.getNonZeroMinInterval(analyzedSpecs);
     } else if (other.size() > 0) {
-      minInterval = other.getNonZeroMinInterval();
+      minInterval = other.getNonZeroMinInterval(analyzedSpecs);
     } else {
       return;
     }
@@ -163,7 +160,7 @@ public class FreqHistogram implements ProtoObject<FreqHistogramProto>, Cloneable
     for (Bucket eachBucket : this.buckets.values()) {
       if (comparator.compare(eachBucket.getBase(), minInterval) > 0) {
         // Split the bucket
-        for (Bucket split : HistogramUtil.splitBucket(this, columnStatsList, eachBucket, minInterval, isPureAscii, maxLength)) {
+        for (Bucket split : HistogramUtil.splitBucket(this, analyzedSpecs, eachBucket, minInterval)) {
           this.buckets.put(split.key, split);
         }
       } else {
@@ -174,7 +171,7 @@ public class FreqHistogram implements ProtoObject<FreqHistogramProto>, Cloneable
     for (Bucket eachBucket: other.buckets.values()) {
       if (comparator.compare(eachBucket.getBase(), minInterval) > 0) {
         // Split the bucket
-        for (Bucket split : HistogramUtil.splitBucket(this, columnStatsList, eachBucket, minInterval, isPureAscii, maxLength)) {
+        for (Bucket split : HistogramUtil.splitBucket(this, analyzedSpecs, eachBucket, minInterval)) {
           this.buckets.put(split.key, split);
         }
       } else {
@@ -189,7 +186,8 @@ public class FreqHistogram implements ProtoObject<FreqHistogramProto>, Cloneable
     return getBucket(new TupleRange(startKey, endKey, base, comparator));
   }
 
-  protected Bucket getBucket(TupleRange key) {
+  @Override
+  public Bucket getBucket(TupleRange key) {
     return buckets.get(key);
   }
 
@@ -224,7 +222,6 @@ public class FreqHistogram implements ProtoObject<FreqHistogramProto>, Cloneable
   @Override
   public FreqHistogramProto getProto() {
     FreqHistogramProto.Builder builder = FreqHistogramProto.newBuilder();
-    builder.setSchema(keySchema.getProto());
     for (SortSpec sortSpec : sortSpecs) {
       builder.addSortSpec(sortSpec.getProto());
     }
@@ -246,8 +243,7 @@ public class FreqHistogram implements ProtoObject<FreqHistogramProto>, Cloneable
   public boolean equals(Object o) {
     if (o instanceof FreqHistogram) {
       FreqHistogram other = (FreqHistogram) o;
-      boolean eq = this.keySchema.equals(other.keySchema);
-      eq &= Arrays.equals(this.sortSpecs, other.sortSpecs);
+      boolean eq = Arrays.equals(this.sortSpecs, other.sortSpecs);
       eq &= this.getSortedBuckets().equals(other.getSortedBuckets());
       return eq;
     }
@@ -270,18 +266,18 @@ public class FreqHistogram implements ProtoObject<FreqHistogramProto>, Cloneable
     }
 
     public Bucket(FreqBucketProto proto) {
-      Tuple startKey = new VTuple(keySchema.size());
-      Tuple endKey = new VTuple(keySchema.size());
-      Tuple base = new VTuple(keySchema.size());
-      for (int i = 0; i < keySchema.size(); i++) {
+      Tuple startKey = new VTuple(sortSpecs.length);
+      Tuple endKey = new VTuple(sortSpecs.length);
+      Tuple base = new VTuple(sortSpecs.length);
+      for (int i = 0; i < sortSpecs.length; i++) {
         startKey.put(i, proto.getStartKey(i).size() == 0 ? NullDatum.get() :
-            DatumFactory.createFromBytes(keySchema.getColumn(i).getDataType(),
+            DatumFactory.createFromBytes(sortSpecs[i].getSortKey().getDataType(),
             proto.getStartKey(i).toByteArray()));
         endKey.put(i, proto.getEndKey(i).size() == 0 ? NullDatum.get() :
-            DatumFactory.createFromBytes(keySchema.getColumn(i).getDataType(),
+            DatumFactory.createFromBytes(sortSpecs[i].getSortKey().getDataType(),
             proto.getEndKey(i).toByteArray()));
         base.put(i, proto.getBase(i).size() == 0 ? NullDatum.get() :
-            DatumFactory.createFromBytes(keySchema.getColumn(i).getDataType(),
+            DatumFactory.createFromBytes(sortSpecs[i].getSortKey().getDataType(),
             proto.getBase(i).toByteArray()));
       }
       this.key = new TupleRange(startKey, endKey, base, comparator);
@@ -291,7 +287,7 @@ public class FreqHistogram implements ProtoObject<FreqHistogramProto>, Cloneable
     @Override
     public FreqBucketProto getProto() {
       FreqBucketProto.Builder builder = FreqBucketProto.newBuilder();
-      for (int i = 0; i < keySchema.size(); i++) {
+      for (int i = 0; i < sortSpecs.length; i++) {
         builder.addStartKey(ByteString.copyFrom(key.getStart().asDatum(i).asByteArray()));
         builder.addEndKey(ByteString.copyFrom(key.getEnd().asDatum(i).asByteArray()));
         builder.addBase(ByteString.copyFrom(key.getBase().asDatum(i).asByteArray()));

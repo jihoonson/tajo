@@ -195,9 +195,8 @@ message ColumnStatsProto {
 }
 
 message FreqHistogramProto {
-  required SchemaProto schema = 1;
-  repeated SortSpecProto sort_spec = 2;
-  repeated FreqBucketProto buckets = 3;
+  repeated SortSpecProto sort_spec = 1;
+  repeated FreqBucketProto buckets = 2;
 }
 
 message FreqBucketProto {

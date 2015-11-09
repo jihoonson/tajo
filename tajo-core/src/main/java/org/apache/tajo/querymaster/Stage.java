@@ -714,7 +714,7 @@ public class Stage implements EventHandler<StageEvent> {
   }
 
   public void initStatCollect(Schema shuffleKeySchema, SortSpec[] sortSpecs) {
-    histogramForRangeShuffle = new FreqHistogram(shuffleKeySchema, sortSpecs);
+    histogramForRangeShuffle = new FreqHistogram(sortSpecs);
   }
 
   public FreqHistogram getHistogramForRangeShuffle() {
@@ -1251,35 +1251,15 @@ public class Stage implements EventHandler<StageEvent> {
 
   private static void updateHistogram(Stage stage, StageTaskEvent taskEvent, int maxSize) {
     FreqHistogram histogram = taskEvent.getHistogram();
-    List<Bucket> buckets = histogram.getSortedBuckets();
-
-    boolean[] isPureAscii = new boolean[histogram.getKeySchema().size()];
-    int[] maxLength = new int[histogram.getKeySchema().size()];
-    Arrays.fill(isPureAscii, true);
-    Arrays.fill(maxLength, 0);
-    for (Bucket bucket : buckets) {
-      Tuple tuple = bucket.getStartKey();
-      for (int i = 0; i < histogram.getKeySchema().size(); i++) {
-        if (histogram.getKeySchema().getColumn(i).getDataType().getType().equals(Type.TEXT)) {
-          boolean isCurrentPureAscii = StringUtils.isPureAscii(tuple.getText(i));
-          if (isPureAscii[i]) {
-            isPureAscii[i] &= isCurrentPureAscii;
-          }
-          if (isCurrentPureAscii) {
-            maxLength[i] = Math.max(maxLength[i], tuple.getText(i).length());
-          } else {
-            maxLength[i] = Math.max(maxLength[i], tuple.getUnicodeChars(i).length);
-          }
-        }
-      }
-    }
-
     List<ColumnStats> sortKeyStats = TupleUtil.extractSortColumnStats(
         histogram.getSortSpecs(),
         stage.resultStatistics.getColumnStats(),
         false);
+    AnalyzedSortSpec[] analyzedSpecs = HistogramUtil.analyzeHistogram(histogram, sortKeyStats);
+
+    List<Bucket> buckets = histogram.getSortedBuckets();
     // 1) Update histograms of range partitions using the report
-    stage.histogramForRangeShuffle.merge(histogram, sortKeyStats, isPureAscii, maxLength);
+    stage.histogramForRangeShuffle.merge(analyzedSpecs, histogram);
 //    FreqHistogram histogram = stage.histogramForRangeShuffle;
 //    HistogramUtil.normalizeLength(histogram);
 //    List<Bucket> buckets = histogram.getSortedBuckets();

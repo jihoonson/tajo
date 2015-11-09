@@ -668,28 +668,8 @@ public class Repartitioner {
       // TODO: create partitions by merging the ranges of the histogram
       FreqHistogram histogram = schedulerContext.getMasterContext().getQuery().getStage(sampleChildBlock.getId()).getHistogramForRangeShuffle();
 //      HistogramUtil.normalize(histogram, sortKeyStats);
+      AnalyzedSortSpec[] analyzedSpecs = HistogramUtil.analyzeHistogram(histogram, sortKeyStats);
       List<Bucket> buckets = histogram.getSortedBuckets();
-
-      boolean[] isPureAscii = new boolean[sortSchema.size()];
-      int[] maxLength = new int[sortSchema.size()];
-      Arrays.fill(isPureAscii, true);
-      Arrays.fill(maxLength, 0);
-      for (Bucket bucket : buckets) {
-        Tuple tuple = bucket.getStartKey();
-        for (int i = 0; i < sortSchema.size(); i++) {
-          if (sortSchema.getColumn(i).getDataType().getType().equals(Type.TEXT)) {
-            boolean isCurrentPureAscii = StringUtils.isPureAscii(tuple.getText(i));
-            if (isPureAscii[i]) {
-              isPureAscii[i] &= isCurrentPureAscii;
-            }
-            if (isCurrentPureAscii) {
-              maxLength[i] = Math.max(maxLength[i], tuple.getText(i).length());
-            } else {
-              maxLength[i] = Math.max(maxLength[i], tuple.getUnicodeChars(i).length);
-            }
-          }
-        }
-      }
 
       // Compute the total cardinality of sort keys.
       BigInteger totalCard = histogram.getAllBuckets().stream().map(
@@ -719,7 +699,7 @@ public class Repartitioner {
         }
 
         // The merged histogram contains the range partitions (buckets).
-        histogram = new FreqHistogram(histogram.getKeySchema(), histogram.getSortSpecs(), buckets);
+        histogram = new FreqHistogram(histogram.getSortSpecs(), buckets);
 
 
       } else if (determinedTaskNum > buckets.size()) {
@@ -732,9 +712,9 @@ public class Repartitioner {
           if (maxBucket.getCount() < 2) {
             throw new TajoInternalError("Cannot split the bucket");
           }
-          buckets.addAll(HistogramUtil.splitBucket(histogram, sortKeyStats, maxBucket, maxBucket.getBase(), isPureAscii, maxLength));
+          buckets.addAll(HistogramUtil.splitBucket(histogram, analyzedSpecs, maxBucket, maxBucket.getBase()));
         }
-        histogram = new FreqHistogram(histogram.getKeySchema(), histogram.getSortSpecs(), buckets);
+        histogram = new FreqHistogram(histogram.getSortSpecs(), buckets);
       }
 
       // The average cardinality of the original histogram must be same with normalized one.
@@ -742,7 +722,7 @@ public class Repartitioner {
 
       // The merged histogram can contain partitions of various lengths.
       // Thus, they need to be refined to be equal in length.
-      HistogramUtil.refineToEquiDepth(histogram, avgCard, sortKeyStats, isPureAscii, maxLength);
+      HistogramUtil.refineToEquiDepth(histogram, avgCard, analyzedSpecs);
       buckets = histogram.getSortedBuckets();
 
 
