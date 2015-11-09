@@ -354,7 +354,8 @@ public class HistogramUtil {
    * @return normalized value
    */
   private static BigDecimal normalize(final AnalyzedSortSpec sortSpec, final BigDecimal val) {
-    return val.subtract(sortSpec.getMin()).divide(sortSpec.getTransformedMax(), MathContext.DECIMAL128);
+    return val.subtract(sortSpec.getMin())
+        .divide(sortSpec.getTransformedMax(), MathContext.DECIMAL128);
   }
 
   /**
