@@ -29,6 +29,7 @@ import org.apache.tajo.catalog.statistics.FreqHistogram.Bucket;
 import org.apache.tajo.common.TajoDataTypes;
 import org.apache.tajo.common.TajoDataTypes.Type;
 import org.apache.tajo.datum.*;
+import org.apache.tajo.exception.TajoInternalError;
 import org.apache.tajo.storage.Tuple;
 import org.apache.tajo.storage.VTuple;
 import org.apache.tajo.util.Bytes;
@@ -159,43 +160,65 @@ public class HistogramUtil {
 //    return denormalized;
 //  }
 
+  private static boolean isMinNormTuple(AnalyzedSortSpec[] sortSpecs, BigDecimal[] normTuple) {
+    for (int i = 0; i < sortSpecs.length; i++) {
+      if (!normTuple[i].equals(sortSpecs[i].getNormMin())) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  private static BigDecimal weightedSum(AnalyzedSortSpec[] sortSpecs, BigDecimal[] normTuple) {
+    BigDecimal sum = BigDecimal.ZERO;
+    BigDecimal exponent = BigDecimal.ZERO;
+    int i;
+    for (i = 0; i < normTuple.length - 1; i++) {
+      sum = sum.add(normTuple[i].multiply());
+    }
+    return sum.add(normTuple[i]);
+  }
+
   public static List<Bucket> splitBucket(FreqHistogram histogram, AnalyzedSortSpec[] sortSpecs,
                                          Bucket bucket, Tuple interval) {
     Comparator<Tuple> comparator = histogram.getComparator();
     List<Bucket> splits = new ArrayList<>();
 
-//    if (bucket.getCount() == 1 ||
-//        bucket.getBase().equals(TupleRangeUtil.createMinBaseTuple(histogram.getSortSpecs()))) {
-//      splits.add(bucket);
-//    } else {
-//      long remaining = bucket.getCount();
-//      Tuple start = bucket.getStartKey();
-//      Tuple end = HistogramUtil.increment(sortSpecs, start, interval, 1);
-//      BigDecimal normalizedStart = normalize(sortSpecs, start);
-//      BigDecimal totalDiff = normalize(sortSpecs, bucket.getEndKey()).subtract(normalizedStart);
-//      BigDecimal totalCount = BigDecimal.valueOf(bucket.getCount());
-//
-//      while (comparator.compare(end, bucket.getEndKey()) < 0) {
-//        // count = totalCount * (end - start) / totalDiff
-//        long count = totalCount.multiply(normalize(sortSpecs, end).subtract(normalizedStart))
-//            .divide(totalDiff, DECIMAL128_HALF_UP).longValue();
-//        splits.add(histogram.createBucket(new TupleRange(start, end, interval, comparator), count));
-//        start = end;
-//        try {
-//          end = HistogramUtil.increment(sortSpecs, start, interval, 1);
-//        } catch (TajoInternalError e) {
-//          // TODO
-//          break;
-//        }
-//        normalizedStart = normalize(sortSpecs, start);
-//        remaining -= count;
-//      }
-//
-//      if (!end.equals(bucket.getEndKey())) {
-//        // TODO: interval is invalid
-//        splits.add(histogram.createBucket(new TupleRange(start, bucket.getEndKey(), interval, comparator), remaining));
-//      }
-//    }
+    BigDecimal[] bigInterval = HistogramUtil.normalize(sortSpecs, bucket.getBase(), true);
+
+    if (bucket.getCount() == 1 ||
+        isMinNormTuple(sortSpecs, bigInterval)) {
+      splits.add(bucket);
+    } else {
+      long remaining = bucket.getCount();
+      Tuple start = bucket.getStartKey();
+      Tuple end = increment(sortSpecs, start, interval, 1);
+      BigDecimal normalizedStart = weightedSum(sortSpecs, normalize(sortSpecs, start, false));
+      BigDecimal totalDiff = weightedSum(sortSpecs, normalize(sortSpecs, bucket.getEndKey(), false)).subtract(normalizedStart);
+      BigDecimal totalCount = BigDecimal.valueOf(bucket.getCount());
+
+      while (comparator.compare(end, bucket.getEndKey()) < 0) {
+        // count = totalCount * (end - start) / totalDiff
+        long count = totalCount.multiply(weightedSum(sortSpecs, normalize(sortSpecs, end, false))
+            .subtract(normalizedStart))
+            .divide(totalDiff, DECIMAL128_HALF_UP).longValue();
+        splits.add(histogram.createBucket(new TupleRange(start, end, interval, comparator), count));
+        start = end;
+        try {
+          end = HistogramUtil.increment(sortSpecs, start, interval, 1);
+        } catch (TajoInternalError e) {
+          // TODO
+          break;
+        }
+        normalizedStart = weightedSum(sortSpecs, normalize(sortSpecs, start, false));
+        remaining -= count;
+      }
+
+      if (!end.equals(bucket.getEndKey())) {
+        // TODO: interval is invalid
+        splits.add(histogram.createBucket(new TupleRange(start, bucket.getEndKey(), interval, comparator), remaining));
+      }
+    }
 
     return splits;
   }
@@ -284,9 +307,9 @@ public class HistogramUtil {
   private static BigDecimal denormalizeVal(final AnalyzedSortSpec sortSpec,
                                            final BigDecimal val) {
     // TODO: check the below line is valid
-//    return val.multiply(sortSpec.getTransformedMax()).add(sortSpec.getMin());
-    BigDecimal result = val.multiply(sortSpec.getTransformedMax(), DECIMAL128_HALF_UP);
-    if (result.compareTo(sortSpec.getTransformedMax()) > 0) {
+//    return val.multiply(sortSpec.getMax()).add(sortSpec.getMin());
+    BigDecimal result = val.multiply(sortSpec.getMax(), DECIMAL128_HALF_UP);
+    if (result.compareTo(sortSpec.getMax()) > 0) {
       throw new ArithmeticException("Overflow");
     }
     return result;
@@ -366,9 +389,9 @@ public class HistogramUtil {
    */
   private static BigDecimal normalizeVal(final AnalyzedSortSpec sortSpec, final BigDecimal val) {
 //    BigDecimal result = val.subtract(sortSpec.getMin())
-//        .divide(sortSpec.getTransformedMax(), DECIMAL128_HALF_UP);
+//        .divide(sortSpec.getMax(), DECIMAL128_HALF_UP);
     BigDecimal result = val
-        .divide(sortSpec.getTransformedMax(), DECIMAL128_HALF_UP);
+        .divide(sortSpec.getMax(), DECIMAL128_HALF_UP);
     if (result.compareTo(BigDecimal.ZERO) < 0) {
       throw new ArithmeticException("Underflow: " + result);
     }
@@ -1177,26 +1200,4 @@ public class HistogramUtil {
     }
     return incremented;
   }
-
-//  public static BigDecimal[] increment(AnalyzedSortSpec[] sortSpecs, BigDecimal[] operand, BigDecimal[] interval, int count) {
-//    Preconditions.checkArgument(operand.length == interval.length);
-//    BigDecimal bigCount = BigDecimal.valueOf(count);
-//    BigDecimal[] carryAndRemainder = new BigDecimal[] {BigDecimal.ZERO, BigDecimal.ZERO};
-//    BigDecimal[] incremented = new BigDecimal[operand.length];
-//    for (int i = operand.length - 1; i >= 0; i--) {
-//      BigDecimal max = sortSpecs[i].getTransformedMax().add(sortSpecs[i].getMin());
-//      // added = carry + operand + interval * count
-//      BigDecimal denormOp = HistogramUtil.denormalizeVal(sortSpecs[i], operand[i]);
-//      BigDecimal denormInt = HistogramUtil.denormalizeVal(sortSpecs[i], interval[i]);
-//      BigDecimal added = carryAndRemainder[0].add(denormOp.add(denormInt.multiply(bigCount)));
-//      if (added.compareTo(max) < 0) {
-//        carryAndRemainder[0] = BigDecimal.ZERO;
-//        incremented[i] = added;
-//      } else {
-//        carryAndRemainder = added.divideAndRemainder(max, DECIMAL128_HALF_UP);
-//        incremented[i] = carryAndRemainder[1];
-//      }
-//    }
-//    return incremented;
-//  }
 }

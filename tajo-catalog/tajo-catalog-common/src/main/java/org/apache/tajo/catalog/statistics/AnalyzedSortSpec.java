@@ -37,8 +37,8 @@ public class AnalyzedSortSpec {
   private int maxLength;
 
   private BigDecimal min;
-  private BigDecimal normMin;
-  private BigDecimal normMax;
+  private BigDecimal normMin; // (min / max)
+  private BigDecimal max;
 
   public AnalyzedSortSpec(SortSpec sortSpec) {
     this.sortSpec = sortSpec;
@@ -117,9 +117,9 @@ public class AnalyzedSortSpec {
     this.hasNullValue = hasNullValue;
   }
 
-  public BigDecimal getTransformedMax() {
+  public BigDecimal getMax() {
     prepareMinMax();
-    return normMax;
+    return max;
   }
 
   public BigDecimal getMin() {
@@ -136,9 +136,8 @@ public class AnalyzedSortSpec {
     if (min == null) {
       BigDecimal[] minMax = HistogramUtil.getMinMaxIncludeNull(this);
       this.min = minMax[0];
-//      this.normMax = minMax[1].subtract(min);
-      this.normMax = minMax[1];
-      this.normMin = min.divide(normMax, HistogramUtil.DECIMAL128_HALF_UP);
+      this.max = minMax[1];
+      this.normMin = min.divide(max, HistogramUtil.DECIMAL128_HALF_UP);
     }
   }
 }
