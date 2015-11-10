@@ -89,7 +89,7 @@ public class FreqHistogram extends Histogram<TupleRange, Bucket>
       for (Bucket eachBucket : buckets.values()) {
         if (minInterval == null) {
           minInterval = eachBucket.getBase();
-        } else if (!HistogramUtil.normalize(sortSpecs, eachBucket.getBase()).equals(BigDecimal.ZERO)
+        } else if (!HistogramUtil.normalize(sortSpecs, eachBucket.getBase(), true).equals(BigDecimal.ZERO)
             && intervalComparator.compare(minInterval, eachBucket.getBase()) > 0) {
           minInterval = eachBucket.getBase();
         }

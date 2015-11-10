@@ -326,13 +326,27 @@ public class StringUtils {
     return padded;
   }
 
+  public static char[] padHead(char[] chars, int length) {
+    if (chars.length >= length) {
+      return chars;
+    } else {
+      int i;
+      char[] padded = new char[length];
+      for (i = 0; i < length - chars.length; i++) {
+        padded[i] = ' ';
+      }
+      System.arraycopy(chars, 0, padded, i, chars.length);
+      return padded;
+    }
+  }
+
   public static char[] padTail(char[] chars, int length) {
     if (chars.length >= length) {
       return chars;
     } else {
       char[] padded = Arrays.copyOf(chars, length);
       for (int i = chars.length; i < length; i++) {
-        padded[i] = 0;
+        padded[i] = ' ';
       }
       return padded;
     }

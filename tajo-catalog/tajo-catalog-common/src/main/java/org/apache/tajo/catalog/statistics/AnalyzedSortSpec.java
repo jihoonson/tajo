@@ -37,6 +37,7 @@ public class AnalyzedSortSpec {
   private int maxLength;
 
   private BigDecimal min;
+  private BigDecimal normMin;
   private BigDecimal normMax;
 
   public AnalyzedSortSpec(SortSpec sortSpec) {
@@ -117,20 +118,27 @@ public class AnalyzedSortSpec {
   }
 
   public BigDecimal getTransformedMax() {
-    if (min == null) {
-      BigDecimal[] minMax = HistogramUtil.getMinMaxIncludeNull(this);
-      this.min = minMax[0];
-      this.normMax = minMax[1].subtract(min);
-    }
+    prepareMinMax();
     return normMax;
   }
 
   public BigDecimal getMin() {
+    prepareMinMax();
+    return min;
+  }
+
+  public BigDecimal getNormMin() {
+    prepareMinMax();
+    return normMin;
+  }
+
+  private void prepareMinMax() {
     if (min == null) {
       BigDecimal[] minMax = HistogramUtil.getMinMaxIncludeNull(this);
       this.min = minMax[0];
-      this.normMax = minMax[1].subtract(min);
+//      this.normMax = minMax[1].subtract(min);
+      this.normMax = minMax[1];
+      this.normMin = min.divide(normMax, HistogramUtil.DECIMAL128_HALF_UP);
     }
-    return min;
   }
 }
