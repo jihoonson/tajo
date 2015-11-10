@@ -33,6 +33,7 @@ import org.junit.Test;
 import java.math.BigDecimal;
 import java.math.MathContext;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.BitSet;
 import java.util.List;
 
@@ -69,7 +70,8 @@ public class TestHistogramUtil {
     TRUE_SET.set(0, schema.size());
 
     totalBase = getVTuple(DatumFactory.createFloat8(0.5), DatumFactory.createInt8(10),
-        DatumFactory.createText("가"), DatumFactory.createTimestampDatumWithJavaMillis(1000));
+        DatumFactory.createText(Convert.chars2utf(HistogramUtil.bigDecimalToUnicodeChars(BigDecimal.valueOf(100)))),
+        DatumFactory.createTimestampDatumWithJavaMillis(1000));
 
     columnStatsList = new ArrayList<>(schema.size());
     for (Column column : schema.getAllColumns()) {
@@ -254,56 +256,80 @@ public class TestHistogramUtil {
   public void testNormalizeTuple() {
     prepareHistogram(TRUE_SET, FALSE_SET);
     Tuple tuple1 = getVTuple(NullDatum.get(), DatumFactory.createInt8(10),
-        DatumFactory.createText("가"), DatumFactory.createTimestampDatumWithJavaMillis(1000));
+        DatumFactory.createText("가가가가가가"), DatumFactory.createTimestampDatumWithJavaMillis(1000));
     Tuple tuple2 = getVTuple(DatumFactory.createFloat8(0.5), NullDatum.get(),
-        DatumFactory.createText("가"), DatumFactory.createTimestampDatumWithJavaMillis(1000));
+        DatumFactory.createText("나나나나나나"), DatumFactory.createTimestampDatumWithJavaMillis(1000));
     assertTrue(comparator.compare(tuple1, tuple2) > 0);
-    BigDecimal n1 = HistogramUtil.normalize(analyzedSpecs, tuple1);
-    BigDecimal n2 = HistogramUtil.normalize(analyzedSpecs, tuple2);
-    assertTrue(n1.compareTo(n2) > 0);
+    BigDecimal[] n1 = HistogramUtil.normalize(analyzedSpecs, tuple1);
+    BigDecimal[] n2 = HistogramUtil.normalize(analyzedSpecs, tuple2);
+    assertTrue(HistogramUtil.compareNormTuples(n1, n2) > 0);
 
-//    Tuple denorm = HistogramUtil.denormalize(analyzedSpecs, n1);
+    Tuple denorm = HistogramUtil.denormalize(analyzedSpecs, n1);
+    assertEquals(tuple1, denorm);
+    denorm = HistogramUtil.denormalize(analyzedSpecs, n2);
+    assertEquals(tuple2, denorm);
+  }
+
+  @Test(expected = ArithmeticException.class)
+  public void testOverflow() {
+    prepareHistogram(TRUE_SET, FALSE_SET);
+    Tuple tuple1 = getVTuple(DatumFactory.createFloat8(1000), DatumFactory.createInt8(10),
+        DatumFactory.createText("가가가가가가가"), DatumFactory.createTimestampDatumWithJavaMillis(1000));
+    HistogramUtil.normalize(analyzedSpecs, tuple1);
+  }
+
+  @Test(expected = ArithmeticException.class)
+  public void testUnderflow() {
+    prepareHistogram(TRUE_SET, FALSE_SET);
+    Tuple tuple1 = getVTuple(DatumFactory.createFloat8(0), DatumFactory.createInt8(10),
+        DatumFactory.createText("가가가가"), DatumFactory.createTimestampDatumWithJavaMillis(1000));
+    HistogramUtil.normalize(analyzedSpecs, tuple1);
   }
 
   @Test
-  public void testNormalizeTuple2() {
-    prepareHistogram(FALSE_SET, FALSE_SET);
-    Schema schema = new Schema();
-    schema.addColumn("col1", Type.TEXT);
-    schema.addColumn("col2", Type.TEXT);
-
-    SortSpec[] sortSpecs = new SortSpec[2];
-    sortSpecs[0] = new SortSpec(schema.getColumn(0), false, false);
-    sortSpecs[1] = new SortSpec(schema.getColumn(1));
-
-    List<ColumnStats> columnStatsList = new ArrayList<>(2);
-    ColumnStats stats = new ColumnStats(schema.getColumn(0));
-    columnStatsList.add(stats);
-    stats = new ColumnStats(schema.getColumn(1));
-    columnStatsList.add(stats);
-
-    columnStatsList.get(0).setMinValue(DatumFactory.createText("하하하"));
-    columnStatsList.get(0).setMaxValue(DatumFactory.createText("하하하"));
-    columnStatsList.get(1).setMinValue(DatumFactory.createText("가가가가가"));
-    columnStatsList.get(1).setMaxValue(DatumFactory.createText("가가가가가"));
-
-    Tuple tuple1 = getVTuple(NullDatum.get(), DatumFactory.createText("가가가가가"));
-    Tuple tuple2 = getVTuple(DatumFactory.createText("하하하"), NullDatum.get());
-    BigDecimal n1 = HistogramUtil.normalize(analyzedSpecs, tuple1);
-    BigDecimal n2 = HistogramUtil.normalize(analyzedSpecs, tuple2);
-    assertTrue(n1.compareTo(n2) > 0);
+  public void testIncrementNormTuples() {
+//    prepareHistogram(TRUE_SET, FALSE_SET);
+//    Tuple tuple = getVTuple(DatumFactory.createFloat8(0.1), DatumFactory.createInt8(10),
+//        DatumFactory.createText("가가가가가가"), DatumFactory.createTimestampDatumWithJavaMillis(1000));
+//    BigDecimal[] norm = HistogramUtil.normalize(analyzedSpecs, tuple);
+//    BigDecimal[] interval = HistogramUtil.normalize(analyzedSpecs, totalBase);
+//    BigDecimal[] incremented = HistogramUtil.increment(norm, interval, 10);
+//    Tuple denorm = HistogramUtil.denormalize(analyzedSpecs, incremented);
+//    System.out.println(denorm);
+//    System.out.println(totalBase);
+//    Tuple expected = getVTuple(
+//        DatumFactory.createFloat8(0.1 + totalBase.getFloat8(0) * 10),
+//        DatumFactory.createInt8(10 + totalBase.getInt8(1) * 10),
+//        DatumFactory.createText(Convert.chars2utf(HistogramUtil.bigDecimalToUnicodeChars(HistogramUtil.unicodeCharsToBigDecimal("가가가가가가".toCharArray()).add(HistogramUtil.unicodeCharsToBigDecimal(totalBase.getUnicodeChars(2)).multiply(BigDecimal.TEN))))),
+//        DatumFactory.createTimestampDatumWithJavaMillis(1000 + ((TimestampDatum)totalBase.asDatum(3)).getJavaTimestamp() * 10)
+//    );
+//    System.out.println(expected);
+//    assertEquals(expected, denorm);
   }
 
   @Test
-  public void testDenormalize() {
-    Tuple tuple1 = getVTuple(NullDatum.get(), DatumFactory.createInt8(10));
-    Tuple tuple2 = getVTuple(DatumFactory.createInt8(10), NullDatum.get());
-    assertTrue(comparator.compare(tuple1, tuple2) > 0);
-    SortSpec[] sortSpecs = new SortSpec[2];
-    sortSpecs[0] = new SortSpec(schema.getColumn(0), true, false);
-    sortSpecs[1] = new SortSpec(schema.getColumn(1), true, false);
-    BigDecimal n1 = HistogramUtil.normalize(analyzedSpecs, tuple1);
-    BigDecimal n2 = HistogramUtil.normalize(analyzedSpecs, tuple2);
+  public void testIncrementNormTuples2() {
+    prepareHistogram(TRUE_SET, FALSE_SET);
+    Tuple tuple = getVTuple(DatumFactory.createFloat8(0.1), DatumFactory.createInt8(10),
+        DatumFactory.createText("가가가가가가"), DatumFactory.createTimestampDatumWithJavaMillis(1000));
+    BigDecimal[] norm = HistogramUtil.normalize(analyzedSpecs, tuple);
+    BigDecimal[] interval = HistogramUtil.normalize(analyzedSpecs, totalBase);
+    BigDecimal[] incremented = HistogramUtil.increment(analyzedSpecs, norm, interval, 1);
+    Tuple denorm = HistogramUtil.denormalize(analyzedSpecs, incremented);
+    System.out.println("operand: " + tuple);
+    System.out.println("operand: " + Arrays.toString(norm));
+    System.out.println("interval: " + totalBase);
+    System.out.println("interval: " + Arrays.toString(interval));
+    System.out.println("result: " + denorm);
+    System.out.println("result: " + Arrays.toString(incremented));
+    Tuple expected = getVTuple(
+        DatumFactory.createFloat8(0.1 + totalBase.getFloat8(0)),
+        DatumFactory.createInt8(10 + totalBase.getInt8(1)),
+        DatumFactory.createText(Convert.chars2utf(HistogramUtil.bigDecimalToUnicodeChars(HistogramUtil.unicodeCharsToBigDecimal("가가가가가가".toCharArray()).add(HistogramUtil.unicodeCharsToBigDecimal(totalBase.getUnicodeChars(2)))))),
+        DatumFactory.createTimestampDatumWithJavaMillis(1000 + ((TimestampDatum)totalBase.asDatum(3)).getJavaTimestamp())
+    );
+    System.out.println("expected: " + expected);
+    assertEquals(expected, denorm);
   }
 
   @Test

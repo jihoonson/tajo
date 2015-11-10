@@ -327,7 +327,7 @@ public class StringUtils {
   }
 
   public static char[] padTail(char[] chars, int length) {
-    if (chars.length > length) {
+    if (chars.length >= length) {
       return chars;
     } else {
       char[] padded = Arrays.copyOf(chars, length);
