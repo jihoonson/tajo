@@ -171,12 +171,13 @@ public class HistogramUtil {
 
   private static BigDecimal weightedSum(AnalyzedSortSpec[] sortSpecs, BigDecimal[] normTuple) {
     BigDecimal sum = BigDecimal.ZERO;
-    BigDecimal exponent = BigDecimal.ZERO;
     int i;
-    for (i = 0; i < normTuple.length - 1; i++) {
-      sum = sum.add(normTuple[i].multiply());
+    BigDecimal carry = BigDecimal.ONE;
+    for (i = normTuple.length - 1; i > 0; i--) {
+      sum = sum.add(normTuple[i].multiply(carry));
+      carry = carry.multiply(sortSpecs[i - 1].getMax());
     }
-    return sum.add(normTuple[i]);
+    return sum.add(normTuple[i].multiply(carry));
   }
 
   public static List<Bucket> splitBucket(FreqHistogram histogram, AnalyzedSortSpec[] sortSpecs,
