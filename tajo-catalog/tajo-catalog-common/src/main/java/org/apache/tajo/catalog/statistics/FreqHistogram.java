@@ -90,7 +90,7 @@ public class FreqHistogram extends Histogram<TupleRange, Bucket>
       for (Bucket eachBucket : buckets.values()) {
         if (minInterval == null) {
           minInterval = eachBucket.getBase();
-        } else if (!HistogramUtil.normalize(sortSpecs, eachBucket.getBase(), true).equals(BigDecimal.ZERO)
+        } else if (!HistogramUtil.normalize(sortSpecs, eachBucket.getBase(), true, false).equals(BigDecimal.ZERO)
             && intervalComparator.compare(minInterval, eachBucket.getBase()) > 0) {
           minInterval = eachBucket.getBase();
         }
@@ -354,8 +354,8 @@ public class FreqHistogram extends Histogram<TupleRange, Bucket>
 
     @VisibleForTesting
     public Tuple getMeanInterval(AnalyzedSortSpec[] sortSpecs, Tuple interval1, Tuple interval2) {
-      BigDecimal[] n1 = HistogramUtil.normalize(sortSpecs, interval1, true);
-      BigDecimal[] n2 = HistogramUtil.normalize(sortSpecs, interval2, true);
+      BigDecimal[] n1 = HistogramUtil.normalize(sortSpecs, interval1, true, false);
+      BigDecimal[] n2 = HistogramUtil.normalize(sortSpecs, interval2, true, false);
       return null;
     }
 
