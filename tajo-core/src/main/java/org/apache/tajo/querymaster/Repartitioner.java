@@ -30,7 +30,6 @@ import org.apache.tajo.algebra.JoinType;
 import org.apache.tajo.catalog.*;
 import org.apache.tajo.catalog.statistics.*;
 import org.apache.tajo.catalog.statistics.FreqHistogram.Bucket;
-import org.apache.tajo.common.TajoDataTypes.Type;
 import org.apache.tajo.conf.TajoConf.ConfVars;
 import org.apache.tajo.datum.Datum;
 import org.apache.tajo.datum.NegativeInfiniteDatum;
@@ -51,12 +50,14 @@ import org.apache.tajo.plan.serder.PlanProto.DistinctGroupbyEnforcer.MultipleAgg
 import org.apache.tajo.plan.serder.PlanProto.EnforceProperty;
 import org.apache.tajo.plan.util.PlannerUtil;
 import org.apache.tajo.querymaster.Task.IntermediateEntry;
-import org.apache.tajo.storage.*;
+import org.apache.tajo.storage.FileTablespace;
+import org.apache.tajo.storage.RowStoreUtil;
+import org.apache.tajo.storage.Tablespace;
+import org.apache.tajo.storage.TablespaceManager;
 import org.apache.tajo.storage.fragment.FileFragment;
 import org.apache.tajo.storage.fragment.Fragment;
 import org.apache.tajo.unit.StorageUnit;
 import org.apache.tajo.util.Pair;
-import org.apache.tajo.util.StringUtils;
 import org.apache.tajo.util.TUtil;
 import org.apache.tajo.util.TajoIdUtils;
 import org.apache.tajo.worker.FetchImpl;
@@ -694,7 +695,7 @@ public class Repartitioner {
       if (determinedTaskNum < buckets.size()) {
         // Merge ranges of the histogram until the number of ranges becomes determinedTaskNum.
         while (buckets.size() > determinedTaskNum) {
-          buckets.get(buckets.size()-2).merge(buckets.get(buckets.size()-1));
+          buckets.get(buckets.size()-2).merge(analyzedSpecs, buckets.get(buckets.size()-1));
           buckets.remove(buckets.size()-1);
         }
 

@@ -33,12 +33,12 @@ import org.junit.Test;
 import java.math.BigDecimal;
 import java.math.MathContext;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.BitSet;
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertArrayEquals;
 
 public class TestHistogramUtil {
 
@@ -53,9 +53,6 @@ public class TestHistogramUtil {
   private static BitSet FALSE_SET;
   private static BitSet TRUE_SET;
   private static TupleComparator comparator;
-
-  private static boolean[] isPureAscii = new boolean[] {false, false, false, false};
-  private static int[] maxLength = new int[] {0, 0, 3, 0};
 
   @Before
   public void setup() {
@@ -349,10 +346,6 @@ public class TestHistogramUtil {
 
   @Test
   public void testSplitBucket2() {
-//    totalBase = getVTuple(DatumFactory.createFloat8(0.5), DatumFactory.createInt8(10),
-//        DatumFactory.createText("d"),
-//        DatumFactory.createTimestampDatumWithJavaMillis(1000));
-
     prepareHistogram(TRUE_SET, FALSE_SET);
     Tuple start = getVTuple(DatumFactory.createFloat8(950.1), DatumFactory.createInt8(2),
         DatumFactory.createText("쐨쐨쐨ᡈᡊ㙨"), DatumFactory.createTimestamp("1970-01-01 00:15:00.01"));
@@ -363,10 +356,30 @@ public class TestHistogramUtil {
         DatumFactory.createText("aa"), DatumFactory.createTimestampDatumWithJavaMillis(100000));
     List<Bucket> buckets = HistogramUtil.splitBucket(histogram, analyzedSpecs, bucket, interval);
     assertEquals(3, buckets.size());
+    for (Bucket eachBucket : buckets) {
+      assertTrue(eachBucket.getCount() > 0);
+    }
+  }
+
+  @Test
+  public void testWeightedSumOfNormTuple() {
+    prepareHistogram(TRUE_SET, FALSE_SET);
+    Tuple tuple = getVTuple(DatumFactory.createFloat8(0.1), DatumFactory.createInt8(10),
+        DatumFactory.createText("가가가가가가"), DatumFactory.createTimestampDatumWithJavaMillis(1000));
+    BigDecimal[] normTuple = HistogramUtil.normalizeTuple(analyzedSpecs, tuple);
+    BigDecimal sum = HistogramUtil.weightedSum(analyzedSpecs, normTuple);
+    BigDecimal[] fromSum = HistogramUtil.normTupleFromWeightedSum(analyzedSpecs, sum, HistogramUtil.getMaxScale(normTuple),
+        new int[] {normTuple[0].scale(), normTuple[1].scale(), normTuple[2].scale(), normTuple[3].scale()});
+
+    assertEquals(normTuple[0].doubleValue(), fromSum[0].doubleValue(), 0.00000001);
+    assertEquals(normTuple[1].doubleValue(), fromSum[1].doubleValue(), 0.00000001);
+    assertEquals(normTuple[2].doubleValue(), fromSum[2].doubleValue(), 0.00000001);
+    assertEquals(normTuple[3].doubleValue(), fromSum[3].doubleValue(), 0.00000001);
   }
 
   @Test
   public void testRefineToEquiDepth() {
+    prepareHistogram(TRUE_SET, FALSE_SET);
     BigDecimal avgCount = totalCount.divide(BigDecimal.valueOf(21), MathContext.DECIMAL128);
     HistogramUtil.refineToEquiDepth(histogram, avgCount, analyzedSpecs);
     List<Bucket> buckets = histogram.getSortedBuckets();

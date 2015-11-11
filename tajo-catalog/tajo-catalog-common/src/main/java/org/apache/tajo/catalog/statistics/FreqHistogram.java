@@ -18,6 +18,7 @@
 
 package org.apache.tajo.catalog.statistics;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.ByteString;
 import org.apache.tajo.catalog.*;
 import org.apache.tajo.catalog.proto.CatalogProtos.FreqBucketProto;
@@ -333,7 +334,7 @@ public class FreqHistogram extends Histogram<TupleRange, Bucket>
       this.count += inc;
     }
 
-    public void merge(Bucket other) {
+    public void merge(AnalyzedSortSpec[] sortSpecs, Bucket other) {
       Tuple minStart, maxEnd;
       if (this.key.compareTo(other.key) < 0) {
         minStart = key.getStart();
@@ -345,7 +346,17 @@ public class FreqHistogram extends Histogram<TupleRange, Bucket>
 
       this.key.setStart(minStart);
       this.key.setEnd(maxEnd);
+      if (!this.key.getBase().equals(other.key.getBase())) {
+        this.key.setBase(getMeanInterval(sortSpecs, this.key.getBase(), other.key.getBase()));
+      }
       this.count += other.count;
+    }
+
+    @VisibleForTesting
+    public Tuple getMeanInterval(AnalyzedSortSpec[] sortSpecs, Tuple interval1, Tuple interval2) {
+      BigDecimal[] n1 = HistogramUtil.normalize(sortSpecs, interval1, true);
+      BigDecimal[] n2 = HistogramUtil.normalize(sortSpecs, interval2, true);
+      return null;
     }
 
     @Override

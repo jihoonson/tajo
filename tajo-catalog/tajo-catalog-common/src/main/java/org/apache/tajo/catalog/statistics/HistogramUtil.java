@@ -26,7 +26,6 @@ import org.apache.tajo.catalog.Schema;
 import org.apache.tajo.catalog.SortSpec;
 import org.apache.tajo.catalog.TupleRange;
 import org.apache.tajo.catalog.statistics.FreqHistogram.Bucket;
-import org.apache.tajo.common.TajoDataTypes;
 import org.apache.tajo.common.TajoDataTypes.Type;
 import org.apache.tajo.datum.*;
 import org.apache.tajo.exception.TajoInternalError;
@@ -40,7 +39,6 @@ import java.math.BigInteger;
 import java.math.MathContext;
 import java.math.RoundingMode;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 
@@ -90,76 +88,6 @@ public class HistogramUtil {
     return schema;
   }
 
-//  /**
-//   * Normalize ranges of buckets into the range of [0, 1).
-//   *
-//   * @param histogram
-//   * @param totalRange
-//   * @return
-//   */
-//  public static FreqHistogram normalize(final FreqHistogram histogram,
-//                                        final TupleRange totalRange,
-//                                        final BigInteger totalCardinality) {
-//    // TODO: Type must be able to contain BigDecimal
-//    Schema normalizedSchema = new Schema(new Column[]{new Column("normalized", Type.FLOAT8)});
-//    SortSpec[] normalizedSortSpecs = new SortSpec[1];
-//    normalizedSortSpecs[0] = new SortSpec(normalizedSchema.getColumn(0), true, false);
-//    FreqHistogram normalized = new FreqHistogram(normalizedSchema, normalizedSortSpecs);
-//
-//    // TODO: calculate diff instead of cardinality
-//    BigDecimal totalDiff = new BigDecimal(TupleRangeUtil.computeCardinalityForAllColumns(histogram.sortSpecs,
-//        totalRange, true)).multiply(new BigDecimal(totalCardinality));
-//    BigDecimal baseDiff = BigDecimal.ONE;
-//
-//    Tuple normalizedBase = new VTuple(normalizedSchema.size());
-//    BigDecimal div = baseDiff.divide(totalDiff, DECIMAL128_HALF_UP);
-//    normalizedBase.put(0, DatumFactory.createFloat8(div.doubleValue()));
-//
-//    for (Bucket eachBucket: histogram.buckets.values()) {
-//      BigDecimal startDiff = new BigDecimal(TupleRangeUtil.computeCardinalityForAllColumns(histogram.sortSpecs,
-//          totalRange.getStart(), eachBucket.getStartKey(), totalRange.getBase(), true).subtract(BigInteger.ONE));
-//      BigDecimal endDiff = new BigDecimal(TupleRangeUtil.computeCardinalityForAllColumns(histogram.sortSpecs,
-//          totalRange.getStart(), eachBucket.getEndKey(), totalRange.getBase(), true).subtract(BigInteger.ONE));
-//      Tuple normalizedStartTuple = new VTuple(
-//          new Datum[]{
-//              DatumFactory.createFloat8(startDiff.divide(totalDiff, DECIMAL128_HALF_UP).doubleValue())
-//          });
-//      Tuple normalizedEndTuple = new VTuple(
-//          new Datum[]{
-//              DatumFactory.createFloat8(endDiff.divide(totalDiff, DECIMAL128_HALF_UP).doubleValue())
-//          });
-//      normalized.updateBucket(normalizedStartTuple, normalizedEndTuple, normalizedBase, eachBucket.getCount());
-//    }
-//
-//    return normalized;
-//  }
-//
-//  /**
-//   *
-//   * @param normalized
-//   * @param denormalizedSchema
-//   * @param denormalizedSortSpecs
-//   * @param columnStatsList
-//   * @param totalRange
-//   * @return
-//   */
-//  public static FreqHistogram denormalize(FreqHistogram normalized,
-//                                          Schema denormalizedSchema,
-//                                          SortSpec[] denormalizedSortSpecs,
-//                                          List<ColumnStats> columnStatsList,
-//                                          TupleRange totalRange) {
-//    FreqHistogram denormalized = new FreqHistogram(denormalizedSchema, denormalizedSortSpecs);
-//    Tuple start = new VTuple(totalRange.getStart());
-//    List<Bucket> buckets = normalized.getSortedBuckets();
-//
-//    for (Bucket eachBucket: buckets) {
-//      Tuple end = increment(denormalizedSortSpecs, columnStatsList, start, totalRange.getBase(), eachBucket.getCount());
-//      denormalized.updateBucket(start, end, totalRange.getBase(), eachBucket.getCount());
-//      start = end;
-//    }
-//    return denormalized;
-//  }
-
   private static boolean isMinNormTuple(AnalyzedSortSpec[] sortSpecs, BigDecimal[] normTuple) {
     for (int i = 0; i < sortSpecs.length; i++) {
       if (!normTuple[i].equals(sortSpecs[i].getNormMin())) {
@@ -169,15 +97,74 @@ public class HistogramUtil {
     return true;
   }
 
-  private static BigDecimal weightedSum(AnalyzedSortSpec[] sortSpecs, BigDecimal[] normTuple) {
-    BigDecimal sum = BigDecimal.ZERO;
-    int i;
-    BigDecimal carry = BigDecimal.ONE;
-    for (i = normTuple.length - 1; i > 0; i--) {
-      sum = sum.add(normTuple[i].multiply(carry));
-      carry = carry.multiply(sortSpecs[i - 1].getMax());
+  private static BigDecimal getNormMaxMax(AnalyzedSortSpec[] sortSpecs) {
+    BigDecimal maxMax = BigDecimal.ZERO;
+    BigDecimal minMax = null;
+    for (AnalyzedSortSpec spec : sortSpecs) {
+      if (maxMax.compareTo(spec.getMax()) < 0) {
+        maxMax = spec.getMax();
+      }
+      if (minMax == null || minMax.compareTo(spec.getMax()) > 0) {
+        minMax = spec.getMax();
+      }
     }
-    return sum.add(normTuple[i].multiply(carry));
+//    return maxMax.divide(minMax, 34, BigDecimal.ROUND_HALF_UP);
+    return maxMax;
+  }
+
+  private static int getScale(BigDecimal val) {
+    int i = 0;
+    while (val.compareTo(BigDecimal.ONE) < 0) {
+      i++;
+      val = val.multiply(BigDecimal.TEN);
+    }
+    return i;
+  }
+
+  public static int getMaxScale(BigDecimal[] normTuple) {
+    int maxScale = 0;
+    for (BigDecimal val : normTuple) {
+      int scale = getScale(val);
+      if (maxScale < scale) {
+        maxScale = scale;
+      }
+    }
+    return maxScale;
+  }
+
+  public static BigDecimal weightedSum(AnalyzedSortSpec[] sortSpecs, BigDecimal[] normTuple) {
+//    BigDecimal maxMax = getNormMaxMax(sortSpecs);
+    BigDecimal maxMax = BigDecimal.TEN.pow(getMaxScale(normTuple));
+    BigDecimal exponent = BigDecimal.ONE;
+    BigDecimal sum = normTuple[normTuple.length - 1];
+    for (int i = normTuple.length - 2; i >= 0; i--) {
+      exponent = exponent.multiply(maxMax);
+      BigDecimal val = normTuple[i].multiply(exponent);
+      sum = sum.add(val);
+    }
+    return sum;
+  }
+
+  public static BigDecimal[] normTupleFromWeightedSum(AnalyzedSortSpec[] sortSpecs, BigDecimal weightedSum, int maxScale, int[] scale) {
+    BigDecimal[] normTuple = new BigDecimal[sortSpecs.length];
+//    BigDecimal maxMax = getNormMaxMax(sortSpecs);
+    BigDecimal maxMax = BigDecimal.TEN.pow(maxScale);
+    BigDecimal exponent = maxMax.pow(sortSpecs.length - 1);
+    BigDecimal quotient, remainder;
+    int i;
+    for (i = 0; i < sortSpecs.length - 1; i++) {
+      if (i < sortSpecs.length - 2) {
+        quotient = weightedSum.divide(exponent, scale[i], BigDecimal.ROUND_DOWN);
+      } else {
+        quotient = weightedSum.divide(exponent, scale[i], BigDecimal.ROUND_UP);
+      }
+      remainder = weightedSum.subtract(quotient.multiply(exponent));
+      normTuple[i] = quotient;
+      weightedSum = remainder;
+      exponent = exponent.divide(maxMax);
+    }
+    normTuple[i] = weightedSum;
+    return normTuple;
   }
 
   public static List<Bucket> splitBucket(FreqHistogram histogram, AnalyzedSortSpec[] sortSpecs,
@@ -199,10 +186,10 @@ public class HistogramUtil {
       BigDecimal totalCount = BigDecimal.valueOf(bucket.getCount());
 
       while (comparator.compare(end, bucket.getEndKey()) < 0) {
-        // count = totalCount * (end - start) / totalDiff
-        long count = totalCount.multiply(weightedSum(sortSpecs, normalize(sortSpecs, end, false))
-            .subtract(normalizedStart))
-            .divide(totalDiff, DECIMAL128_HALF_UP).longValue();
+        // count = totalCount * ( (end - start) / totalDiff )
+        long count = roundToInteger(totalCount.multiply(
+            weightedSum(sortSpecs, normalize(sortSpecs, end, false)).subtract(normalizedStart)
+                .divide(totalDiff, DECIMAL128_HALF_UP))).longValue();
         splits.add(histogram.createBucket(new TupleRange(start, end, interval, comparator), count));
         start = end;
         try {
@@ -222,14 +209,6 @@ public class HistogramUtil {
     }
 
     return splits;
-  }
-
-  public static Tuple getPositiveInfiniteTuple(int size) {
-    Tuple tuple = new VTuple(size);
-    for (int i = 0; i < size; i++) {
-      tuple.put(i, PositiveInfiniteDatum.get());
-    }
-    return tuple;
   }
 
   public static Datum getLastValue(SortSpec[] sortSpecs, List<ColumnStats> columnStatsList, int i) {
@@ -316,14 +295,31 @@ public class HistogramUtil {
     return result;
   }
 
+  /**
+   * Round half up the given value if its type is not real.
+   *
+   * @param type data type
+   * @param val value
+   * @return rounded value if its type is real.
+   */
   private static BigDecimal roundIfNecessary(final Type type,
                                              BigDecimal val) {
     if (!type.equals(Type.FLOAT4) &&
         !type.equals(Type.FLOAT8)) {
-      return val.setScale(0, RoundingMode.HALF_UP);
+      return roundToInteger(val);
     } else {
       return val;
     }
+  }
+
+  /**
+   * Round half up the given value.
+   *
+   * @param val value to be rounded
+   * @return rounded value
+   */
+  private static BigDecimal roundToInteger(BigDecimal val) {
+    return val.setScale(0, RoundingMode.HALF_UP);
   }
 
   public static Datum denormalizeDatum(final AnalyzedSortSpec sortSpec,
@@ -389,15 +385,12 @@ public class HistogramUtil {
    * @return normalized value
    */
   private static BigDecimal normalizeVal(final AnalyzedSortSpec sortSpec, final BigDecimal val) {
-//    BigDecimal result = val.subtract(sortSpec.getMin())
-//        .divide(sortSpec.getMax(), DECIMAL128_HALF_UP);
-    BigDecimal result = val
-        .divide(sortSpec.getMax(), DECIMAL128_HALF_UP);
+    BigDecimal result = val.divide(sortSpec.getMax(), DECIMAL128_HALF_UP);
     if (result.compareTo(BigDecimal.ZERO) < 0) {
-      throw new ArithmeticException("Underflow: " + result);
+      throw new ArithmeticException("Underflow: " + result + " should be larger than or equal to 0.");
     }
     if (result.compareTo(BigDecimal.ONE) > 0) {
-      throw new ArithmeticException("Overflow: " + result);
+      throw new ArithmeticException("Overflow: " + result + " should be smaller than or equal to 1.");
     }
     return result;
   }
@@ -509,6 +502,14 @@ public class HistogramUtil {
         return normalizeVal(sortSpec, unicodeCharsToBigDecimal(val.asUnicodeChars(), sortSpec.getMaxLength(), textPadFirst));
       }
     }
+  }
+
+  public static BigDecimal[] normalizeTuple(AnalyzedSortSpec[] analyzedSpecs, Tuple tuple) {
+    return normalize(analyzedSpecs, tuple, false);
+  }
+
+  public static BigDecimal[] normalizeInterval(AnalyzedSortSpec[] analyzedSpec, Tuple interval) {
+    return normalize(analyzedSpec, interval, true);
   }
 
   /**
@@ -830,252 +831,9 @@ public class HistogramUtil {
     return chars;
   }
 
-  /**
-   *
-   * @param normalizedVal
-   * @param normalizedMax
-   * @return
-   */
-  private static BigDecimal[] calculateCarryAndRemainder(BigDecimal normalizedVal, BigDecimal normalizedMax) {
-    // TODO: if val is negative??
-    BigDecimal[] carryAndRemainder = new BigDecimal[2];
-    if (normalizedVal.compareTo(normalizedMax) > 0) {
-      // quote = val / max
-      // remainder = val % max
-      BigDecimal[] quotAndRem = normalizedVal.divideAndRemainder(normalizedMax, DECIMAL128_HALF_UP);
-      carryAndRemainder[0] = quotAndRem[0]; // set carry as quotient
-      carryAndRemainder[1] = quotAndRem[1];
-    } else if (normalizedVal.compareTo(BigDecimal.ZERO) < 0) {
-      // quote = -1 * ceil( -val / max )
-      // remainder = max * -quote + val
-      carryAndRemainder[0] = normalizedVal.abs().divide(normalizedMax, BigDecimal.ROUND_CEILING);
-      carryAndRemainder[1] = normalizedMax.multiply(carryAndRemainder[0]).add(normalizedVal);
-      carryAndRemainder[0] = carryAndRemainder[0].multiply(BigDecimal.valueOf(-1));
-    } else {
-      carryAndRemainder[0] = BigDecimal.ZERO;
-      carryAndRemainder[1] = normalizedVal;
-    }
-    return carryAndRemainder;
-  }
-
-//  public static void normalize(FreqHistogram histogram, List<ColumnStats> columnStatsList) {
-//    List<Bucket> buckets = histogram.getSortedBuckets();
-//    Tuple[] candidates = new Tuple[] {
-//        buckets.get(0).getEndKey(),
-//        buckets.get(buckets.size() - 1).getEndKey()
-//    };
-//    for (int i = 0; i < columnStatsList.size(); i++) {
-//      ColumnStats columnStats = columnStatsList.get(i);
-//      for (Tuple key : candidates) {
-//        if (key.isInfinite(i) || key.isBlankOrNull(i)) {
-//          continue;
-//        }
-//        switch (columnStats.getColumn().getDataType().getType()) {
-//          case BOOLEAN:
-//            // ignore
-//            break;
-//          case INT2:
-//            if (key.getInt2(i) > columnStats.getMaxValue().asInt2()) {
-//              key.put(i, PositiveInfiniteDatum.get());
-//            } else if (key.getInt2(i) < columnStats.getMinValue().asInt2()) {
-//              key.put(i, NegativeInfiniteDatum.get());
-//            }
-//            break;
-//          case INT4:
-//            if (key.getInt4(i) > columnStats.getMaxValue().asInt4()) {
-//              key.put(i, PositiveInfiniteDatum.get());
-//            } else if (key.getInt4(i) < columnStats.getMinValue().asInt4()) {
-//              key.put(i, NegativeInfiniteDatum.get());
-//            }
-//            break;
-//          case INT8:
-//            if (key.getInt8(i) > columnStats.getMaxValue().asInt8()) {
-//              key.put(i, PositiveInfiniteDatum.get());
-//            } else if (key.getInt8(i) < columnStats.getMinValue().asInt8()) {
-//              key.put(i, NegativeInfiniteDatum.get());
-//            }
-//            break;
-//          case FLOAT4:
-//            if (key.getFloat4(i) > columnStats.getMaxValue().asFloat4()) {
-//              key.put(i, PositiveInfiniteDatum.get());
-//            } else if (key.getFloat4(i) < columnStats.getMinValue().asFloat4()) {
-//              key.put(i, NegativeInfiniteDatum.get());
-//            }
-//            break;
-//          case FLOAT8:
-//            if (key.getFloat8(i) > columnStats.getMaxValue().asFloat8()) {
-//              key.put(i, PositiveInfiniteDatum.get());
-//            } else if (key.getFloat8(i) < columnStats.getMinValue().asFloat8()) {
-//              key.put(i, NegativeInfiniteDatum.get());
-//            }
-//            break;
-//          case CHAR:
-//            if (key.getChar(i) > columnStats.getMaxValue().asChar()) {
-//              key.put(i, PositiveInfiniteDatum.get());
-//            } else if (key.getChar(i) < columnStats.getMinValue().asChar()) {
-//              key.put(i, NegativeInfiniteDatum.get());
-//            }
-//            break;
-//          case TEXT:
-//            if (key.getText(i).compareTo(columnStats.getMaxValue().asChars()) > 0) {
-//              key.put(i, PositiveInfiniteDatum.get());
-//            } else if (key.getText(i).compareTo(columnStats.getMinValue().asChars()) < 0) {
-//              key.put(i, NegativeInfiniteDatum.get());
-//            }
-//            break;
-//          case DATE:
-//            if (key.getInt4(i) > columnStats.getMaxValue().asInt4()) {
-//              key.put(i, PositiveInfiniteDatum.get());
-//            } else if (key.getInt4(i) < columnStats.getMinValue().asInt4()) {
-//              key.put(i, NegativeInfiniteDatum.get());
-//            }
-//            break;
-//          case TIME:
-//            if (key.getInt8(i) > columnStats.getMaxValue().asInt8()) {
-//              key.put(i, PositiveInfiniteDatum.get());
-//            } else if (key.getInt8(i) < columnStats.getMinValue().asInt8()) {
-//              key.put(i, NegativeInfiniteDatum.get());
-//            }
-//            break;
-//          case TIMESTAMP:
-//            if (key.getInt8(i) > columnStats.getMaxValue().asInt8()) {
-//              key.put(i, PositiveInfiniteDatum.get());
-//            } else if (key.getInt8(i) < columnStats.getMinValue().asInt8()) {
-//              key.put(i, NegativeInfiniteDatum.get());
-//            }
-//            break;
-//          case INET4:
-//            if (key.getInt4(i) > columnStats.getMaxValue().asInt4()) {
-//              key.put(i, PositiveInfiniteDatum.get());
-//            } else if (key.getInt4(i) < columnStats.getMinValue().asInt4()) {
-//              key.put(i, NegativeInfiniteDatum.get());
-//            }
-//            break;
-//          default:
-//            throw new UnsupportedOperationException(columnStats.getColumn().getDataType().getType()
-//                + " is not supported yet");
-//        }
-//      }
-//    }
-//  }
-
-  /**
-   * Makes the start and end keys of the TEXT type equal in length.
-   *
-   * @param histogram
-   */
-  public static void normalizeLength(FreqHistogram histogram) {
-    SortSpec[] sortSpecs = histogram.getSortSpecs();
-    boolean needNomalize = false;
-    for (SortSpec sortSpec : sortSpecs) {
-      if (sortSpec.getSortKey().getDataType().getType() == TajoDataTypes.Type.TEXT) {
-        needNomalize = true;
-      }
-    }
-    if (!needNomalize) return;
-
-    int[] maxLenOfTextCols = new int[sortSpecs.length];
-    boolean[] pureAscii = new boolean[sortSpecs.length];
-    Arrays.fill(pureAscii, true);
-
-    for (Bucket bucket : histogram.getAllBuckets()) {
-      for (int i = 0; i < sortSpecs.length; i++) {
-        if (sortSpecs[i].getSortKey().getDataType().getType() == TajoDataTypes.Type.TEXT) {
-          pureAscii[i] &= StringUtils.isPureAscii(bucket.getStartKey().getText(i)) &&
-              StringUtils.isPureAscii(bucket.getEndKey().getText(i));
-        }
-      }
-    }
-
-    for (Bucket bucket : histogram.getAllBuckets()) {
-      for (int i = 0; i < sortSpecs.length; i++) {
-        if (sortSpecs[i].getSortKey().getDataType().getType() == TajoDataTypes.Type.TEXT) {
-          if (pureAscii[i]) {
-            if (maxLenOfTextCols[i] < bucket.getStartKey().getText(i).length()) {
-              maxLenOfTextCols[i] = bucket.getStartKey().getText(i).length();
-            }
-            if (maxLenOfTextCols[i] < bucket.getEndKey().getText(i).length()) {
-              maxLenOfTextCols[i] = bucket.getEndKey().getText(i).length();
-            }
-          } else {
-            if (maxLenOfTextCols[i] < bucket.getStartKey().getUnicodeChars(i).length) {
-              maxLenOfTextCols[i] = bucket.getStartKey().getUnicodeChars(i).length;
-            }
-            if (maxLenOfTextCols[i] < bucket.getEndKey().getUnicodeChars(i).length) {
-              maxLenOfTextCols[i] = bucket.getEndKey().getUnicodeChars(i).length;
-            }
-          }
-        }
-      }
-    }
-
-
-    // normalize text fields to have same bytes length
-    for (Bucket bucket : histogram.getAllBuckets()) {
-      TupleRange range = bucket.getKey();
-      for (int i = 0; i < sortSpecs.length; i++) {
-        if (sortSpecs[i].getSortKey().getDataType().getType() == TajoDataTypes.Type.TEXT) {
-          if (pureAscii[i]) {
-            byte[] startBytes = null;
-            byte[] endBytes = null;
-            if (!range.getStart().isBlankOrNull(i)) {
-              startBytes = range.getStart().getBytes(i);
-            }
-
-            if (!range.getEnd().isBlankOrNull(i)) {
-              endBytes = range.getEnd().getBytes(i);
-            }
-
-            if (startBytes != null) {
-              startBytes = Bytes.padTail(startBytes, maxLenOfTextCols[i] - startBytes.length);
-            }
-            if (endBytes != null) {
-              endBytes = Bytes.padTail(endBytes, maxLenOfTextCols[i] - endBytes.length);
-            }
-            range.getStart().put(i, startBytes == null ? NullDatum.get() : DatumFactory.createText(startBytes));
-            range.getEnd().put(i, endBytes == null ? NullDatum.get() : DatumFactory.createText(endBytes));
-
-          } else {
-            char[] startChars = null;
-            char[] endChars = null;
-            if (!range.getStart().isBlankOrNull(i)) {
-              startChars = range.getStart().getUnicodeChars(i);
-            }
-
-            if (!range.getEnd().isBlankOrNull(i)) {
-              endChars = range.getEnd().getUnicodeChars(i);
-            }
-
-            if (startChars != null) {
-              startChars = StringUtils.padTail(startChars, maxLenOfTextCols[i] - startChars.length + 1);
-            }
-            if (endChars != null) {
-              endChars = StringUtils.padTail(endChars, maxLenOfTextCols[i] - endChars.length + 1);
-            }
-            range.getStart().put(i, startChars == null ? NullDatum.get() :
-                DatumFactory.createText(Convert.chars2utf(startChars)));
-            range.getEnd().put(i, endChars == null ? NullDatum.get() :
-                DatumFactory.createText(Convert.chars2utf(endChars)));
-          }
-        }
-      }
-    }
-  }
-
-  public static boolean hasInfiniteDatum(Tuple tuple) {
-    for (int i = 0; i < tuple.size(); i++) {
-      if (tuple.isInfinite(i)) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-//  public static void refineToEquiDepth(FreqHistogram normalizedHistogram, BigInteger avgCard, Comparator<Tuple> comparator) {
   public static void refineToEquiDepth(final FreqHistogram histogram,
                                        final BigDecimal avgCard,
                                        final AnalyzedSortSpec[] sortSpecs) {
-//    List<Bucket> buckets = normalizedHistogram.getSortedBuckets();
     List<Bucket> buckets = histogram.getSortedBuckets();
     Comparator<Tuple> comparator = histogram.getComparator();
     Bucket passed = null;
@@ -1085,11 +843,10 @@ public class HistogramUtil {
       Bucket current = buckets.get(i);
       // First add the passed range from the previous partition to the current one.
       if (passed != null) {
-        current.merge(passed);
+        current.merge(sortSpecs, passed);
         passed = null;
       }
 
-      // TODO: handle infinite in increment
 //      if (!hasInfiniteDatum(current.getEndKey()) &&
 //          !increment(sortSpecs, columnStatsList, current.getStartKey(), current.getBase(), 1, isPureAscii, maxLength).equals(current.getEndKey())) {
       if (current.getCount() > 1) {
@@ -1127,7 +884,7 @@ public class HistogramUtil {
       Bucket current = buckets.get(i);
       // First add the passed range from the previous partition to the current one.
       if (passed != null) {
-        current.merge(passed);
+        current.merge(sortSpecs, passed);
         passed = null;
       }
 //      if (!hasInfiniteDatum(current.getEndKey()) &&

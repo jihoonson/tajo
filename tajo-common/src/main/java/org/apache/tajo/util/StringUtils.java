@@ -307,22 +307,6 @@ public class StringUtils {
     padded[0] = padTail(startChars, max);
     padded[1] = padTail(endChars, max);
 
-//    padded[0] = new char[max];
-//    padded[1] = new char[max];
-//
-//    for (int i = 0; i < startChars.length; i++) {
-//      padded[0][i] = startChars[i];
-//    }
-//    for (int i = startChars.length; i < max; i++) {
-//      padded[0][i] = 0;
-//    }
-//    for (int i = 0; i < endChars.length; i++) {
-//      padded[1][i] = endChars[i];
-//    }
-//    for (int i = endChars.length; i < max; i++) {
-//      padded[1][i] = 0;
-//    }
-
     return padded;
   }
 
@@ -330,12 +314,13 @@ public class StringUtils {
     if (chars.length >= length) {
       return chars;
     } else {
-      int i;
+//      int i;
       char[] padded = new char[length];
-      for (i = 0; i < length - chars.length; i++) {
-        padded[i] = ' ';
-      }
-      System.arraycopy(chars, 0, padded, i, chars.length);
+//      for (i = 0; i < length - chars.length; i++) {
+//        padded[i] = ' ';
+//      }
+      Arrays.fill(padded, 0, length - chars.length, ' ');
+      System.arraycopy(chars, 0, padded, length - chars.length, chars.length);
       return padded;
     }
   }
@@ -345,9 +330,10 @@ public class StringUtils {
       return chars;
     } else {
       char[] padded = Arrays.copyOf(chars, length);
-      for (int i = chars.length; i < length; i++) {
-        padded[i] = ' ';
-      }
+//      for (int i = chars.length; i < length; i++) {
+//        padded[i] = ' ';
+//      }
+      Arrays.fill(padded, chars.length, length, ' ');
       return padded;
     }
   }
