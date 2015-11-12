@@ -90,7 +90,7 @@ public class FreqHistogram extends Histogram<TupleRange, Bucket>
       for (Bucket eachBucket : buckets.values()) {
         if (minInterval == null) {
           minInterval = eachBucket.getBase();
-        } else if (!HistogramUtil.normalizeTupleAsVector(sortSpecs, eachBucket.getBase()).equals(BigDecimal.ZERO)
+        } else if (!HistogramUtil.isMinNormTuple(HistogramUtil.normalizeTupleAsVector(sortSpecs, eachBucket.getBase()))
             && intervalComparator.compare(minInterval, eachBucket.getBase()) > 0) {
           minInterval = eachBucket.getBase();
         }
@@ -158,12 +158,14 @@ public class FreqHistogram extends Histogram<TupleRange, Bucket>
 
     // Split buckets with the min interval
     this.buckets.clear();
+    List<Bucket> needSplit = new ArrayList<>();
     for (Bucket eachBucket : this.buckets.values()) {
       if (comparator.compare(eachBucket.getBase(), minInterval) > 0) {
-        // Split the bucket
-        for (Bucket split : HistogramUtil.splitBucket(this, analyzedSpecs, eachBucket, minInterval)) {
-          this.buckets.put(split.key, split);
-        }
+//        // Split the bucket
+//        for (Bucket split : HistogramUtil.splitBucket(this, analyzedSpecs, eachBucket, minInterval)) {
+//          this.buckets.put(split.key, split);
+//        }
+        needSplit.add(eachBucket);
       } else {
         this.buckets.put(eachBucket.key, eachBucket);
       }
@@ -171,12 +173,19 @@ public class FreqHistogram extends Histogram<TupleRange, Bucket>
 
     for (Bucket eachBucket: other.buckets.values()) {
       if (comparator.compare(eachBucket.getBase(), minInterval) > 0) {
-        // Split the bucket
-        for (Bucket split : HistogramUtil.splitBucket(this, analyzedSpecs, eachBucket, minInterval)) {
-          this.buckets.put(split.key, split);
-        }
+//        // Split the bucket
+//        for (Bucket split : HistogramUtil.splitBucket(this, analyzedSpecs, eachBucket, minInterval)) {
+//          this.buckets.put(split.key, split);
+//        }
+        needSplit.add(eachBucket);
       } else {
         this.buckets.put(eachBucket.key, eachBucket);
+      }
+    }
+    for (Bucket eachBucket : needSplit) {
+      // Split the bucket
+      for (Bucket split : HistogramUtil.splitBucket(this, analyzedSpecs, eachBucket, minInterval)) {
+        this.buckets.put(split.key, split);
       }
     }
 

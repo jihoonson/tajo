@@ -42,6 +42,7 @@ import org.apache.tajo.util.StringUtils;
 import org.apache.tajo.worker.TaskAttemptContext;
 
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -186,18 +187,13 @@ public class RangeShuffleFileWriteExec extends UnaryPhysicalExec {
       current = countPerTuples.get(i);
       next = countPerTuples.get(i + 1);
       interval = HistogramUtil.diff(analyzedSpecs, current.getFirst(), next.getFirst());
+
       // TODO: interval must be divided by count
       freqHistogram.updateBucket(new TupleRange(current.getFirst(), next.getFirst(),
           interval,
           freqHistogram.getComparator()), current.getSecond());
     }
     if (next != null) {
-//      Tuple lastEnd;
-//      if (sortSpecs[0].isAscending()) {
-//       lastEnd = HistogramUtil.increment(sortSpecs, sortKeyStats, next.getFirst(), interval, 1, isPureAscii, maxLength);
-//      } else {
-//        lastEnd = HistogramUtil.increment(sortSpecs, sortKeyStats, next.getFirst(), interval, -1, isPureAscii, maxLength);
-//      }
       freqHistogram.updateBucket(new TupleRange(next.getFirst(), next.getFirst(),
           HistogramUtil.diff(analyzedSpecs, next.getFirst(), next.getFirst()),
           freqHistogram.getComparator()), next.getSecond(), true);

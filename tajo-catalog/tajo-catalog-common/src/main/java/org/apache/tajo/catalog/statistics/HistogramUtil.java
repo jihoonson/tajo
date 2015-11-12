@@ -28,7 +28,6 @@ import org.apache.tajo.catalog.TupleRange;
 import org.apache.tajo.catalog.statistics.FreqHistogram.Bucket;
 import org.apache.tajo.common.TajoDataTypes.Type;
 import org.apache.tajo.datum.*;
-import org.apache.tajo.exception.TajoInternalError;
 import org.apache.tajo.storage.Tuple;
 import org.apache.tajo.storage.VTuple;
 import org.apache.tajo.util.Bytes;
@@ -89,8 +88,8 @@ public class HistogramUtil {
     return schema;
   }
 
-  private static boolean isMinNormTuple(AnalyzedSortSpec[] sortSpecs, BigDecimal[] normTuple) {
-    for (int i = 0; i < sortSpecs.length; i++) {
+  public static boolean isMinNormTuple(BigDecimal[] normTuple) {
+    for (int i = 0; i < normTuple.length; i++) {
 //      if (!normTuple[i].equals(sortSpecs[i].getNormMin())) {
       if (!normTuple[i].equals(BigDecimal.ZERO)) {
         return false;
@@ -143,8 +142,7 @@ public class HistogramUtil {
 
     BigDecimal[] normInterval = normalizeTupleAsVector(sortSpecs, bucket.getBase());
 
-    if (bucket.getCount() == 1 ||
-        isMinNormTuple(sortSpecs, normInterval)) {
+    if (bucket.getCount() == 1 || isMinNormTuple(normInterval)) {
       splits.add(bucket);
     } else {
       long newCard = HistogramUtil.diff(sortSpecs, interval, bucket.getStartKey(), bucket.getEndKey());
@@ -261,11 +259,12 @@ public class HistogramUtil {
     if (isValue) {
       result = result.add(sortSpec.getMin());
     }
-    if (result.compareTo(sortSpec.getMax()) > 0) {
-      throw new ArithmeticException("Overflow");
-    } else if (result.compareTo(sortSpec.getMin()) < 0) {
-      throw new ArithmeticException("Underflow");
-    }
+    // TODO: range check may be required for values (not vectors)
+//    if (result.compareTo(sortSpec.getMax()) > 0) {
+//      throw new ArithmeticException("Overflow");
+//    } else if (result.compareTo(sortSpec.getMin()) < 0) {
+//      throw new ArithmeticException("Underflow");
+//    }
     return result;
   }
 
@@ -325,11 +324,13 @@ public class HistogramUtil {
       case FLOAT8:
         return DatumFactory.createFloat8(denormalized.doubleValue());
       case TEXT:
+        String text;
         if (sortSpec.isPureAscii()) {
-          return DatumFactory.createText(denormalized.toBigInteger().toByteArray());
+          text = new String(denormalized.toBigInteger().toByteArray()).trim();
         } else {
-          return DatumFactory.createText(Convert.chars2utf(bigDecimalToUnicodeChars(denormalized)));
+          text = new String(Convert.chars2utf(bigDecimalToUnicodeChars(denormalized))).trim();
         }
+        return DatumFactory.createText(text);
       case DATE:
         return DatumFactory.createDate(denormalized.intValue());
       case TIME:
@@ -448,9 +449,9 @@ public class HistogramUtil {
     } else {
       byte[] padded;
       if (textPadFirst) {
-        padded = Bytes.padHead(bytes, bytes.length - length);
+        padded = Bytes.padHead(bytes, length - bytes.length);
       } else {
-        padded = Bytes.padTail(bytes, bytes.length - length);
+        padded = Bytes.padTail(bytes, length - bytes.length);
       }
       return new BigDecimal(new BigInteger(padded));
     }
@@ -547,6 +548,17 @@ public class HistogramUtil {
 
     // TODO: handle the case of (small > large)
     return i;
+  }
+
+  public static Tuple diff(final AnalyzedSortSpec[] sortSpecs, final Tuple t1, final Tuple t2) {
+    BigDecimal[] n1 = normalizeTupleAsValue(sortSpecs, t1);
+    BigDecimal[] n2 = normalizeTupleAsValue(sortSpecs, t2);
+    int[] scales = maxScales(n1, n2);
+    BigDecimal s1 = weightedSum(n1, scales);
+    BigDecimal s2 = weightedSum(n2, scales);
+    BigDecimal diff = s1.compareTo(s2) > 0 ? s1.subtract(s2) : s2.subtract(s1);
+    BigDecimal[] normDiff = normTupleFromWeightedSum(sortSpecs, diff, scales);
+    return denormalize(sortSpecs, normDiff, false);
   }
 
   /**
@@ -673,6 +685,10 @@ public class HistogramUtil {
     }
 
     // TODO: if there are remaining passed bucket,
+    if (passed != null && passed.getCount() > 0) {
+      Bucket lastBucket = buckets.get(buckets.size() - 1);
+      lastBucket.merge(sortSpecs, passed);
+    }
   }
 
   private static class NormTupleComparator implements Comparator<BigDecimal[]> {
