@@ -90,7 +90,7 @@ public class FreqHistogram extends Histogram<TupleRange, Bucket>
       for (Bucket eachBucket : buckets.values()) {
         if (minInterval == null) {
           minInterval = eachBucket.getBase();
-        } else if (!HistogramUtil.normalize(sortSpecs, eachBucket.getBase(), true, false).equals(BigDecimal.ZERO)
+        } else if (!HistogramUtil.normalizeTupleAsVector(sortSpecs, eachBucket.getBase()).equals(BigDecimal.ZERO)
             && intervalComparator.compare(minInterval, eachBucket.getBase()) > 0) {
           minInterval = eachBucket.getBase();
         }
@@ -354,9 +354,14 @@ public class FreqHistogram extends Histogram<TupleRange, Bucket>
 
     @VisibleForTesting
     public Tuple getMeanInterval(AnalyzedSortSpec[] sortSpecs, Tuple interval1, Tuple interval2) {
-      BigDecimal[] n1 = HistogramUtil.normalize(sortSpecs, interval1, true, false);
-      BigDecimal[] n2 = HistogramUtil.normalize(sortSpecs, interval2, true, false);
-      return null;
+      BigDecimal[] n1 = HistogramUtil.normalizeTupleAsVector(sortSpecs, interval1);
+      BigDecimal[] n2 = HistogramUtil.normalizeTupleAsVector(sortSpecs, interval2);
+      int[] scales = HistogramUtil.maxScales(n1, n2);
+      BigDecimal s1 = HistogramUtil.weightedSum(n1, scales);
+      BigDecimal s2 = HistogramUtil.weightedSum(n2, scales);
+      BigDecimal mean = s1.add(s2).divide(BigDecimal.valueOf(2), HistogramUtil.DECIMAL128_HALF_UP);
+      BigDecimal[] normMeanInterval = HistogramUtil.normTupleFromWeightedSum(sortSpecs, mean, scales);
+      return HistogramUtil.denormalizeAsVector(sortSpecs, normMeanInterval);
     }
 
     @Override

@@ -258,13 +258,13 @@ public class TestHistogramUtil {
     Tuple tuple2 = getVTuple(DatumFactory.createFloat8(0.5), NullDatum.get(),
         DatumFactory.createText("나나나나나나"), DatumFactory.createTimestampDatumWithJavaMillis(1000));
     assertTrue(comparator.compare(tuple1, tuple2) > 0);
-    BigDecimal[] n1 = HistogramUtil.normalize(analyzedSpecs, tuple1, false, true);
-    BigDecimal[] n2 = HistogramUtil.normalize(analyzedSpecs, tuple2, false, true);
+    BigDecimal[] n1 = HistogramUtil.normalizeTupleAsValue(analyzedSpecs, tuple1);
+    BigDecimal[] n2 = HistogramUtil.normalizeTupleAsValue(analyzedSpecs, tuple2);
     assertTrue(HistogramUtil.compareNormTuples(n1, n2) > 0);
 
-    Tuple denorm = HistogramUtil.denormalize(analyzedSpecs, n1, true);
+    Tuple denorm = HistogramUtil.denormalizeAsValue(analyzedSpecs, n1);
     assertEquals(tuple1, denorm);
-    denorm = HistogramUtil.denormalize(analyzedSpecs, n2, true);
+    denorm = HistogramUtil.denormalizeAsValue(analyzedSpecs, n2);
     assertEquals(tuple2, denorm);
   }
 
@@ -273,7 +273,7 @@ public class TestHistogramUtil {
     prepareHistogram(TRUE_SET, FALSE_SET);
     Tuple tuple1 = getVTuple(DatumFactory.createFloat8(1000), DatumFactory.createInt8(10),
         DatumFactory.createText("가가가가가가가"), DatumFactory.createTimestampDatumWithJavaMillis(1000));
-    HistogramUtil.normalize(analyzedSpecs, tuple1, false, true);
+    HistogramUtil.normalizeTupleAsValue(analyzedSpecs, tuple1);
   }
 
   @Test(expected = ArithmeticException.class)
@@ -281,7 +281,7 @@ public class TestHistogramUtil {
     prepareHistogram(TRUE_SET, FALSE_SET);
     Tuple tuple1 = getVTuple(DatumFactory.createFloat8(0), DatumFactory.createInt8(-10),
         DatumFactory.createText("가가가가"), DatumFactory.createTimestampDatumWithJavaMillis(1000));
-    HistogramUtil.normalize(analyzedSpecs, tuple1, false, true);
+    HistogramUtil.normalizeTupleAsValue(analyzedSpecs, tuple1);
   }
 
   @Test
@@ -289,10 +289,10 @@ public class TestHistogramUtil {
     prepareHistogram(TRUE_SET, FALSE_SET);
     Tuple tuple = getVTuple(DatumFactory.createFloat8(0.1), DatumFactory.createInt8(10),
         DatumFactory.createText("가가가가가가"), DatumFactory.createTimestampDatumWithJavaMillis(1000));
-    BigDecimal[] norm = HistogramUtil.normalize(analyzedSpecs, tuple, false, true);
-    BigDecimal[] interval = HistogramUtil.normalize(analyzedSpecs, totalBase, true, false);
+    BigDecimal[] norm = HistogramUtil.normalizeTupleAsValue(analyzedSpecs, tuple);
+    BigDecimal[] interval = HistogramUtil.normalizeTupleAsVector(analyzedSpecs, totalBase);
     BigDecimal[] incremented = HistogramUtil.increment(norm, interval, 10);
-    Tuple denorm = HistogramUtil.denormalize(analyzedSpecs, incremented, true);
+    Tuple denorm = HistogramUtil.denormalizeAsValue(analyzedSpecs, incremented);
     Tuple expected = getVTuple(
         DatumFactory.createFloat8(0.1 + totalBase.getFloat8(0) * 10),
         DatumFactory.createInt8(10 + totalBase.getInt8(1) * 10),
@@ -311,10 +311,10 @@ public class TestHistogramUtil {
     prepareHistogram(TRUE_SET, FALSE_SET);
     Tuple tuple = getVTuple(DatumFactory.createFloat8(0.1), DatumFactory.createInt8(10),
         DatumFactory.createText("가가가가가가"), DatumFactory.createTimestampDatumWithJavaMillis(1000));
-    BigDecimal[] norm = HistogramUtil.normalize(analyzedSpecs, tuple, false, true);
-    BigDecimal[] interval = HistogramUtil.normalize(analyzedSpecs, totalBase, true, false);
+    BigDecimal[] norm = HistogramUtil.normalizeTupleAsValue(analyzedSpecs, tuple);
+    BigDecimal[] interval = HistogramUtil.normalizeTupleAsVector(analyzedSpecs, totalBase);
     BigDecimal[] incremented = HistogramUtil.increment(norm, interval, 1);
-    Tuple denorm = HistogramUtil.denormalize(analyzedSpecs, incremented, true);
+    Tuple denorm = HistogramUtil.denormalizeAsValue(analyzedSpecs, incremented);
     Tuple expected = getVTuple(
         DatumFactory.createFloat8(0.1 + totalBase.getFloat8(0)),
         DatumFactory.createInt8(10 + totalBase.getInt8(1)),
@@ -331,10 +331,10 @@ public class TestHistogramUtil {
   @Test
   public void testSplitBucket() {
     prepareHistogram(TRUE_SET, FALSE_SET);
-    Tuple start = getVTuple(DatumFactory.createFloat8(950.1), DatumFactory.createInt8(2),
-        DatumFactory.createText("쐨쐨쐨ᡈᡊ㙨"), DatumFactory.createTimestamp("1970-01-01 00:15:00.01"));
-    Tuple end = getVTuple(DatumFactory.createFloat8(1050.1), DatumFactory.createInt8(2),
-        DatumFactory.createText("ߐߐߏ寮寰꼯"), DatumFactory.createTimestamp("1970-01-01 00:01:40.01"));
+    Tuple start = getVTuple(DatumFactory.createFloat8(959.6), DatumFactory.createInt8(12),
+        DatumFactory.createText("쑈쑈쑈ᡨᡪ㛌"), DatumFactory.createTimestamp("1970-01-01 00:15:00.01"));
+    Tuple end = getVTuple(DatumFactory.createFloat8(1060.6), DatumFactory.createInt8(22),
+        DatumFactory.createText("ࠐࠐࠏ尮尰꿷"), DatumFactory.createTimestamp("1970-01-01 00:01:40.01"));
     Bucket bucket = histogram.getBucket(start, end, totalBase);
     List<Bucket> buckets = HistogramUtil.splitBucket(histogram, analyzedSpecs, bucket, totalBase);
     assertEquals(199, buckets.size());
@@ -360,15 +360,15 @@ public class TestHistogramUtil {
     }
   }
 
-//  @Test
+  @Test
   public void testWeightedSumOfNormTuple() {
     prepareHistogram(TRUE_SET, FALSE_SET);
     Tuple tuple = getVTuple(DatumFactory.createFloat8(0.1), DatumFactory.createInt8(10),
         DatumFactory.createText("가가가가가가"), DatumFactory.createTimestampDatumWithJavaMillis(1000));
     BigDecimal[] normTuple = HistogramUtil.normalizeTupleAsValue(analyzedSpecs, tuple);
-    BigDecimal sum = HistogramUtil.weightedSum(analyzedSpecs, normTuple);
-    BigDecimal[] fromSum = HistogramUtil.normTupleFromWeightedSum(analyzedSpecs, sum, HistogramUtil.getMaxScale(normTuple),
-        new int[] {normTuple[0].scale(), normTuple[1].scale(), normTuple[2].scale(), normTuple[3].scale()});
+    int[] scales = new int[] {normTuple[0].scale(), normTuple[1].scale(), normTuple[2].scale(), normTuple[3].scale()};
+    BigDecimal sum = HistogramUtil.weightedSum(normTuple, scales);
+    BigDecimal[] fromSum = HistogramUtil.normTupleFromWeightedSum(analyzedSpecs, sum, scales);
 
     assertEquals(normTuple[0].doubleValue(), fromSum[0].doubleValue(), 0.00000001);
     assertEquals(normTuple[1].doubleValue(), fromSum[1].doubleValue(), 0.00000001);
