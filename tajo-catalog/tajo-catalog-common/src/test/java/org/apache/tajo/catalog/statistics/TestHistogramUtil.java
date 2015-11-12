@@ -36,8 +36,7 @@ import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.List;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.*;
 
 public class TestHistogramUtil {
 
@@ -66,7 +65,7 @@ public class TestHistogramUtil {
     TRUE_SET.set(0, schema.size());
 
     totalBase = getVTuple(DatumFactory.createFloat8(0.5), DatumFactory.createInt8(10),
-        DatumFactory.createText("d"),
+        DatumFactory.createText("가가가"),
         DatumFactory.createTimestampDatumWithJavaMillis(1000));
 
     columnStatsList = new ArrayList<>(schema.size());
@@ -201,7 +200,7 @@ public class TestHistogramUtil {
 
     assertEquals(5.1, result.getFloat8(0), 0.0001);
     assertEquals(102, result.getInt8(1));
-    assertEquals("굀굀굀ŠŠЈ", result.getText(2));
+    assertEquals("굀굀굆렬렬렦", result.getText(2));
     assertEquals("1970-01-01 00:00:10.01", result.getTimeDate(3).toString());
 
     result = HistogramUtil.increment(analyzedSpecs, result, totalBase, -10);
@@ -221,7 +220,7 @@ public class TestHistogramUtil {
 
     assertEquals(970.6, incremented.getFloat8(0), 0.000001);
     assertEquals(51, incremented.getInt8(1));
-    assertEquals("՝攗걠걡\u0080Ō", incremented.getText(2));
+    assertEquals("՝攗걢뀅ФТ", incremented.getText(2));
     assertEquals("1970-01-01 00:15:03.019", incremented.getTimeDate(3).toString());
 
     Tuple result = HistogramUtil.increment(analyzedSpecs, incremented, totalBase, -3);
@@ -299,7 +298,7 @@ public class TestHistogramUtil {
         DatumFactory.createText(Convert.chars2utf(
             HistogramUtil.bigDecimalToUnicodeChars(
                 HistogramUtil.unicodeCharsToBigDecimal(tuple.getUnicodeChars(2), analyzedSpecs[2].getMaxLength(), false)
-                    .add(HistogramUtil.unicodeCharsToBigDecimal(new char[] {'d'}, analyzedSpecs[2].getMaxLength(), true).multiply(BigDecimal.TEN))))
+                    .add(HistogramUtil.unicodeCharsToBigDecimal(new char[] {'가', '가', '가'}, analyzedSpecs[2].getMaxLength(), true).multiply(BigDecimal.TEN))))
         ),
         DatumFactory.createTimestampDatumWithJavaMillis(1000 + ((TimestampDatum)totalBase.asDatum(3)).getJavaTimestamp() * 10)
     );
@@ -321,7 +320,7 @@ public class TestHistogramUtil {
         DatumFactory.createText(Convert.chars2utf(
             HistogramUtil.bigDecimalToUnicodeChars(
                 HistogramUtil.unicodeCharsToBigDecimal(tuple.getUnicodeChars(2), analyzedSpecs[2].getMaxLength(), false)
-                    .add(HistogramUtil.unicodeCharsToBigDecimal(new char[] {'d'}, analyzedSpecs[2].getMaxLength(), true))))
+                    .add(HistogramUtil.unicodeCharsToBigDecimal(new char[] {'가', '가', '가'}, analyzedSpecs[2].getMaxLength(), true))))
         ),
         DatumFactory.createTimestampDatumWithJavaMillis(1000 + ((TimestampDatum)totalBase.asDatum(3)).getJavaTimestamp())
     );
@@ -329,15 +328,64 @@ public class TestHistogramUtil {
   }
 
   @Test
-  public void testSplitBucket() {
+  public void testIncrementNormTuple3() {
+    prepareHistogram(TRUE_SET, FALSE_SET);
+    Tuple start = getVTuple(DatumFactory.createFloat8(959.6), DatumFactory.createInt8(12),
+        DatumFactory.createText("쑈쑈쥄烀烀毄"), DatumFactory.createTimestamp("1970-01-01 00:15:00.01"));
+    BigDecimal[] normTuple = HistogramUtil.normalizeTupleAsValue(analyzedSpecs, start);
+    BigDecimal[] normInter = HistogramUtil.normalizeTupleAsVector(analyzedSpecs, totalBase);
+    BigDecimal[] incremented, decremented;
+    for (int i = 0; i < 200; i++) {
+      incremented = HistogramUtil.increment(normTuple, normInter, 1);
+      assertTrue(HistogramUtil.compareNormTuples(normTuple, incremented) < 0);
+      decremented = HistogramUtil.increment(incremented, normInter, -1);
+      assertEquals(normTuple[0].doubleValue(), decremented[0].doubleValue(), 0.00000001);
+      assertEquals(normTuple[1].doubleValue(), decremented[1].doubleValue(), 0.00000001);
+      assertEquals(normTuple[2].doubleValue(), decremented[2].doubleValue(), 0.00000001);
+      assertEquals(normTuple[3].doubleValue(), decremented[3].doubleValue(), 0.00000001);
+      normTuple = incremented;
+    }
+  }
+
+  @Test
+  public void testIncrementTuple() {
     prepareHistogram(TRUE_SET, FALSE_SET);
     Tuple start = getVTuple(DatumFactory.createFloat8(959.6), DatumFactory.createInt8(12),
         DatumFactory.createText("쑈쑈쑈ᡨᡪ㛌"), DatumFactory.createTimestamp("1970-01-01 00:15:00.01"));
+    Tuple incremented = HistogramUtil.increment(analyzedSpecs, start, totalBase, 200);
+    Tuple expected = getVTuple(DatumFactory.createFloat8(1060.6), DatumFactory.createInt8(22),
+        DatumFactory.createText("ࠐࠐ\u0896倜倞淺"), DatumFactory.createTimestamp("1970-01-01 00:01:40.01"));
+    assertEquals(expected, incremented);
+
+    Tuple decremented = HistogramUtil.increment(analyzedSpecs, incremented, totalBase, -200);
+    assertEquals(start, decremented);
+  }
+
+  @Test
+  public void testIncrementTuple2() {
+    prepareHistogram(TRUE_SET, FALSE_SET);
+    Tuple start = getVTuple(DatumFactory.createFloat8(959.6), DatumFactory.createInt8(12),
+        DatumFactory.createText("쑈쑈쥄烀烀毄"), DatumFactory.createTimestamp("1970-01-01 00:15:00.01"));
+    Tuple incremented, decremented;
+    for (int i = 0; i < 200; i++) {
+      incremented = HistogramUtil.increment(analyzedSpecs, start, totalBase, 1);
+      assertTrue(comparator.compare(start, incremented) < 0);
+      decremented = HistogramUtil.increment(analyzedSpecs, incremented, totalBase, -1);
+      assertEquals(i + " th tuples are different", start, decremented);
+      start = incremented;
+    }
+  }
+
+  @Test
+  public void testSplitBucket() {
+    prepareHistogram(TRUE_SET, FALSE_SET);
+    Tuple start = getVTuple(DatumFactory.createFloat8(959.6), DatumFactory.createInt8(12),
+        DatumFactory.createText("쑈쑈쥄烀烀毄"), DatumFactory.createTimestamp("1970-01-01 00:15:00.01"));
     Tuple end = getVTuple(DatumFactory.createFloat8(1060.6), DatumFactory.createInt8(22),
-        DatumFactory.createText("ࠐࠐࠏ尮尰꿷"), DatumFactory.createTimestamp("1970-01-01 00:01:40.01"));
+        DatumFactory.createText("ࠐࠐඒ꡴꡴ꋲ"), DatumFactory.createTimestamp("1970-01-01 00:01:40.01"));
     Bucket bucket = histogram.getBucket(start, end, totalBase);
     List<Bucket> buckets = HistogramUtil.splitBucket(histogram, analyzedSpecs, bucket, totalBase);
-    assertEquals(199, buckets.size());
+    assertEquals(200, buckets.size());
     for (Bucket eachBucket : buckets) {
       assertTrue(eachBucket.getCount() > 0);
     }
@@ -346,15 +394,15 @@ public class TestHistogramUtil {
   @Test
   public void testSplitBucket2() {
     prepareHistogram(TRUE_SET, FALSE_SET);
-    Tuple start = getVTuple(DatumFactory.createFloat8(950.1), DatumFactory.createInt8(2),
-        DatumFactory.createText("쐨쐨쐨ᡈᡊ㙨"), DatumFactory.createTimestamp("1970-01-01 00:15:00.01"));
-    Tuple end = getVTuple(DatumFactory.createFloat8(1050.1), DatumFactory.createInt8(2),
-        DatumFactory.createText("ߐߐߏ寮寰꼯"), DatumFactory.createTimestamp("1970-01-01 00:01:40.01"));
+    Tuple start = getVTuple(DatumFactory.createFloat8(959.6), DatumFactory.createInt8(12),
+        DatumFactory.createText("쑈쑈쥄烀烀毄"), DatumFactory.createTimestamp("1970-01-01 00:15:00.01"));
+    Tuple end = getVTuple(DatumFactory.createFloat8(1060.6), DatumFactory.createInt8(22),
+        DatumFactory.createText("ࠐࠐඒ꡴꡴ꋲ"), DatumFactory.createTimestamp("1970-01-01 00:01:40.01"));
     Bucket bucket = histogram.getBucket(start, end, totalBase);
     Tuple interval = getVTuple(DatumFactory.createFloat8(40.d), DatumFactory.createInt8(500),
         DatumFactory.createText("aa"), DatumFactory.createTimestampDatumWithJavaMillis(100000));
     List<Bucket> buckets = HistogramUtil.splitBucket(histogram, analyzedSpecs, bucket, interval);
-    assertEquals(3, buckets.size());
+    assertEquals(2, buckets.size());
     for (Bucket eachBucket : buckets) {
       assertTrue(eachBucket.getCount() > 0);
     }
@@ -400,37 +448,29 @@ public class TestHistogramUtil {
         DatumFactory.createText("가가가가가가"), DatumFactory.createTimestampDatumWithJavaMillis(1000));
     Tuple result = HistogramUtil.increment(analyzedSpecs, tuple, totalBase, 1);
 
-    Tuple diff = HistogramUtil.diff(analyzedSpecs, tuple, result);
-    assertEquals(0.5, diff.getFloat8(0), 0.0001);
-    assertEquals(10, diff.getInt8(1));
-    assertEquals("     d", diff.getText(2));
-    assertEquals("1970-01-01 00:00:01", diff.getTimeDate(3).toString());
+    long diff = HistogramUtil.diff(analyzedSpecs, totalBase, tuple, result);
+    assertEquals(1, diff);
 
-    diff = HistogramUtil.diff(analyzedSpecs, result, tuple);
-    assertEquals(0.5, diff.getFloat8(0), 0.0001);
-    assertEquals(10, diff.getInt8(1));
-    assertEquals("     d", diff.getText(2));
-    assertEquals("1970-01-01 00:00:01", diff.getTimeDate(3).toString());
+    diff = HistogramUtil.diff(analyzedSpecs, totalBase, result, tuple);
+    assertEquals(1, diff);
   }
 
   @Test
-  public void testDiff2() {
-    prepareHistogram(FALSE_SET, TRUE_SET);
+  public void testDiff3() {
+    prepareHistogram(TRUE_SET, FALSE_SET);
+    Tuple tuple1 = getVTuple(DatumFactory.createFloat8(959.6), DatumFactory.createInt8(12),
+        DatumFactory.createText("쑈쑈쑈ᡨᡪ㛌"), DatumFactory.createTimestamp("1970-01-01 00:15:00.01"));
+    Tuple tuple2 = getVTuple(DatumFactory.createFloat8(1060.6), DatumFactory.createInt8(22),
+        DatumFactory.createText("ࠐࠐࠏ尮尰꿷"), DatumFactory.createTimestamp("1970-01-01 00:01:40.01"));
+    BigDecimal[] n1 = HistogramUtil.normalizeTupleAsValue(analyzedSpecs, tuple1);
+    BigDecimal[] n2 = HistogramUtil.normalizeTupleAsValue(analyzedSpecs, tuple2);
+    int [] scales = HistogramUtil.maxScales(n1, n2);
+    Tuple diff = HistogramUtil.increment(analyzedSpecs, totalBase, totalBase, 199);
+    BigDecimal[] n3 = HistogramUtil.normalizeTupleAsVector(analyzedSpecs, diff);
+    System.out.println(HistogramUtil.weightedSum(n3, scales));
+    System.out.println(diff);
 
-    Tuple tuple = getVTuple(DatumFactory.createFloat8(0.1), DatumFactory.createInt8(10),
-        DatumFactory.createText("가가가가가가"), DatumFactory.createTimestampDatumWithJavaMillis(1000));
-    Tuple result = HistogramUtil.increment(analyzedSpecs, tuple, totalBase, 1);
-
-    Tuple diff = HistogramUtil.diff(analyzedSpecs, tuple, result);
-    assertEquals(0.5, diff.getFloat8(0), 0.0001);
-    assertEquals(10, diff.getInt8(1));
-    assertEquals("     d", diff.getText(2));
-    assertEquals("1970-01-01 00:00:01", diff.getTimeDate(3).toString());
-
-    diff = HistogramUtil.diff(analyzedSpecs, result, tuple);
-    assertEquals(0.5, diff.getFloat8(0), 0.0001);
-    assertEquals(10, diff.getInt8(1));
-    assertEquals("     d", diff.getText(2));
-    assertEquals("1970-01-01 00:00:01", diff.getTimeDate(3).toString());
+    assertEquals(tuple2, HistogramUtil.increment(analyzedSpecs, tuple1, diff, 1));
+    assertArrayEquals(n2, HistogramUtil.increment(n1, n3, 1));
   }
 }
