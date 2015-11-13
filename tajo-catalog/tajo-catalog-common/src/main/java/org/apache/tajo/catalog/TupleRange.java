@@ -28,16 +28,13 @@ import java.util.Comparator;
  */
 public class TupleRange implements Comparable<TupleRange>, Cloneable {
   private Tuple start;
-  private Tuple end;
-  private Tuple base;
+  private Tuple end; // usually exclusive
   private final Comparator<Tuple> comp;
 
-  public TupleRange(final Tuple start, final Tuple end, final Tuple base, final Comparator<Tuple> comp) {
+  public TupleRange(final Tuple start, final Tuple end, final Comparator<Tuple> comp) {
     this.comp = comp;
-//    this.comp = new BaseTupleComparator(sortSpecsToSchema(sortSpecs), sortSpecs);
     // if there is only one value, start == end
     this.start = start;
-    this.base = base;
     this.end = end;
   }
 
@@ -57,21 +54,22 @@ public class TupleRange implements Comparable<TupleRange>, Cloneable {
     return this.end;
   }
 
-  public Tuple getBase() {
-    return base;
-  }
-
-  public void setBase(Tuple base) {
-    this.base = base;
+  public boolean include(Tuple tuple) {
+    if (start.equals(end)) {
+      return start.equals(tuple);
+    } else {
+      return comp.compare(start, tuple) <= 0
+          && comp.compare(end, tuple) > 0;
+    }
   }
 
   public String toString() {
-    return "[" + this.start + ", " + this.end + ", base: " + this.base + "]";
+    return "[" + this.start + ", " + this.end + "]";
   }
 
   @Override
   public int hashCode() {
-    return Objects.hashCode(start, end, base);
+    return Objects.hashCode(start, end);
   }
 
   @Override
@@ -79,8 +77,7 @@ public class TupleRange implements Comparable<TupleRange>, Cloneable {
     if (obj instanceof TupleRange) {
       TupleRange other = (TupleRange) obj;
       return this.start.equals(other.start) &&
-          this.end.equals(other.end) &&
-          this.base.equals(other.base);
+          this.end.equals(other.end);
     } else {
       return false;
     }
@@ -94,7 +91,6 @@ public class TupleRange implements Comparable<TupleRange>, Cloneable {
       return cmpVal;
     } else {
       return comp.compare(this.end, o.end);
-//      return cmpVal != 0 ? cmpVal : comp.compare(this.base, o.base);
     }
   }
 
@@ -103,7 +99,6 @@ public class TupleRange implements Comparable<TupleRange>, Cloneable {
     TupleRange newRange = (TupleRange) super.clone();
     newRange.setStart(start.clone());
     newRange.setEnd(end.clone());
-    newRange.setBase(base.clone());
     return newRange;
   }
 }

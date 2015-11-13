@@ -18,7 +18,6 @@
 
 package org.apache.tajo.catalog.statistics;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.ByteString;
 import org.apache.tajo.catalog.*;
 import org.apache.tajo.catalog.proto.CatalogProtos.FreqBucketProto;
@@ -45,7 +44,7 @@ public class FreqHistogram extends Histogram<TupleRange, Bucket>
   private final SortSpec[] sortSpecs;
   private final Map<TupleRange, Bucket> buckets = new HashMap<>();
   private final TupleComparator intervalComparator;
-  private Tuple minInterval;
+//  private Tuple minInterval;
 
   public FreqHistogram(SortSpec[] sortSpecs) {
     Schema keySchema = HistogramUtil.sortSpecsToSchema(sortSpecs);
@@ -84,38 +83,37 @@ public class FreqHistogram extends Histogram<TupleRange, Bucket>
     this.intervalComparator = new BaseTupleComparator(keySchema, baseSortSpecs);
   }
 
-  public Tuple getNonZeroMinInterval(AnalyzedSortSpec[] sortSpecs) {
-    if (this.minInterval == null) {
-//      Tuple zeroTuple = TupleRangeUtil.createMinBaseTuple(context.sortSpecs);
-      for (Bucket eachBucket : buckets.values()) {
-        if (minInterval == null) {
-          minInterval = eachBucket.getBase();
-        } else if (!HistogramUtil.isMinNormTuple(HistogramUtil.normalizeTupleAsVector(sortSpecs, eachBucket.getBase()))
-            && intervalComparator.compare(minInterval, eachBucket.getBase()) > 0) {
-          minInterval = eachBucket.getBase();
-        }
-      }
-    }
-    return minInterval;
-  }
+//  public Tuple getNonZeroMinInterval(AnalyzedSortSpec[] sortSpecs) {
+//    if (this.minInterval == null) {
+////      Tuple zeroTuple = TupleRangeUtil.createMinBaseTuple(context.sortSpecs);
+//      for (Bucket eachBucket : buckets.values()) {
+//        if (minInterval == null) {
+//          minInterval = eachBucket.getBase();
+//        } else if (!HistogramUtil.isMinNormTuple(HistogramUtil.normalizeTupleAsVector(sortSpecs, eachBucket.getBase()))
+//            && intervalComparator.compare(minInterval, eachBucket.getBase()) > 0) {
+//          minInterval = eachBucket.getBase();
+//        }
+//      }
+//    }
+//    return minInterval;
+//  }
 
   public SortSpec[] getSortSpecs() {
     return sortSpecs;
   }
 
-  public void updateBucket(Tuple startKey, Tuple endKey, Tuple base, long change) {
+  public void updateBucket(Tuple startKey, Tuple endKey, double change) {
     // TODO: normalize length
-    Tuple startClone, endClone, baseClone;
+    Tuple startClone, endClone;
     try {
       startClone = startKey.clone();
       endClone = endKey.clone();
-      baseClone = base.clone();
     } catch (CloneNotSupportedException e) {
       throw new RuntimeException(e);
     }
-    TupleRange key = new TupleRange(startClone, endClone, baseClone, comparator);
+    TupleRange key = new TupleRange(startClone, endClone, comparator);
     updateBucket(key, change);
-    minInterval = null;
+//    minInterval = null;
   }
 
   /**
@@ -124,7 +122,7 @@ public class FreqHistogram extends Histogram<TupleRange, Bucket>
    * @param change
    */
   @Override
-  public void updateBucket(TupleRange key, long change) {
+  public void updateBucket(TupleRange key, double change) {
     if (buckets.containsKey(key)) {
       getBucket(key).incCount(change);
     } else {
@@ -132,7 +130,7 @@ public class FreqHistogram extends Histogram<TupleRange, Bucket>
     }
   }
 
-  public void updateBucket(TupleRange key, long change, boolean endKeyInclusive) {
+  public void updateBucket(TupleRange key, double change, boolean endKeyInclusive) {
     updateBucket(key, change);
     buckets.get(key).setEndKeyInclusive(endKeyInclusive);
   }
@@ -143,57 +141,105 @@ public class FreqHistogram extends Histogram<TupleRange, Bucket>
    */
   public void merge(AnalyzedSortSpec[] analyzedSpecs, FreqHistogram other) {
     // Find the min interval from both histograms
-    Tuple minInterval;
-    if (this.size() > 0 && other.size() > 0) {
-      minInterval = comparator.compare(this.getNonZeroMinInterval(analyzedSpecs),
-          other.getNonZeroMinInterval(analyzedSpecs)) > 0 ?
-          other.getNonZeroMinInterval(analyzedSpecs) : this.getNonZeroMinInterval(analyzedSpecs);
-    } else if (this.size() > 0) {
-      minInterval = this.getNonZeroMinInterval(analyzedSpecs);
-    } else if (other.size() > 0) {
-      minInterval = other.getNonZeroMinInterval(analyzedSpecs);
-    } else {
-      return;
-    }
+//    Tuple minInterval;
+//    if (this.size() > 0 && other.size() > 0) {
+//      minInterval = comparator.compare(this.getNonZeroMinInterval(analyzedSpecs),
+//          other.getNonZeroMinInterval(analyzedSpecs)) > 0 ?
+//          other.getNonZeroMinInterval(analyzedSpecs) : this.getNonZeroMinInterval(analyzedSpecs);
+//    } else if (this.size() > 0) {
+//      minInterval = this.getNonZeroMinInterval(analyzedSpecs);
+//    } else if (other.size() > 0) {
+//      minInterval = other.getNonZeroMinInterval(analyzedSpecs);
+//    } else {
+//      return;
+//    }
+//
+//    // Split buckets with the min interval
+//    this.buckets.clear();
+//    List<Bucket> needSplit = new ArrayList<>();
+//    for (Bucket eachBucket : this.buckets.values()) {
+//      if (comparator.compare(eachBucket.getBase(), minInterval) > 0) {
+//        needSplit.add(eachBucket);
+//      } else {
+//        this.buckets.put(eachBucket.key, eachBucket);
+//      }
+//    }
+//
+//    for (Bucket eachBucket: other.buckets.values()) {
+//      if (comparator.compare(eachBucket.getBase(), minInterval) > 0) {
+//        needSplit.add(eachBucket);
+//      } else {
+//        this.buckets.put(eachBucket.key, eachBucket);
+//      }
+//    }
+//    for (Bucket eachBucket : needSplit) {
+//      // Split the bucket
+//      for (Bucket split : HistogramUtil.splitBucket(this, analyzedSpecs, eachBucket, minInterval)) {
+//        this.buckets.put(split.key, split);
+//      }
+//    }
+//
+//    this.minInterval = other.minInterval = minInterval;
 
-    // Split buckets with the min interval
+    List<Bucket> thisBuckets = this.getSortedBuckets();
+    List<Bucket> otherBuckets = other.getSortedBuckets();
+    Iterator<Bucket> thisIt = thisBuckets.iterator();
+    Iterator<Bucket> otherIt = otherBuckets.iterator();
+
     this.buckets.clear();
-    List<Bucket> needSplit = new ArrayList<>();
-    for (Bucket eachBucket : this.buckets.values()) {
-      if (comparator.compare(eachBucket.getBase(), minInterval) > 0) {
-//        // Split the bucket
-//        for (Bucket split : HistogramUtil.splitBucket(this, analyzedSpecs, eachBucket, minInterval)) {
-//          this.buckets.put(split.key, split);
-//        }
-        needSplit.add(eachBucket);
-      } else {
-        this.buckets.put(eachBucket.key, eachBucket);
-      }
-    }
+    Bucket thisBucket = null, otherBucket = null;
+    while ((thisBucket != null || thisIt.hasNext())
+        && (otherBucket != null || otherIt.hasNext())) {
+      if (thisBucket == null) thisBucket = thisIt.next();
+      if (otherBucket == null) otherBucket = otherIt.next();
 
-    for (Bucket eachBucket: other.buckets.values()) {
-      if (comparator.compare(eachBucket.getBase(), minInterval) > 0) {
-//        // Split the bucket
-//        for (Bucket split : HistogramUtil.splitBucket(this, analyzedSpecs, eachBucket, minInterval)) {
-//          this.buckets.put(split.key, split);
-//        }
-        needSplit.add(eachBucket);
+      Bucket smallStartBucket, largeStartBucket;
+      boolean isThisSmall = thisBucket.key.compareTo(otherBucket.key) < 0;
+      if (isThisSmall) {
+        smallStartBucket = thisBucket;
+        largeStartBucket = otherBucket;
       } else {
-        this.buckets.put(eachBucket.key, eachBucket);
+        smallStartBucket = otherBucket;
+        largeStartBucket = thisBucket;
       }
-    }
-    for (Bucket eachBucket : needSplit) {
-      // Split the bucket
-      for (Bucket split : HistogramUtil.splitBucket(this, analyzedSpecs, eachBucket, minInterval)) {
-        this.buckets.put(split.key, split);
-      }
-    }
 
-    this.minInterval = other.minInterval = minInterval;
+      // check overlap between keys
+      // since end is exclusive, the equal case is also included
+      if (comparator.compare(smallStartBucket.key.getEnd(), largeStartBucket.key.getStart()) <= 0) {
+        // non-overlap keys
+        this.buckets.put(smallStartBucket.key, smallStartBucket);
+        if (isThisSmall) {
+          thisBucket = null;
+        } else {
+          otherBucket = null;
+        }
+      } else {
+        // Split buckets into overlapped and non-overlapped portions
+//        Tuple[] tuples = new Tuple[4];
+//        tuples[0] = smallStartBucket.getStartKey();
+//        tuples[1] = largeStartBucket.getStartKey();
+//        tuples[2] = smallStartBucket.getEndKey();
+//        tuples[3] = largeStartBucket.getEndKey();
+//        if (comparator.compare(tuples[2], tuples[3]) > 0) {
+//          Tuple tmp = tuples[2];
+//          tuples[2] = tuples[3];
+//          tuples[3] = tmp;
+//        }
+        BigDecimal[] normInterval = HistogramUtil.normalizeTupleAsVector(analyzedSpecs,
+            smallStartBucket.getBase(analyzedSpecs));
+        Tuple newInterval = HistogramUtil.diff(analyzedSpecs, smallStartBucket.getStartKey(), largeStartBucket.getStartKey());
+
+        BigDecimal normRange = HistogramUtil.weightedSum(
+            normInterval, HistogramUtil.maxScales(normInterval, normInterval));
+        Bucket bucket = this.createBucket(
+            new TupleRange(smallStartBucket.getStartKey(), largeStartBucket.getStartKey(), comparator), );
+
+      }
+    }
   }
 
-  public Bucket getBucket(Tuple startKey, Tuple endKey, Tuple base) {
-    return getBucket(new TupleRange(startKey, endKey, base, comparator));
+  public Bucket getBucket(Tuple startKey, Tuple endKey) {
+    return getBucket(new TupleRange(startKey, endKey, comparator));
   }
 
   @Override
@@ -245,8 +291,8 @@ public class FreqHistogram extends Histogram<TupleRange, Bucket>
     buckets.clear();
   }
 
-  public Bucket createBucket(TupleRange key, long count) {
-    return new Bucket(key, count);
+  public Bucket createBucket(TupleRange key, double amount) {
+    return new Bucket(key, amount);
   }
 
   @Override
@@ -263,14 +309,15 @@ public class FreqHistogram extends Histogram<TupleRange, Bucket>
   public class Bucket implements ProtoObject<FreqBucketProto>, Cloneable, GsonObject {
     // [start key, end key)
     private final TupleRange key;
-    private long count;
+    private Tuple interval = null;
+    private double count; // can be a floating point number
     private boolean endKeyInclusive = false; // set for only the last bucket
 
     public Bucket(TupleRange key) {
       this(key, 0);
     }
 
-    public Bucket(TupleRange key, long count) {
+    public Bucket(TupleRange key, double count) {
       this.key = key;
       this.count = count;
     }
@@ -278,7 +325,6 @@ public class FreqHistogram extends Histogram<TupleRange, Bucket>
     public Bucket(FreqBucketProto proto) {
       Tuple startKey = new VTuple(sortSpecs.length);
       Tuple endKey = new VTuple(sortSpecs.length);
-      Tuple base = new VTuple(sortSpecs.length);
       for (int i = 0; i < sortSpecs.length; i++) {
         startKey.put(i, proto.getStartKey(i).size() == 0 ? NullDatum.get() :
             DatumFactory.createFromBytes(sortSpecs[i].getSortKey().getDataType(),
@@ -286,11 +332,8 @@ public class FreqHistogram extends Histogram<TupleRange, Bucket>
         endKey.put(i, proto.getEndKey(i).size() == 0 ? NullDatum.get() :
             DatumFactory.createFromBytes(sortSpecs[i].getSortKey().getDataType(),
             proto.getEndKey(i).toByteArray()));
-        base.put(i, proto.getBase(i).size() == 0 ? NullDatum.get() :
-            DatumFactory.createFromBytes(sortSpecs[i].getSortKey().getDataType(),
-            proto.getBase(i).toByteArray()));
       }
-      this.key = new TupleRange(startKey, endKey, base, comparator);
+      this.key = new TupleRange(startKey, endKey, comparator);
       this.count = proto.getCount();
     }
 
@@ -300,7 +343,6 @@ public class FreqHistogram extends Histogram<TupleRange, Bucket>
       for (int i = 0; i < sortSpecs.length; i++) {
         builder.addStartKey(ByteString.copyFrom(key.getStart().asDatum(i).asByteArray()));
         builder.addEndKey(ByteString.copyFrom(key.getEnd().asDatum(i).asByteArray()));
-        builder.addBase(ByteString.copyFrom(key.getBase().asDatum(i).asByteArray()));
       }
       return builder.setCount(count).build();
     }
@@ -319,8 +361,11 @@ public class FreqHistogram extends Histogram<TupleRange, Bucket>
       return key;
     }
 
-    public Tuple getBase() {
-      return key.getBase();
+    public Tuple getBase(AnalyzedSortSpec[] sortSpecs) {
+      if (interval == null) {
+        interval = HistogramUtil.diff(sortSpecs, key.getStart(), key.getEnd());
+      }
+      return interval;
     }
 
     public Tuple getStartKey() {
@@ -331,19 +376,19 @@ public class FreqHistogram extends Histogram<TupleRange, Bucket>
       return key.getEnd();
     }
 
-    public long getCount() {
+    public double getCount() {
       return count;
     }
 
-    public void setCount(long count) {
+    public void setCount(double count) {
       this.count = count;
     }
 
-    public void incCount(long inc) {
+    public void incCount(double inc) {
       this.count += inc;
     }
 
-    public void merge(AnalyzedSortSpec[] sortSpecs, Bucket other) {
+    public void merge(Bucket other) {
       Tuple minStart, maxEnd;
       if (this.key.compareTo(other.key) < 0) {
         minStart = key.getStart();
@@ -355,22 +400,8 @@ public class FreqHistogram extends Histogram<TupleRange, Bucket>
 
       this.key.setStart(minStart);
       this.key.setEnd(maxEnd);
-      if (!this.key.getBase().equals(other.key.getBase())) {
-        this.key.setBase(getMeanInterval(sortSpecs, this.key.getBase(), other.key.getBase()));
-      }
+      this.interval = null;
       this.count += other.count;
-    }
-
-    @VisibleForTesting
-    public Tuple getMeanInterval(AnalyzedSortSpec[] sortSpecs, Tuple interval1, Tuple interval2) {
-      BigDecimal[] n1 = HistogramUtil.normalizeTupleAsVector(sortSpecs, interval1);
-      BigDecimal[] n2 = HistogramUtil.normalizeTupleAsVector(sortSpecs, interval2);
-      int[] scales = HistogramUtil.maxScales(n1, n2);
-      BigDecimal s1 = HistogramUtil.weightedSum(n1, scales);
-      BigDecimal s2 = HistogramUtil.weightedSum(n2, scales);
-      BigDecimal mean = s1.add(s2).divide(BigDecimal.valueOf(2), HistogramUtil.DECIMAL128_HALF_UP);
-      BigDecimal[] normMeanInterval = HistogramUtil.normTupleFromWeightedSum(sortSpecs, mean, scales);
-      return HistogramUtil.denormalizeAsVector(sortSpecs, normMeanInterval);
     }
 
     @Override

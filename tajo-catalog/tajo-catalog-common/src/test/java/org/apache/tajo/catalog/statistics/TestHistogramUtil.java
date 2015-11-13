@@ -361,6 +361,20 @@ public class TestHistogramUtil {
     assertEquals(start, decremented);
   }
 
+  @Test
+  public void testIncrementTuple2() {
+    prepareHistogram(TRUE_SET, FALSE_SET);
+    Tuple start = getVTuple(DatumFactory.createFloat8(959.6), DatumFactory.createInt8(12),
+        DatumFactory.createText("쑈쑈쑈ᡨᡪ㛌"), DatumFactory.createTimestamp("1970-01-01 00:15:00.01"));
+    Tuple incremented = HistogramUtil.increment(analyzedSpecs, start, totalBase, 0.1);
+    Tuple expected = getVTuple(DatumFactory.createFloat8(959.65), DatumFactory.createInt8(13),
+        DatumFactory.createText("쑋\uF77E\uF77E峎峐笲"), DatumFactory.createTimestamp("1970-01-01 00:15:00.11"));
+    assertEquals(expected, incremented);
+
+    Tuple decremented = HistogramUtil.increment(analyzedSpecs, incremented, totalBase, -0.1);
+    assertEquals(start, decremented);
+  }
+
 //  @Test
 //  public void testIncrementTuple2() {
 //    prepareHistogram(TRUE_SET, FALSE_SET);
@@ -486,4 +500,27 @@ public class TestHistogramUtil {
 //    assertEquals(tuple2, HistogramUtil.increment(analyzedSpecs, tuple1, diff, 1));
 //    assertArrayEquals(n2, HistogramUtil.increment(n1, n3, 1));
 //  }
+
+  @Test
+  public void testMeanInterval() {
+    prepareHistogram(TRUE_SET, FALSE_SET);
+    Tuple inter1 = totalBase;
+    Tuple inter2 = HistogramUtil.incrementVector(analyzedSpecs, inter1, totalBase, 2);
+    Tuple mean = HistogramUtil.getMeanInterval(analyzedSpecs, inter1, inter2);
+    Tuple expected = HistogramUtil.incrementVector(analyzedSpecs, inter1, totalBase, 1);
+    assertEquals(expected, mean);
+  }
+
+  @Test
+  public void testMeanInterval2() {
+    prepareHistogram(TRUE_SET, FALSE_SET);
+    Tuple inter1 = totalBase;
+    Tuple inter2 = getVTuple(DatumFactory.createFloat8(15.5), DatumFactory.createInt8(3),
+        DatumFactory.createText("나나나"), DatumFactory.createTimestampDatumWithJavaMillis(1000));
+    Tuple mean = HistogramUtil.getMeanInterval(analyzedSpecs, inter1, inter2);
+    assertEquals(7.5, mean.getFloat8(0), 0.000001);
+    assertEquals(507, mean.getInt8(1));
+    assertEquals("까까까", mean.getText(2));
+    assertEquals("1970-01-01 00:00:01", mean.getTimeDate(3).toString());
+  }
 }

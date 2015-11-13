@@ -30,7 +30,7 @@ public abstract class Histogram<KEY, BUCKET> {
    * @param key
    * @param change
    */
-  public abstract void updateBucket(KEY key, long change);
+  public abstract void updateBucket(KEY key, double change);
 
   /**
    *

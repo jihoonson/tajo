@@ -182,20 +182,16 @@ public class RangeShuffleFileWriteExec extends UnaryPhysicalExec {
 
     FreqHistogram freqHistogram = new FreqHistogram(sortSpecs);
     Pair<Tuple, Long> current, next = null;
-    Tuple interval = null;
     for (int i = 0; i < countPerTuples.size() - 1; i++) {
       current = countPerTuples.get(i);
       next = countPerTuples.get(i + 1);
-      interval = HistogramUtil.diff(analyzedSpecs, current.getFirst(), next.getFirst());
 
       // TODO: interval must be divided by count
       freqHistogram.updateBucket(new TupleRange(current.getFirst(), next.getFirst(),
-          interval,
           freqHistogram.getComparator()), current.getSecond());
     }
     if (next != null) {
       freqHistogram.updateBucket(new TupleRange(next.getFirst(), next.getFirst(),
-          HistogramUtil.diff(analyzedSpecs, next.getFirst(), next.getFirst()),
           freqHistogram.getComparator()), next.getSecond(), true);
     }
     context.setFreqHistogram(freqHistogram);

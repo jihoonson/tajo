@@ -695,7 +695,7 @@ public class Repartitioner {
       if (determinedTaskNum < buckets.size()) {
         // Merge ranges of the histogram until the number of ranges becomes determinedTaskNum.
         while (buckets.size() > determinedTaskNum) {
-          buckets.get(buckets.size()-2).merge(analyzedSpecs, buckets.get(buckets.size()-1));
+          buckets.get(buckets.size()-2).merge(buckets.get(buckets.size()-1));
           buckets.remove(buckets.size()-1);
         }
 

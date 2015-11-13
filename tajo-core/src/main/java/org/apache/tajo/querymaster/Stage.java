@@ -32,7 +32,6 @@ import org.apache.tajo.catalog.*;
 import org.apache.tajo.catalog.proto.CatalogProtos.PartitionDescProto;
 import org.apache.tajo.catalog.statistics.*;
 import org.apache.tajo.catalog.statistics.FreqHistogram.Bucket;
-import org.apache.tajo.common.TajoDataTypes.Type;
 import org.apache.tajo.conf.TajoConf;
 import org.apache.tajo.engine.planner.PhysicalPlannerImpl;
 import org.apache.tajo.engine.planner.enforce.Enforcer;
@@ -40,6 +39,7 @@ import org.apache.tajo.engine.planner.global.DataChannel;
 import org.apache.tajo.engine.planner.global.ExecutionBlock;
 import org.apache.tajo.engine.planner.global.MasterPlan;
 import org.apache.tajo.engine.utils.TupleUtil;
+import org.apache.tajo.exception.ExceptionUtil;
 import org.apache.tajo.exception.TajoException;
 import org.apache.tajo.ipc.TajoWorkerProtocol;
 import org.apache.tajo.master.TaskState;
@@ -57,19 +57,15 @@ import org.apache.tajo.rpc.protocolrecords.PrimitiveProtos;
 import org.apache.tajo.storage.FileTablespace;
 import org.apache.tajo.storage.Tablespace;
 import org.apache.tajo.storage.TablespaceManager;
-import org.apache.tajo.storage.Tuple;
 import org.apache.tajo.storage.fragment.Fragment;
 import org.apache.tajo.unit.StorageUnit;
 import org.apache.tajo.util.KeyValueSet;
 import org.apache.tajo.util.RpcParameterFactory;
-import org.apache.tajo.util.StringUtils;
 import org.apache.tajo.util.history.StageHistory;
 import org.apache.tajo.util.history.TaskHistory;
 import org.apache.tajo.worker.FetchImpl;
 
 import java.io.IOException;
-import java.math.BigDecimal;
-import java.math.MathContext;
 import java.net.InetSocketAddress;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -1299,12 +1295,17 @@ public class Stage implements EventHandler<StageEvent> {
 
         if (taskEvent.getState() == TaskState.SUCCEEDED) {
           stage.succeededObjectCount++;
-          // Incremental statistics update
-          updateStats(stage, task);
+          try {
+            // Incremental statistics update
+            updateStats(stage, task);
 
-          // Incremental histogram update
-          if (stage.histogramForRangeShuffle != null) {
-            updateHistogram(stage, taskEvent, 100000);
+            // Incremental histogram update
+            if (stage.histogramForRangeShuffle != null) {
+              updateHistogram(stage, taskEvent, 100000);
+            }
+          } catch (Exception e) {
+            ExceptionUtil.printStackTraceIfError(LOG, e);
+            stage.eventHandler.handle(new StageEvent(stage.getId(), StageEventType.SQ_INTERNAL_ERROR));
           }
         } else if (task.getState() == TaskState.KILLED) {
           stage.killedObjectCount++;
