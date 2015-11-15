@@ -65,7 +65,6 @@ import org.apache.tajo.worker.FetchImpl;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.math.BigDecimal;
-import java.math.BigInteger;
 import java.math.MathContext;
 import java.net.URI;
 import java.util.*;
@@ -668,20 +667,19 @@ public class Repartitioner {
     } else {
       // TODO: create partitions by merging the ranges of the histogram
       FreqHistogram histogram = schedulerContext.getMasterContext().getQuery().getStage(sampleChildBlock.getId()).getHistogramForRangeShuffle();
-//      HistogramUtil.normalize(histogram, sortKeyStats);
       AnalyzedSortSpec[] analyzedSpecs = HistogramUtil.analyzeHistogram(histogram, sortKeyStats);
       List<Bucket> buckets = histogram.getSortedBuckets();
 
       // Compute the total cardinality of sort keys.
-      BigInteger totalCard = histogram.getAllBuckets().stream().map(
-          bucket -> BigInteger.valueOf(bucket.getCount())
-      ).reduce(BigInteger.ZERO, (a, b) -> a.add(b));
+      BigDecimal totalCard = histogram.getAllBuckets().stream().map(
+          bucket -> BigDecimal.valueOf(bucket.getCount())
+      ).reduce(BigDecimal.ZERO, (a, b) -> a.add(b));
 //      // Total range is the pair of the first and last tuples.
 //      TupleRange totalRange = new TupleRange(buckets.get(0).getStartKey(), buckets.get(buckets.size()-1).getEndKey(), buckets.get(0).getKey().getBase(), histogram.getComparator());
 //
       // if the number of the range cardinality is less than the desired number of tasks,
       // we set the the number of tasks to the number of range cardinality.
-      if (totalCard.compareTo(BigInteger.valueOf(maxNum)) < 0) {
+      if (totalCard.compareTo(BigDecimal.valueOf(maxNum)) < 0) {
         LOG.info(stage.getId() + ", The range cardinality (" + totalCard
             + ") is less then the desired number of tasks (" + maxNum + ")");
         determinedTaskNum = totalCard.intValue();
@@ -702,7 +700,6 @@ public class Repartitioner {
         // The merged histogram contains the range partitions (buckets).
         histogram = new FreqHistogram(histogram.getSortSpecs(), buckets);
 
-
       } else if (determinedTaskNum > buckets.size()) {
         while (determinedTaskNum > buckets.size()) {
           Bucket maxBucket = null;
@@ -710,16 +707,19 @@ public class Repartitioner {
             maxBucket = maxBucket == null || maxBucket.getCount() < eachBucket.getCount() ?
                 eachBucket : maxBucket;
           }
-          if (maxBucket.getCount() < 2) {
-            throw new TajoInternalError("Cannot split the bucket");
+          if (maxBucket != null && maxBucket.getCount() > 1) {
+            buckets.addAll(HistogramUtil.splitBucket(histogram, analyzedSpecs, maxBucket, 2));
+          } else {
+            determinedTaskNum = buckets.size();
+            LOG.info("Task number is adjusted to " + determinedTaskNum + " due to the number of buckets.");
+            break;
           }
-          buckets.addAll(HistogramUtil.splitBucket(histogram, analyzedSpecs, maxBucket, maxBucket.getBase()));
         }
         histogram = new FreqHistogram(histogram.getSortSpecs(), buckets);
       }
 
       // The average cardinality of the original histogram must be same with normalized one.
-      BigDecimal avgCard = new BigDecimal(totalCard).divide(BigDecimal.valueOf(histogram.size()), MathContext.DECIMAL128);
+      BigDecimal avgCard = totalCard.divide(BigDecimal.valueOf(histogram.size()), MathContext.DECIMAL128);
 
       // The merged histogram can contain partitions of various lengths.
       // Thus, they need to be refined to be equal in length.

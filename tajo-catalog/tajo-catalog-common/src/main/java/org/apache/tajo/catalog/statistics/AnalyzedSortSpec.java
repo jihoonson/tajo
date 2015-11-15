@@ -37,10 +37,10 @@ public class AnalyzedSortSpec {
   private int maxLength;
 
   private BigDecimal min;
+  private BigDecimal max; // exclusive
   private BigDecimal normMin; // (min / max)
   private BigDecimal transMax; // max - min
-  private BigDecimal normTransMax; // (max - min) / max
-  private BigDecimal max;
+//  private BigDecimal normTransMax; // (max - min) / max
 
   public AnalyzedSortSpec(SortSpec sortSpec) {
     this.sortSpec = sortSpec;
@@ -134,14 +134,23 @@ public class AnalyzedSortSpec {
     return normMin;
   }
 
+  public BigDecimal getTransMin() {
+    return BigDecimal.ZERO;
+  }
+
   public BigDecimal getTransMax() {
     prepareMinMax();
     return transMax;
   }
 
+  public BigDecimal getNormTransMin() {
+    return BigDecimal.ZERO;
+  }
+
   public BigDecimal getNormTransMax() {
-    prepareMinMax();
-    return normTransMax;
+//    prepareMinMax();
+//    return normTransMax;
+    return BigDecimal.ONE;
   }
 
   private void prepareMinMax() {
@@ -149,10 +158,9 @@ public class AnalyzedSortSpec {
       BigDecimal[] minMax = HistogramUtil.getMinMaxIncludeNull(this);
       this.min = minMax[0];
       this.max = minMax[1];
-      int maxScale = max.scale() > min.scale() ? max.scale() : min.scale();
-      this.normMin = min.divide(max, maxScale, BigDecimal.ROUND_HALF_UP);
+      this.normMin = min.divide(max, 128, BigDecimal.ROUND_HALF_UP);
       this.transMax = max.subtract(min);
-      this.normTransMax = transMax.divide(max, maxScale, BigDecimal.ROUND_HALF_UP);
+//      this.normTransMax = transMax.divide(transMax, 128, BigDecimal.ROUND_HALF_UP);
     }
   }
 }

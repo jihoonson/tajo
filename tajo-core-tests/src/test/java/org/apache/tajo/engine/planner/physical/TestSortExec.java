@@ -30,7 +30,6 @@ import org.apache.tajo.conf.TajoConf;
 import org.apache.tajo.conf.TajoConf.ConfVars;
 import org.apache.tajo.datum.Datum;
 import org.apache.tajo.datum.DatumFactory;
-import org.apache.tajo.parser.sql.SQLAnalyzer;
 import org.apache.tajo.engine.planner.PhysicalPlanner;
 import org.apache.tajo.engine.planner.PhysicalPlannerImpl;
 import org.apache.tajo.engine.planner.RangePartitionAlgorithm;
@@ -38,6 +37,7 @@ import org.apache.tajo.engine.planner.UniformRangePartition;
 import org.apache.tajo.engine.planner.enforce.Enforcer;
 import org.apache.tajo.engine.query.QueryContext;
 import org.apache.tajo.exception.TajoException;
+import org.apache.tajo.parser.sql.SQLAnalyzer;
 import org.apache.tajo.plan.LogicalOptimizer;
 import org.apache.tajo.plan.LogicalPlan;
 import org.apache.tajo.plan.LogicalPlanner;
@@ -164,8 +164,7 @@ public class TestSortExec {
     s.put(0, DatumFactory.createInt8(0));
     VTuple e = new VTuple(1);
     e.put(0, DatumFactory.createInt8(6000000000l));
-    TupleRange expected = new TupleRange(s, e, TupleRangeUtil.createMinBaseTuple(sortSpecs),
-        new BaseTupleComparator(schema, sortSpecs));
+    TupleRange expected = new TupleRange(s, e, new BaseTupleComparator(schema, sortSpecs));
     RangePartitionAlgorithm partitioner
         = new UniformRangePartition(expected, sortSpecs, true);
     TupleRange [] ranges = partitioner.partition(967);

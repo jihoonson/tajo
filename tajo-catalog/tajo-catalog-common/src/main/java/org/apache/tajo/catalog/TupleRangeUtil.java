@@ -18,7 +18,6 @@
 
 package org.apache.tajo.catalog;
 
-import org.apache.tajo.catalog.statistics.ColumnStats;
 import org.apache.tajo.common.TajoDataTypes.DataType;
 import org.apache.tajo.datum.Datum;
 import org.apache.tajo.datum.DatumFactory;
@@ -27,15 +26,12 @@ import org.apache.tajo.datum.TextDatum;
 import org.apache.tajo.exception.NotImplementedException;
 import org.apache.tajo.exception.TajoInternalError;
 import org.apache.tajo.storage.Tuple;
-import org.apache.tajo.storage.VTuple;
 import org.apache.tajo.util.Bytes;
 import org.apache.tajo.util.BytesUtils;
 import org.apache.tajo.util.StringUtils;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
-import java.math.MathContext;
-import java.util.List;
 
 public class TupleRangeUtil {
 
@@ -84,23 +80,6 @@ public class TupleRangeUtil {
     }
   }
 
-  public static Tuple createMinBaseTuple(SortSpec[] sortSpecs) {
-    Tuple base = new VTuple(sortSpecs.length);
-    int i = 0;
-    for (i = 0; i < sortSpecs.length; i++) {
-      base.put(i, minBase(sortSpecs[i].getSortKey().getDataType(), 0));
-    }
-    return base;
-  }
-
-//  public static Tuple createMinTuple(List<ColumnStats> columnStatsList) {
-//    Tuple tuple = new VTuple(columnStatsList.size());
-//    for (int i = 0; i < columnStatsList.size(); i++) {
-//      tuple.put(i, columnStatsList.get(i).getMinValue());
-//    }
-//    return tuple;
-//  }
-
   /**
    * It computes the value cardinality of a tuple range.
    *
@@ -111,10 +90,10 @@ public class TupleRangeUtil {
    */
   public static BigInteger computeCardinality(SortSpec sortSpec, TupleRange range, int i,
                                               boolean lastInclusive) {
-    return computeCardinality(sortSpec, range.getStart(), range.getEnd(), range.getBase(), i, lastInclusive);
+    return computeCardinality(sortSpec, range.getStart(), range.getEnd(), i, lastInclusive);
   }
 
-  public static BigInteger computeCardinality(SortSpec sortSpec, Tuple start, Tuple end, Tuple base, int i,
+  public static BigInteger computeCardinality(SortSpec sortSpec, Tuple start, Tuple end, int i,
                                               boolean lastInclusive) {
     BigInteger columnCard;
     DataType dataType = sortSpec.getSortKey().getDataType();
@@ -133,7 +112,7 @@ public class TupleRangeUtil {
           startChar = endChar;
           endChar = tmp;
         }
-        columnCard = BigInteger.valueOf((endChar - startChar) / base.getChar(i));
+        columnCard = BigInteger.valueOf(endChar - startChar);
         break;
 //      case BIT:
 //        byte startByte = start.isBlankOrNull(i) ? (sortSpec.isNullFirst() ? 0 : 0x) : start.getByte(i);
@@ -154,7 +133,7 @@ public class TupleRangeUtil {
           endShort = tmp;
         }
 
-        columnCard = BigInteger.valueOf((endShort - startShort) / base.getInt2(i));
+        columnCard = BigInteger.valueOf(endShort - startShort);
         break;
       case INT4:
       case DATE:
@@ -168,7 +147,7 @@ public class TupleRangeUtil {
           endInt = tmp;
         }
 
-        columnCard = BigInteger.valueOf((endInt - startInt) / base.getInt4(i));
+        columnCard = BigInteger.valueOf(endInt - startInt);
         break;
       case INT8:
       case TIME:
@@ -182,7 +161,7 @@ public class TupleRangeUtil {
           endLong = tmp;
         }
 
-        columnCard = BigInteger.valueOf((endLong - startLong) / base.getInt8(i));
+        columnCard = BigInteger.valueOf(endLong - startLong);
         break;
       case FLOAT4:
         float startFloat = start.isBlankOrNull(i) ? (sortSpec.isNullFirst() ? 0 : Float.MAX_VALUE) : start.getFloat4(i);
@@ -195,7 +174,7 @@ public class TupleRangeUtil {
         }
 
         // TODO: round
-        columnCard = BigDecimal.valueOf(endFloat).subtract(BigDecimal.valueOf(startFloat)).divide(BigDecimal.valueOf(base.getFloat4(i)), MathContext.DECIMAL128).toBigInteger();
+        columnCard = BigDecimal.valueOf(endFloat).subtract(BigDecimal.valueOf(startFloat)).toBigInteger();
         break;
       case FLOAT8:
         double startDouble = start.isBlankOrNull(i) ? (sortSpec.isNullFirst() ? 0 : Double.MAX_VALUE) : start.getFloat8(i);
@@ -207,7 +186,7 @@ public class TupleRangeUtil {
           endDouble = tmp;
         }
 
-        columnCard = BigDecimal.valueOf(endDouble).subtract(BigDecimal.valueOf(startDouble)).divide(BigDecimal.valueOf(base.getFloat8(i)), MathContext.DECIMAL128).toBigInteger();
+        columnCard = BigDecimal.valueOf(endDouble).subtract(BigDecimal.valueOf(startDouble)).toBigInteger();
         break;
       case TEXT: {
         boolean isPureAscii = StringUtils.isPureAscii(start.getText(i)) && StringUtils.isPureAscii(end.getText(i));
@@ -215,7 +194,6 @@ public class TupleRangeUtil {
         if (isPureAscii) {
           byte[] s;
           byte[] e;
-          byte[] b = base.getBytes(i);
           if (sortSpec.isAscending()) {
             s = start.getBytes(i);
             e = end.getBytes(i);
@@ -232,12 +210,10 @@ public class TupleRangeUtil {
           final BigInteger startBI = new BigInteger(Bytes.add(prependHeader, s));
           final BigInteger stopBI = new BigInteger(Bytes.add(prependHeader, e));
 
-          final BigInteger baseBI = new BigInteger(b);
-          columnCard = stopBI.subtract(startBI).divide(baseBI);
+          columnCard = stopBI.subtract(startBI);
         } else {
           char [] s;
           char [] e;
-          char [] b = base.getUnicodeChars(i);
 
           if (sortSpec.isAscending()) {
             s = start.getUnicodeChars(i);
@@ -249,9 +225,8 @@ public class TupleRangeUtil {
 
           BigInteger startBI = charsToBigInteger(s);
           BigInteger stopBI = charsToBigInteger(e);
-          BigInteger baseBI = charsToBigInteger(b);
 
-          columnCard = stopBI.subtract(startBI).divide(baseBI);
+          columnCard = stopBI.subtract(startBI);
         }
         break;
       }
@@ -277,12 +252,12 @@ public class TupleRangeUtil {
     return sum;
   }
 
-  public static BigInteger computeCardinalityForAllColumns(SortSpec[] sortSpecs, Tuple start, Tuple end, Tuple base,
+  public static BigInteger computeCardinalityForAllColumns(SortSpec[] sortSpecs, Tuple start, Tuple end,
                                                            boolean lastInclusive) {
     BigInteger cardinality = BigInteger.ONE;
     BigInteger columnCard;
     for (int i = 0; i < sortSpecs.length; i++) {
-      columnCard = computeCardinality(sortSpecs[i], start, end, base, i, lastInclusive);
+      columnCard = computeCardinality(sortSpecs[i], start, end, i, lastInclusive);
 
       if (BigInteger.ZERO.compareTo(columnCard) < 0) {
         cardinality = cardinality.multiply(columnCard);
@@ -297,6 +272,6 @@ public class TupleRangeUtil {
    * @return
    */
   public static BigInteger computeCardinalityForAllColumns(SortSpec[] sortSpecs, TupleRange range, boolean lastInclusive) {
-    return computeCardinalityForAllColumns(sortSpecs, range.getStart(), range.getEnd(), range.getBase(), lastInclusive);
+    return computeCardinalityForAllColumns(sortSpecs, range.getStart(), range.getEnd(), lastInclusive);
   }
 }

@@ -140,11 +140,10 @@ public class UniformRangePartition extends RangePartitionAlgorithm {
     TupleComparator comparator = new BaseTupleComparator(sortSpecsToSchema(sortSpecs), sortSpecs);
     while(reminder.compareTo(BigInteger.ZERO) > 0) {
       if (reminder.compareTo(term) <= 0) { // final one is inclusive
-        tupleRange = new TupleRange(last, mergedRange.getEnd(), TupleRangeUtil.createMinBaseTuple(sortSpecs),
-            comparator);
+        tupleRange = new TupleRange(last, mergedRange.getEnd(), comparator);
       } else {
         Tuple next = increment(last, term, variableId);
-        tupleRange = new TupleRange(last, next, TupleRangeUtil.createMinBaseTuple(sortSpecs), comparator);
+        tupleRange = new TupleRange(last, next, comparator);
       }
 
       ranges.add(tupleRange);

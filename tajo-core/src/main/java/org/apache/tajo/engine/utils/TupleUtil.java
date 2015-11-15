@@ -189,7 +189,6 @@ public class TupleUtil {
       }
       i++;
     }
-    return new TupleRange(startTuple, endTuple, TupleRangeUtil.createMinBaseTuple(sortSpecs),
-        new BaseTupleComparator(target, sortSpecs));
+    return new TupleRange(startTuple, endTuple, new BaseTupleComparator(target, sortSpecs));
   }
 }

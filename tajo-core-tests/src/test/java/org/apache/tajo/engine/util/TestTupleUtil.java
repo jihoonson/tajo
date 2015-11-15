@@ -19,17 +19,22 @@
 package org.apache.tajo.engine.util;
 
 import org.apache.hadoop.fs.Path;
-import org.apache.tajo.catalog.*;
+import org.apache.tajo.catalog.BaseTupleComparator;
+import org.apache.tajo.catalog.Schema;
+import org.apache.tajo.catalog.SortSpec;
+import org.apache.tajo.catalog.TupleRange;
 import org.apache.tajo.common.TajoDataTypes.Type;
 import org.apache.tajo.datum.Datum;
 import org.apache.tajo.datum.DatumFactory;
-import org.apache.tajo.plan.util.PlannerUtil;
 import org.apache.tajo.engine.planner.RangePartitionAlgorithm;
 import org.apache.tajo.engine.planner.UniformRangePartition;
 import org.apache.tajo.plan.rewrite.rules.PartitionedTableRewriter;
-import org.apache.tajo.storage.*;
+import org.apache.tajo.plan.util.PlannerUtil;
+import org.apache.tajo.storage.RowStoreUtil;
 import org.apache.tajo.storage.RowStoreUtil.RowStoreDecoder;
 import org.apache.tajo.storage.RowStoreUtil.RowStoreEncoder;
+import org.apache.tajo.storage.Tuple;
+import org.apache.tajo.storage.VTuple;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -125,7 +130,7 @@ public class TestTupleUtil {
     eTuple.put(6, DatumFactory.createFloat8(170));
 
     RangePartitionAlgorithm partitioner = new UniformRangePartition(new TupleRange(sTuple, eTuple,
-        TupleRangeUtil.createMinBaseTuple(sortSpecs), new BaseTupleComparator(schema, sortSpecs)),
+        new BaseTupleComparator(schema, sortSpecs)),
         sortSpecs);
     TupleRange [] ranges = partitioner.partition(5);
     assertTrue(5 <= ranges.length);

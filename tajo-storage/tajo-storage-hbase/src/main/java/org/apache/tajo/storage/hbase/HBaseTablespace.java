@@ -946,7 +946,7 @@ public class HBaseTablespace extends Tablespace {
       end.put(i, columnStatsList.get(i).getMaxValue());
     }
     TupleComparator comparator = new BaseTupleComparator(inputSchema, sortSpecs);
-    TupleRange dataRange = new TupleRange(start, end, null, comparator);
+    TupleRange dataRange = new TupleRange(start, end, comparator);
 
     try {
       int[] sortKeyIndexes = new int[sortSpecs.length];
@@ -1001,8 +1001,7 @@ public class HBaseTablespace extends Tablespace {
                       rowKeyFields[i]));
             }
           }
-          tupleRanges.add(new TupleRange(previousTuple, endTuple, TupleRangeUtil.createMinBaseTuple(sortSpecs),
-              comparator));
+          tupleRanges.add(new TupleRange(previousTuple, endTuple, comparator));
           previousTuple = endTuple;
         }
 

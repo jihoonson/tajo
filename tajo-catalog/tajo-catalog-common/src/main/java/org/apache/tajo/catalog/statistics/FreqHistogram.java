@@ -18,6 +18,7 @@
 
 package org.apache.tajo.catalog.statistics;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.ByteString;
 import org.apache.tajo.catalog.*;
 import org.apache.tajo.catalog.proto.CatalogProtos.FreqBucketProto;
@@ -215,26 +216,42 @@ public class FreqHistogram extends Histogram<TupleRange, Bucket>
         }
       } else {
         // Split buckets into overlapped and non-overlapped portions
-//        Tuple[] tuples = new Tuple[4];
-//        tuples[0] = smallStartBucket.getStartKey();
-//        tuples[1] = largeStartBucket.getStartKey();
-//        tuples[2] = smallStartBucket.getEndKey();
-//        tuples[3] = largeStartBucket.getEndKey();
-//        if (comparator.compare(tuples[2], tuples[3]) > 0) {
-//          Tuple tmp = tuples[2];
-//          tuples[2] = tuples[3];
-//          tuples[3] = tmp;
-//        }
-        BigDecimal[] normInterval = HistogramUtil.normalizeTupleAsVector(analyzedSpecs,
-            smallStartBucket.getBase(analyzedSpecs));
-        Tuple newInterval = HistogramUtil.diff(analyzedSpecs, smallStartBucket.getStartKey(), largeStartBucket.getStartKey());
+        Bucket[] bucketOrder = new Bucket[3];
+        bucketOrder[0] = smallStartBucket;
 
-        BigDecimal normRange = HistogramUtil.weightedSum(
-            normInterval, HistogramUtil.maxScales(normInterval, normInterval));
-        Bucket bucket = this.createBucket(
-            new TupleRange(smallStartBucket.getStartKey(), largeStartBucket.getStartKey(), comparator), );
+        Tuple[] tuples = new Tuple[4];
+        tuples[0] = smallStartBucket.getStartKey();
+        tuples[1] = largeStartBucket.getStartKey();
 
+        if (comparator.compare(smallStartBucket.getEndKey(), largeStartBucket.getEndKey()) < 0) {
+          tuples[2] = smallStartBucket.getEndKey();
+          tuples[3] = largeStartBucket.getEndKey();
+          bucketOrder[1] = largeStartBucket;
+          bucketOrder[2] = smallStartBucket;
+        } else {
+          tuples[2] = largeStartBucket.getEndKey();
+          tuples[3] = smallStartBucket.getEndKey();
+          bucketOrder[1] = smallStartBucket;
+          bucketOrder[2] = largeStartBucket;
+        }
+
+        for (int i = 0; i < bucketOrder.length; i++) {
+          Tuple start = tuples[i];
+          Tuple end = tuples[i + 1];
+          Bucket subBucket = HistogramUtil.getSubBucket(this, analyzedSpecs, bucketOrder[i], start, end);
+          this.buckets.put(subBucket.key, subBucket);
+        }
       }
+    }
+
+    while (thisIt.hasNext()) {
+      Bucket next = thisIt.next();
+      this.buckets.put(next.key, next);
+    }
+
+    while (otherIt.hasNext()) {
+      Bucket next = otherIt.next();
+      this.buckets.put(next.key, next);
     }
   }
 
@@ -268,6 +285,10 @@ public class FreqHistogram extends Histogram<TupleRange, Bucket>
 
   public Comparator<Tuple> getComparator() {
     return comparator;
+  }
+
+  public Comparator<Tuple> getVectorComparator() {
+    return intervalComparator;
   }
 
   @Override
