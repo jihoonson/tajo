@@ -35,10 +35,7 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.math.MathContext;
 import java.math.RoundingMode;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Comparator;
-import java.util.List;
+import java.util.*;
 
 public class HistogramUtil {
 
@@ -58,23 +55,82 @@ public class HistogramUtil {
 
   public static AnalyzedSortSpec[] analyzeHistogram(FreqHistogram histogram, List<ColumnStats> columnStatses) {
     SortSpec[] sortSpecs = histogram.getSortSpecs();
+    Set<Datum>[] distValSets = new Set[sortSpecs.length];
+    for (int i = 0; i < distValSets.length; i++) {
+      distValSets[i] = new HashSet<>();
+    }
+    double[] rounds = new double[sortSpecs.length];
+    Arrays.fill(rounds, 0);
     AnalyzedSortSpec[] analyzedSpecs = toAnalyzedSortSpecs(sortSpecs, columnStatses);
-    for (Bucket bucket : histogram.getAllBuckets()) {
-      Tuple tuple = bucket.getStartKey();
+    BigDecimal sumCard = BigDecimal.ZERO;
+    List<Bucket> buckets = histogram.getSortedBuckets();
+    Tuple first = buckets.get(0).getStartKey();
+    Tuple last = new VTuple(analyzedSpecs.length);
+    for (Bucket bucket : buckets) {
+      Tuple start = bucket.getStartKey();
+      Tuple end = bucket.getEndKey();
       for (int i = 0; i < sortSpecs.length; i++) {
+        if (end.asDatum(i).compareTo(start.asDatum(i)) < 0) {
+          rounds[i] += 1;
+        }
+        if (!end.isBlankOrNull(i)) {
+          last.put(i, end.asDatum(i));
+        }
+      }
+      sumCard = sumCard.add(BigDecimal.valueOf(bucket.getCount()));
+      for (int i = 0; i < sortSpecs.length; i++) {
+        distValSets[i].add(start.asDatum(i));
         if (sortSpecs[i].getSortKey().getDataType().getType().equals(Type.TEXT)) {
-          boolean isCurrentPureAscii = StringUtils.isPureAscii(tuple.getText(i));
+          boolean isCurrentPureAscii = StringUtils.isPureAscii(start.getText(i));
           if (analyzedSpecs[i].isPureAscii()) {
             analyzedSpecs[i].setPureAscii(isCurrentPureAscii);
           }
           if (isCurrentPureAscii) {
-            analyzedSpecs[i].setMaxLength(Math.max(analyzedSpecs[i].getMaxLength(), tuple.getText(i).length()));
+            analyzedSpecs[i].setMaxLength(Math.max(analyzedSpecs[i].getMaxLength(), start.getText(i).length()));
           } else {
-            analyzedSpecs[i].setMaxLength(Math.max(analyzedSpecs[i].getMaxLength(), tuple.getUnicodeChars(i).length));
+            analyzedSpecs[i].setMaxLength(Math.max(analyzedSpecs[i].getMaxLength(), start.getUnicodeChars(i).length));
           }
         }
       }
     }
+
+    for (int i = 0; i < sortSpecs.length; i++) {
+      // (max - last) + (first - min)
+      BigDecimal [] minMax = getMinMaxIncludeNull(analyzedSpecs[i]);
+      BigDecimal max = minMax[1], min = minMax[0];
+      BigDecimal transMax = max.subtract(min);
+
+      BigDecimal lastVal, firstVal;
+      if (sortSpecs[i].getSortKey().getDataType().getType().equals(Type.TEXT)) {
+        if (analyzedSpecs[i].isPureAscii()) {
+          firstVal = bytesToBigDecimal(first.getBytes(i), analyzedSpecs[i].getMaxLength(), true);
+          lastVal = bytesToBigDecimal(last.getBytes(i), analyzedSpecs[i].getMaxLength(), true);
+        } else {
+          firstVal = unicodeCharsToBigDecimal(first.getUnicodeChars(i), analyzedSpecs[i].getMaxLength(), true);
+          lastVal = unicodeCharsToBigDecimal(last.getUnicodeChars(i), analyzedSpecs[i].getMaxLength(), true);
+        }
+      } else {
+        firstVal = datumToBigDecimal(analyzedSpecs[i], first.asDatum(i));
+        lastVal = datumToBigDecimal(analyzedSpecs[i], last.asDatum(i));
+      }
+
+      if (rounds[i] == 0) {
+        rounds[i] = 1;
+      }
+      rounds[i] += max.subtract(lastVal).add(firstVal.subtract(min))
+          .divide(transMax, 64, BigDecimal.ROUND_HALF_UP).doubleValue();
+
+      BigDecimal distVal = transMax.multiply(BigDecimal.valueOf(rounds[i])).divide(sumCard, 128, BigDecimal.ROUND_HALF_UP);
+      analyzedSpecs[i].setNormMeanInterval(distVal.divide(transMax, 128, BigDecimal.ROUND_HALF_UP));
+    }
+
+//    BigDecimal avgCard = sumCard.divide(BigDecimal.valueOf(buckets.size()), 128, BigDecimal.ROUND_HALF_UP);
+//    for (int i = 0; i < distValSets.length; i++) {
+//      long numDistVals = BigDecimal.valueOf(distValSets[i].size()).multiply(avgCard)
+//          .divide(BigDecimal.valueOf(rounds[i]), 0, RoundingMode.HALF_UP).longValue();
+//      analyzedSpecs[i].setNumDistVals(numDistVals);
+//    }
+
     return analyzedSpecs;
   }
 
@@ -282,11 +338,11 @@ public class HistogramUtil {
         break;
       case TEXT:
         if (sortSpec.isPureAscii()) {
-          max = new BigDecimal(new BigInteger(sortSpec.getMaxValue().asByteArray()));
-          min = new BigDecimal(new BigInteger(sortSpec.getMinValue().asByteArray()));
+          max = bytesToBigDecimal(sortSpec.getMaxValue().asByteArray(), sortSpec.getMaxLength(), false);
+          min = bytesToBigDecimal(sortSpec.getMinValue().asByteArray(), sortSpec.getMaxLength(), false);
         } else {
-          max = unicodeCharsToBigDecimal(sortSpec.getMaxValue().asUnicodeChars());
-          min = unicodeCharsToBigDecimal(sortSpec.getMinValue().asUnicodeChars());
+          max = unicodeCharsToBigDecimal(sortSpec.getMaxValue().asUnicodeChars(), sortSpec.getMaxLength(), false);
+          min = unicodeCharsToBigDecimal(sortSpec.getMinValue().asUnicodeChars(), sortSpec.getMaxLength(), false);
         }
         break;
       case TIMESTAMP:
@@ -462,6 +518,15 @@ public class HistogramUtil {
     if (val.isNull()) {
       return sortSpec.isNullFirst() ? BigDecimal.ZERO : BigDecimal.ONE;
     } else {
+      BigDecimal normNumber = datumToBigDecimal(sortSpec, val);
+      return normalizeVal(sortSpec, normNumber, isValue);
+    }
+  }
+
+  private static BigDecimal datumToBigDecimal(final AnalyzedSortSpec sortSpec, final Datum val) {
+    if (val.isNull()) {
+      return sortSpec.isNullFirst() ? BigDecimal.ZERO : BigDecimal.ONE;
+    } else {
       BigDecimal normNumber;
       switch (sortSpec.getType()) {
         case BOOLEAN:
@@ -501,7 +566,7 @@ public class HistogramUtil {
         default:
           throw new UnsupportedOperationException(sortSpec.getType() + " is not supported yet");
       }
-      return normalizeVal(sortSpec, normNumber, isValue);
+      return normNumber;
     }
   }
 
@@ -646,13 +711,16 @@ public class HistogramUtil {
    *
    * @param sortSpecs an array of sort specifications
    * @param operand tuple to be incremented
-   * @param baseTuple base tuple
    * @param amount increment count. If this value is negative, this method works as decrement.
    * @return incremented tuple
    */
-  public static Tuple incrementValue(AnalyzedSortSpec[] sortSpecs, final Tuple operand, final Tuple baseTuple, double amount) {
+  public static Tuple incrementValue(AnalyzedSortSpec[] sortSpecs, final Tuple operand, double amount) {
     BigDecimal[] norm = normalizeTupleAsValue(sortSpecs, operand);
-    BigDecimal[] interval = normalizeTupleAsVector(sortSpecs, baseTuple);
+//    BigDecimal[] interval = normalizeTupleAsVector(sortSpecs);
+    BigDecimal[] interval = new BigDecimal[sortSpecs.length];
+    for (int i = 0; i < interval.length; i++) {
+      interval[i] = sortSpecs[i].getNormMeanInterval();
+    }
     BigDecimal[] incremented = increment(sortSpecs, norm, interval, amount);
 
     return denormalizeAsValue(sortSpecs, incremented);
@@ -660,8 +728,12 @@ public class HistogramUtil {
 
   public static Tuple incrementVector(AnalyzedSortSpec[] sortSpecs, final Tuple vector, final Tuple baseTuple, double amount) {
     BigDecimal[] norm = normalizeTupleAsVector(sortSpecs, vector);
-    BigDecimal[] interval = normalizeTupleAsVector(sortSpecs, baseTuple);
+//    BigDecimal[] interval = normalizeTupleAsVector(sortSpecs, baseTuple);
     // TODO: maybe incrementVector for normalized tuple is required
+    BigDecimal[] interval = new BigDecimal[sortSpecs.length];
+    for (int i = 0; i < interval.length; i++) {
+      interval[i] = sortSpecs[i].getNormMeanInterval();
+    }
     BigDecimal[] incremented = increment(sortSpecs, norm, interval, amount);
 
     return denormalizeAsVector(sortSpecs, incremented);
@@ -810,14 +882,20 @@ public class HistogramUtil {
 
   protected static BigDecimal[] increment(AnalyzedSortSpec[] sortSpecs, BigDecimal[] operand, BigDecimal[] interval,
                                           double amount) {
-    Preconditions.checkArgument(operand.length == interval.length);
+//    Preconditions.checkArgument(operand.length == interval.length);
     BigDecimal bigCount = BigDecimal.valueOf(amount);
     BigDecimal carry = BigDecimal.ZERO;
     BigDecimal[] incremented = new BigDecimal[operand.length];
     for (int i = operand.length - 1; i >= 0; i--) {
-      // added = carry + operand + interval * count
       // TODO: the below round should be improved
-      BigDecimal added = operand[i].add(interval[i].multiply(bigCount.add(carry))).setScale(127, BigDecimal.ROUND_HALF_UP);
+//      BigDecimal added = operand[i].add(carry.add(bigCount).multiply(sortSpecs[i].getNormMeanInterval()))
+//          .setScale(127, BigDecimal.ROUND_HALF_UP);
+
+      // added = operand + carry * meanInterval + interval * count
+      BigDecimal added = operand[i]
+          .add(carry.multiply(sortSpecs[i].getNormMeanInterval()))
+          .add(bigCount.multiply(interval[i]));
+
       // Calculate carry and remainder
       if (added.compareTo(BigDecimal.ZERO) < 0) {
 //        carry = added.abs().setScale(0, BigDecimal.ROUND_CEILING);

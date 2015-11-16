@@ -30,6 +30,8 @@ public class AnalyzedSortSpec {
   private final SortSpec sortSpec;
   private Datum minValue;
   private Datum maxValue;
+  private Datum meanInterval;
+  private long numDistVals;
 
   // Below variables are used only for text type
   private boolean hasNullValue;
@@ -41,6 +43,8 @@ public class AnalyzedSortSpec {
   private BigDecimal normMin; // (min / max)
   private BigDecimal transMax; // max - min
 //  private BigDecimal normTransMax; // (max - min) / max
+
+  private BigDecimal normMeanInterval; // transMax / numDistVals
 
   public AnalyzedSortSpec(SortSpec sortSpec) {
     this.sortSpec = sortSpec;
@@ -119,6 +123,10 @@ public class AnalyzedSortSpec {
     this.hasNullValue = hasNullValue;
   }
 
+  public void setNumDistVals(long num) {
+    numDistVals = num;
+  }
+
   public BigDecimal getMax() {
     prepareMinMax();
     return max;
@@ -153,6 +161,11 @@ public class AnalyzedSortSpec {
     return BigDecimal.ONE;
   }
 
+  public BigDecimal getNormMeanInterval() {
+    prepareMinMax();
+    return normMeanInterval;
+  }
+
   private void prepareMinMax() {
     if (min == null) {
       BigDecimal[] minMax = HistogramUtil.getMinMaxIncludeNull(this);
@@ -161,6 +174,13 @@ public class AnalyzedSortSpec {
       this.normMin = min.divide(max, 128, BigDecimal.ROUND_HALF_UP);
       this.transMax = max.subtract(min);
 //      this.normTransMax = transMax.divide(transMax, 128, BigDecimal.ROUND_HALF_UP);
+//      this.normMeanInterval = transMax.divide(BigDecimal.valueOf(numDistVals), 128, BigDecimal.ROUND_HALF_UP)
+//          .divide(transMax, 128, BigDecimal.ROUND_HALF_UP);
+      this.normMeanInterval = BigDecimal.ONE.divide(BigDecimal.valueOf(numDistVals), 128, BigDecimal.ROUND_HALF_UP);
     }
+  }
+
+  public void setNormMeanInterval(BigDecimal normMeanInterval) {
+    this.normMeanInterval = normMeanInterval;
   }
 }
