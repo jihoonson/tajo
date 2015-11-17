@@ -116,14 +116,14 @@ public class TupleUtil {
 
     return colStats.stream()
         .filter(stats -> sortKeys.contains(stats.getColumn()))
-        .map(stats -> {
-          if (stats.getMinValue() == null)
-            stats.setMinValue(NullDatum.get());
-
-          if (checkNull && stats.hasNullValue() || stats.getMaxValue() == null)
-            stats.setMaxValue(NullDatum.get());
-          return stats;
-        })
+//        .map(stats -> {
+//          if (stats.getMinValue() == null)
+//            stats.setMinValue(NullDatum.get());
+//
+//          if (checkNull && stats.hasNullValue() || stats.getMaxValue() == null)
+//            stats.setMaxValue(NullDatum.get());
+//          return stats;
+//        })
         .collect(Collectors.toList());
   }
 
