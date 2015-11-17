@@ -675,7 +675,7 @@ public class Repartitioner {
           bucket -> BigDecimal.valueOf(bucket.getCount())
       ).reduce(BigDecimal.ZERO, (a, b) -> a.add(b));
 //      // Total range is the pair of the first and last tuples.
-//      TupleRange totalRange = new TupleRange(buckets.get(0).getStartKey(), buckets.get(buckets.size()-1).getEndKey(), buckets.get(0).getKey().getBase(), histogram.getComparator());
+//      TupleRange totalRange = new TupleRange(buckets.get(0).getStartKey(), buckets.get(buckets.size()-1).getEndKey(), buckets.get(0).getKey().getInterval(), histogram.getComparator());
 //
       // if the number of the range cardinality is less than the desired number of tasks,
       // we set the the number of tasks to the number of range cardinality.
@@ -748,7 +748,7 @@ public class Repartitioner {
           if (val instanceof PositiveInfiniteDatum) {
             ranges[i].getEnd().put(j, HistogramUtil.getLastValue(sortSpecs, sortKeyStats, j));
 //          } else {
-//            ranges[i].setEnd(HistogramUtil.increment(sortSpecs, sortKeyStats, ranges[i].getEnd(), ranges[i].getBase(), -2));
+//            ranges[i].setEnd(HistogramUtil.increment(sortSpecs, sortKeyStats, ranges[i].getEnd(), ranges[i].getInterval(), -2));
           } else if (val instanceof NegativeInfiniteDatum) {
             ranges[i].getEnd().put(j, HistogramUtil.getFirstValue(sortSpecs, sortKeyStats, j));
           }

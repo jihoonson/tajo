@@ -89,10 +89,10 @@ public class FreqHistogram extends Histogram<TupleRange, Bucket>
 ////      Tuple zeroTuple = TupleRangeUtil.createMinBaseTuple(context.sortSpecs);
 //      for (Bucket eachBucket : buckets.values()) {
 //        if (minInterval == null) {
-//          minInterval = eachBucket.getBase();
-//        } else if (!HistogramUtil.isMinNormTuple(HistogramUtil.normalizeTupleAsVector(sortSpecs, eachBucket.getBase()))
-//            && intervalComparator.compare(minInterval, eachBucket.getBase()) > 0) {
-//          minInterval = eachBucket.getBase();
+//          minInterval = eachBucket.getInterval();
+//        } else if (!HistogramUtil.isMinNormTuple(HistogramUtil.normalizeTupleAsVector(sortSpecs, eachBucket.getInterval()))
+//            && intervalComparator.compare(minInterval, eachBucket.getInterval()) > 0) {
+//          minInterval = eachBucket.getInterval();
 //        }
 //      }
 //    }
@@ -159,7 +159,7 @@ public class FreqHistogram extends Histogram<TupleRange, Bucket>
 //    this.buckets.clear();
 //    List<Bucket> needSplit = new ArrayList<>();
 //    for (Bucket eachBucket : this.buckets.values()) {
-//      if (comparator.compare(eachBucket.getBase(), minInterval) > 0) {
+//      if (comparator.compare(eachBucket.getInterval(), minInterval) > 0) {
 //        needSplit.add(eachBucket);
 //      } else {
 //        this.buckets.put(eachBucket.key, eachBucket);
@@ -167,7 +167,7 @@ public class FreqHistogram extends Histogram<TupleRange, Bucket>
 //    }
 //
 //    for (Bucket eachBucket: other.buckets.values()) {
-//      if (comparator.compare(eachBucket.getBase(), minInterval) > 0) {
+//      if (comparator.compare(eachBucket.getInterval(), minInterval) > 0) {
 //        needSplit.add(eachBucket);
 //      } else {
 //        this.buckets.put(eachBucket.key, eachBucket);
@@ -382,7 +382,7 @@ public class FreqHistogram extends Histogram<TupleRange, Bucket>
       return key;
     }
 
-    public Tuple getBase(AnalyzedSortSpec[] sortSpecs) {
+    public Tuple getInterval(AnalyzedSortSpec[] sortSpecs) {
       if (interval == null) {
         interval = HistogramUtil.diff(sortSpecs, key.getStart(), key.getEnd());
       }
