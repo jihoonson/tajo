@@ -108,30 +108,29 @@ limitations under the License.
           </execution>
         </executions>
       </plugin>
-      <plugin>
-        <groupId>org.codehaus.mojo</groupId>
-        <artifactId>exec-maven-plugin</artifactId>
-        <version>1.2</version>
-        <executions>
-          <execution>
-            <id>generate-sources</id>
-            <phase>generate-sources</phase>
-            <configuration>
-              <executable>protoc</executable>
-              <arguments>
-                <argument>-Isrc/main/proto/</argument>
-                <argument>--proto_path=../../tajo-common/src/main/proto</argument>
-                <argument>--proto_path=../../tajo-catalog/tajo-catalog-common/src/main/proto</argument>
-                <argument>--java_out=target/generated-sources/proto</argument>
-                <argument>src/main/proto/IndexProtos.proto</argument>
-              </arguments>
-            </configuration>
-            <goals>
-              <goal>exec</goal>
-            </goals>
-          </execution>
-        </executions>
-      </plugin>
+      <!--<plugin>-->
+        <!--<groupId>org.codehaus.mojo</groupId>-->
+        <!--<artifactId>exec-maven-plugin</artifactId>-->
+        <!--<version>1.2</version>-->
+        <!--<executions>-->
+          <!--<execution>-->
+            <!--<id>generate-sources</id>-->
+            <!--<phase>generate-sources</phase>-->
+            <!--<configuration>-->
+              <!--<executable>protoc</executable>-->
+              <!--<arguments>-->
+                <!--<argument>-Isrc/main/proto/</argument>-->
+                <!--<argument>&#45;&#45;proto_path=../../tajo-common/src/main/proto</argument>-->
+                <!--<argument>&#45;&#45;proto_path=../../tajo-catalog/tajo-catalog-common/src/main/proto</argument>-->
+                <!--<argument>&#45;&#45;java_out=target/generated-sources/proto</argument>-->
+              <!--</arguments>-->
+            <!--</configuration>-->
+            <!--<goals>-->
+              <!--<goal>exec</goal>-->
+            <!--</goals>-->
+          <!--</execution>-->
+        <!--</executions>-->
+      <!--</plugin>-->
       <plugin>
         <groupId>org.codehaus.mojo</groupId>
         <artifactId>build-helper-maven-plugin</artifactId>

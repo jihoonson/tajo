@@ -1,4 +1,4 @@
-/**
+/***
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -16,16 +16,18 @@
  * limitations under the License.
  */
 
-option java_package = "org.apache.tajo.index";
-option java_outer_classname = "IndexProtos";
-option optimize_for = SPEED;
-option java_generic_services = false;
-option java_generate_equals_and_hash = true;
+package org.apache.tajo.catalog;
 
-import "CatalogProtos.proto";
+import org.apache.tajo.common.ProtoObject;
+import org.apache.tajo.storage.StorageProtos.TupleComparatorProto;
+import org.apache.tajo.storage.Tuple;
 
-message TupleComparatorProto {
-  required SchemaProto schema = 1;
-  repeated SortSpecProto sort_specs = 2;
-  repeated TupleComparatorSpecProto comp_specs = 3;
+import java.util.Comparator;
+
+
+public abstract class TupleComparator implements Comparator<Tuple>, ProtoObject<TupleComparatorProto> {
+
+  public abstract int compare(Tuple o1, Tuple o2);
+
+  public abstract boolean isAscendingFirstKey();
 }

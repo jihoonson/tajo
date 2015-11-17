@@ -19,10 +19,7 @@
 package org.apache.tajo.jdbc;
 
 import org.apache.tajo.common.TajoDataTypes;
-import org.apache.tajo.datum.Datum;
-import org.apache.tajo.datum.IntervalDatum;
-import org.apache.tajo.datum.NullDatum;
-import org.apache.tajo.datum.ProtobufDatum;
+import org.apache.tajo.datum.*;
 import org.apache.tajo.exception.TajoRuntimeException;
 import org.apache.tajo.exception.UnsupportedException;
 import org.apache.tajo.storage.Tuple;
@@ -59,6 +56,11 @@ public class MetaDataTuple implements Tuple {
   @Override
   public boolean isBlankOrNull(int fieldid) {
     return values.get(fieldid) == null || values.get(fieldid).isNull();
+  }
+
+  @Override
+  public boolean isInfinite(int fieldId) {
+    return values.get(fieldId) instanceof PositiveInfiniteDatum || values.get(fieldId) instanceof NegativeInfiniteDatum;
   }
 
   @Override

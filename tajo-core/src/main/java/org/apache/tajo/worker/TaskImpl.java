@@ -29,9 +29,7 @@ import org.apache.hadoop.fs.*;
 import org.apache.tajo.TajoProtos;
 import org.apache.tajo.TajoProtos.TaskAttemptState;
 import org.apache.tajo.TaskAttemptId;
-import org.apache.tajo.catalog.Schema;
-import org.apache.tajo.catalog.TableDesc;
-import org.apache.tajo.catalog.TableMeta;
+import org.apache.tajo.catalog.*;
 import org.apache.tajo.catalog.proto.CatalogProtos;
 import org.apache.tajo.catalog.proto.CatalogProtos.FragmentProto;
 import org.apache.tajo.catalog.statistics.TableStats;
@@ -351,6 +349,11 @@ public class TaskImpl implements Task {
 
         builder.addShuffleFileOutputs(part.build());
       } while (it.hasNext());
+    }
+
+    if (context.hasFreqHistogram()) {
+      // TODO: range sampling
+      builder.setFreqHistogram(context.getFreqHistogram().getProto());
     }
 
     return builder.build();

@@ -32,6 +32,8 @@ public interface Tuple extends Cloneable {
 
   boolean isBlankOrNull(int fieldid);
 
+  boolean isInfinite(int fieldId);
+
   void insertTuple(int fieldId, Tuple tuple);
 
   void put(int fieldId, Datum value);

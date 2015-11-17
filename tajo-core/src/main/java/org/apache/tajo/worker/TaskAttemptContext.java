@@ -28,6 +28,7 @@ import org.apache.tajo.TajoProtos.TaskAttemptState;
 import org.apache.tajo.TaskAttemptId;
 import org.apache.tajo.catalog.Schema;
 import org.apache.tajo.catalog.proto.CatalogProtos.PartitionDescProto;
+import org.apache.tajo.catalog.statistics.FreqHistogram;
 import org.apache.tajo.catalog.statistics.TableStats;
 import org.apache.tajo.conf.TajoConf;
 import org.apache.tajo.engine.planner.enforce.Enforcer;
@@ -60,6 +61,7 @@ public class TaskAttemptContext {
 
   private volatile TaskAttemptState state;
   private TableStats resultStats;
+  private FreqHistogram freqHistogram;
   private TaskAttemptId taskId;
   private final Path workDir;
   private boolean needFetch = false;
@@ -188,6 +190,18 @@ public class TaskAttemptContext {
 
   public TableStats getResultStats() {
     return this.resultStats;
+  }
+
+  public boolean hasFreqHistogram() {
+    return freqHistogram != null;
+  }
+
+  public void setFreqHistogram(FreqHistogram freqHistogram) {
+    this.freqHistogram = freqHistogram;
+  }
+
+  public FreqHistogram getFreqHistogram() {
+    return freqHistogram;
   }
 
   public boolean isStopped() {

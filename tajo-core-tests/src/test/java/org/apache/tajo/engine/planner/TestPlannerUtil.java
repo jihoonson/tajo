@@ -41,7 +41,7 @@ import org.apache.tajo.plan.logical.*;
 import org.apache.tajo.plan.util.PlannerUtil;
 import org.apache.tajo.storage.TablespaceManager;
 import org.apache.tajo.storage.Tuple;
-import org.apache.tajo.storage.TupleComparator;
+import org.apache.tajo.catalog.TupleComparator;
 import org.apache.tajo.storage.VTuple;
 import org.apache.tajo.storage.fragment.FileFragment;
 import org.apache.tajo.storage.fragment.FragmentConvertor;

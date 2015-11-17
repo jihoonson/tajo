@@ -35,10 +35,10 @@ import org.apache.tajo.plan.expr.EvalNode;
 import org.apache.tajo.plan.logical.NodeType;
 import org.apache.tajo.plan.logical.PersistentStoreNode;
 import org.apache.tajo.plan.util.PlannerUtil;
-import org.apache.tajo.storage.BaseTupleComparator;
+import org.apache.tajo.catalog.BaseTupleComparator;
 import org.apache.tajo.storage.FileTablespace;
 import org.apache.tajo.storage.StorageConstants;
-import org.apache.tajo.storage.TupleComparator;
+import org.apache.tajo.catalog.TupleComparator;
 import org.apache.tajo.storage.fragment.FileFragment;
 import org.apache.tajo.storage.fragment.FragmentConvertor;
 

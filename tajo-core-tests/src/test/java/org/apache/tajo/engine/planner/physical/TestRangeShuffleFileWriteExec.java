@@ -19,12 +19,9 @@
 package org.apache.tajo.engine.planner.physical;
 
 import org.apache.hadoop.fs.Path;
-import org.apache.tajo.LocalTajoTestingUtility;
-import org.apache.tajo.TajoConstants;
-import org.apache.tajo.TajoTestingCluster;
-import org.apache.tajo.TpchTestBase;
-import org.apache.tajo.algebra.Expr;
+import org.apache.tajo.*;
 import org.apache.tajo.catalog.*;
+import org.apache.tajo.catalog.statistics.FreqHistogram;
 import org.apache.tajo.common.TajoDataTypes.Type;
 import org.apache.tajo.conf.TajoConf;
 import org.apache.tajo.conf.TajoConf.ConfVars;
@@ -32,30 +29,27 @@ import org.apache.tajo.datum.Datum;
 import org.apache.tajo.datum.DatumFactory;
 import org.apache.tajo.engine.planner.PhysicalPlanner;
 import org.apache.tajo.engine.planner.PhysicalPlannerImpl;
-import org.apache.tajo.engine.planner.RangePartitionAlgorithm;
-import org.apache.tajo.engine.planner.UniformRangePartition;
 import org.apache.tajo.engine.planner.enforce.Enforcer;
+import org.apache.tajo.engine.planner.global.DataChannel;
 import org.apache.tajo.engine.query.QueryContext;
-import org.apache.tajo.exception.TajoException;
 import org.apache.tajo.parser.sql.SQLAnalyzer;
 import org.apache.tajo.plan.LogicalOptimizer;
-import org.apache.tajo.plan.LogicalPlan;
 import org.apache.tajo.plan.LogicalPlanner;
-import org.apache.tajo.plan.logical.LogicalNode;
-import org.apache.tajo.plan.util.PlannerUtil;
+import org.apache.tajo.plan.logical.ScanNode;
+import org.apache.tajo.plan.logical.ShuffleFileWriteNode;
+import org.apache.tajo.plan.logical.SortNode;
+import org.apache.tajo.plan.serder.PlanProto.ShuffleType;
 import org.apache.tajo.storage.*;
 import org.apache.tajo.storage.fragment.FileFragment;
 import org.apache.tajo.util.CommonTestingUtil;
 import org.apache.tajo.worker.TaskAttemptContext;
-import org.junit.BeforeClass;
+import org.junit.Before;
 import org.junit.Test;
 
 import java.io.IOException;
 import java.util.Random;
 
-import static org.junit.Assert.assertTrue;
-
-public class TestSortExec {
+public class TestRangeShuffleFileWriteExec {
   private static TajoConf conf;
   private static final String TEST_PATH = TajoTestingCluster.DEFAULT_TEST_DIRECTORY + "/TestPhysicalPlanner";
   private static TajoTestingCluster util;
@@ -68,14 +62,15 @@ public class TestSortExec {
   private static Path tablePath;
   private static TableMeta employeeMeta;
   private static QueryContext queryContext;
+  private static TableDesc desc;
 
   private static Random rnd = new Random(System.currentTimeMillis());
 
-  @BeforeClass
-  public static void setUp() throws Exception {
+  @Before
+  public void setup() throws Exception {
     conf = new TajoConf();
     conf.setBoolVar(TajoConf.ConfVars.$TEST_MODE, true);
-    conf.setIntVar(ConfVars.$SORT_LIST_SIZE, 100);
+    conf.setIntVar(ConfVars.$SORT_HASH_TABLE_SIZE, 100);
     util = TpchTestBase.getInstance().getTestingCluster();
     catalog = util.getMaster().getCatalog();
     workDir = CommonTestingUtil.getTestDir(TEST_PATH);
@@ -95,7 +90,7 @@ public class TestSortExec {
         .getAppender(employeeMeta, schema, tablePath);
     appender.init();
     VTuple tuple = new VTuple(schema.size());
-    for (int i = 0; i < 100; i++) {
+    for (int i = 0; i < 10; i++) {
       tuple.put(new Datum[] {
           DatumFactory.createInt4(rnd.nextInt(5)),
           DatumFactory.createInt4(rnd.nextInt(10)),
@@ -105,7 +100,7 @@ public class TestSortExec {
     appender.flush();
     appender.close();
 
-    TableDesc desc = new TableDesc(
+    desc = new TableDesc(
         CatalogUtil.buildFQName(TajoConstants.DEFAULT_DATABASE_NAME, "employee"), schema, employeeMeta,
         tablePath.toUri());
     catalog.createTable(desc);
@@ -116,66 +111,51 @@ public class TestSortExec {
     optimizer = new LogicalOptimizer(conf, catalog);
   }
 
-  public static String[] QUERIES = {
-      "select managerId, empId, deptName from employee order by managerId, empId desc" };
-
   @Test
-  public final void testNext() throws IOException, TajoException {
+  public void testCreateHistogram() throws IOException {
     FileFragment[] frags = FileTablespace.splitNG(conf, "default.employee", employeeMeta, tablePath, Integer.MAX_VALUE);
-    Path workDir = CommonTestingUtil.getTestDir(TajoTestingCluster.DEFAULT_TEST_DIRECTORY + "/TestSortExec");
     TaskAttemptContext ctx = new TaskAttemptContext(queryContext,
         LocalTajoTestingUtility
-        .newTaskAttemptId(), new FileFragment[] { frags[0] }, workDir);
+            .newTaskAttemptId(), new FileFragment[] { frags[0] }, workDir);
     ctx.setEnforcer(new Enforcer());
-    Expr context = analyzer.parse(QUERIES[0]);
-    LogicalPlan plan = planner.createPlan(LocalTajoTestingUtility.createDummyContext(conf), context);
-    LogicalNode rootNode = optimizer.optimize(plan);
+    DataChannel channel = new DataChannel(null, null, ShuffleType.RANGE_SHUFFLE);
+    channel.setSchema(desc.getSchema());
+    channel.setShuffleKeys(desc.getSchema().toArray());
+    channel.setShuffleOutputNum(3);
+    channel.setDataFormat(BuiltinStorages.RAW);
+    ctx.setDataChannel(channel);
 
-    PhysicalPlanner phyPlanner = new PhysicalPlannerImpl(conf);
-    PhysicalExec exec = phyPlanner.createPlan(ctx, rootNode);
+    SortSpec[] sortSpecs = new SortSpec[3];
+    sortSpecs[0] = new SortSpec(desc.getSchema().getColumn(0));
+    sortSpecs[1] = new SortSpec(desc.getSchema().getColumn(1));
+    sortSpecs[2] = new SortSpec(desc.getSchema().getColumn(2));
 
-    Tuple tuple;
-    Datum preVal = null;
-    Datum curVal;
+    ScanNode scanNode = new ScanNode(0);
+    scanNode.init(desc);
+    scanNode.setInSchema(desc.getSchema());
+    scanNode.setOutSchema(desc.getSchema());
+
+    SortNode sortNode = new SortNode(1);
+    sortNode.setSortSpecs(sortSpecs);
+    sortNode.setInSchema(desc.getSchema());
+    sortNode.setOutSchema(desc.getSchema());
+    sortNode.setChild(scanNode);
+
+//    ShuffleFileWriteNode shuffleFileWriteNode = new ShuffleFileWriteNode(2);
+//    shuffleFileWriteNode.setDataFormat(BuiltinStorages.TEXT);
+//    shuffleFileWriteNode.setShuffle(ShuffleType.RANGE_SHUFFLE,
+//        desc.getSchema().toArray(), 2);
+//    shuffleFileWriteNode.setInSchema(desc.getSchema());
+//    shuffleFileWriteNode.setChild(sortNode);
+
+    PhysicalPlanner planner = new PhysicalPlannerImpl(conf);
+    PhysicalExec exec = planner.createPlan(ctx, sortNode);
     exec.init();
-    while ((tuple = exec.next()) != null) {
-      curVal = tuple.asDatum(0);
-      if (preVal != null) {
-        assertTrue(preVal.lessThanEqual(curVal).asBool());
-      }
+    while (exec.next() != null) {
 
-      preVal = curVal;
     }
     exec.close();
-  }
+    FreqHistogram histogram = ctx.getFreqHistogram();
 
-  @Test
-  /**
-   * TODO - Now, in FSM branch, TestUniformRangePartition is ported to Java.
-   * So, this test is located in here.
-   * Later it should be moved TestUniformPartitions.
-   */
-  public void testTAJO_946() {
-    Schema schema = new Schema();
-    schema.addColumn("l_orderkey", Type.INT8);
-    SortSpec [] sortSpecs = PlannerUtil.schemaToSortSpecs(schema);
-
-    VTuple s = new VTuple(1);
-    s.put(0, DatumFactory.createInt8(0));
-    VTuple e = new VTuple(1);
-    e.put(0, DatumFactory.createInt8(6000000000l));
-    TupleRange expected = new TupleRange(s, e, new BaseTupleComparator(schema, sortSpecs));
-    RangePartitionAlgorithm partitioner
-        = new UniformRangePartition(expected, sortSpecs, true);
-    TupleRange [] ranges = partitioner.partition(967);
-
-    TupleRange prev = null;
-    for (TupleRange r : ranges) {
-      if (prev == null) {
-        prev = r;
-      } else {
-        assertTrue(prev.compareTo(r) < 0);
-      }
-    }
   }
 }
