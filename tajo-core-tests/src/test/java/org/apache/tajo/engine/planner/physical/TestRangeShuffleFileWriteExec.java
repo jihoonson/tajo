@@ -70,7 +70,7 @@ public class TestRangeShuffleFileWriteExec {
   public void setup() throws Exception {
     conf = new TajoConf();
     conf.setBoolVar(TajoConf.ConfVars.$TEST_MODE, true);
-    conf.setIntVar(ConfVars.$SORT_HASH_TABLE_SIZE, 100);
+    conf.setIntVar(ConfVars.$SORT_LIST_SIZE, 100);
     util = TpchTestBase.getInstance().getTestingCluster();
     catalog = util.getMaster().getCatalog();
     workDir = CommonTestingUtil.getTestDir(TEST_PATH);

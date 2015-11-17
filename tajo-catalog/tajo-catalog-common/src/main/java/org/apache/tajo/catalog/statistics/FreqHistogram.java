@@ -238,7 +238,17 @@ public class FreqHistogram extends Histogram<TupleRange, Bucket>
         for (int i = 0; i < bucketOrder.length; i++) {
           Tuple start = tuples[i];
           Tuple end = tuples[i + 1];
-          Bucket subBucket = HistogramUtil.getSubBucket(this, analyzedSpecs, bucketOrder[i], start, end);
+          Bucket subBucket;
+          if (i == 1) {
+            // Overlapped bucket
+            Bucket smallSubBucket = HistogramUtil.getSubBucket(this, analyzedSpecs, smallStartBucket, start, end);
+            Bucket largetSubBucket = HistogramUtil.getSubBucket(this, analyzedSpecs, largeStartBucket, start, end);
+            assert smallSubBucket.getKey().equals(largetSubBucket.getKey());
+            smallSubBucket.incCount(largetSubBucket.getCount());
+            subBucket = smallSubBucket;
+          } else {
+            subBucket = HistogramUtil.getSubBucket(this, analyzedSpecs, bucketOrder[i], start, end);
+          }
           this.buckets.put(subBucket.key, subBucket);
         }
       }

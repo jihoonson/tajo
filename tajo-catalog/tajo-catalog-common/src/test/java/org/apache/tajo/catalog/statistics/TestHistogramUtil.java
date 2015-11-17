@@ -87,10 +87,10 @@ public class TestHistogramUtil {
     // Data generation
     BigDecimal[] min = new BigDecimal[] {BigDecimal.valueOf(0.1), BigDecimal.valueOf(2),
         HistogramUtil.unicodeCharsToBigDecimal(new char[] {'가'}), BigDecimal.valueOf(10000)};
-    BigDecimal[] max = new BigDecimal[] {BigDecimal.valueOf(5), BigDecimal.valueOf(5),
-        HistogramUtil.unicodeCharsToBigDecimal(new char[] {5}), BigDecimal.valueOf(5)};
+    BigDecimal[] max = new BigDecimal[] {BigDecimal.valueOf(30), BigDecimal.valueOf(30),
+        HistogramUtil.unicodeCharsToBigDecimal(new char[] {30}), BigDecimal.valueOf(30)};
 
-    int rowNum = 100;
+    int rowNum = 10000;
     List<Tuple> tuples = new ArrayList<>(rowNum);
     Random random = new Random();
     // TODO: add null datum
