@@ -21,15 +21,13 @@ package org.apache.tajo.engine.planner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.sun.tools.javac.util.Convert;
-import org.apache.tajo.catalog.Column;
-import org.apache.tajo.catalog.SortSpec;
+import org.apache.tajo.catalog.*;
 import org.apache.tajo.common.TajoDataTypes;
 import org.apache.tajo.datum.DatumFactory;
 import org.apache.tajo.datum.NullDatum;
 import org.apache.tajo.datum.TextDatum;
 import org.apache.tajo.engine.exception.RangeOverflowException;
 import org.apache.tajo.storage.Tuple;
-import org.apache.tajo.storage.TupleRange;
 import org.apache.tajo.storage.VTuple;
 import org.apache.tajo.util.Bytes;
 import org.apache.tajo.util.BytesUtils;
@@ -80,8 +78,7 @@ public class UniformRangePartition extends RangePartitionAlgorithm {
     normalize(sortSpecs, this.mergedRange);
 
     for (int i = 0; i < sortSpecs.length; i++) {
-      colCards[i] =  computeCardinality(sortSpecs[i].getSortKey().getDataType(), entireRange, i,
-          inclusive, sortSpecs[i].isAscending());
+      colCards[i] =  TupleRangeUtil.computeCardinality(sortSpecs[i], entireRange, i, inclusive);
     }
 
     cardForEachDigit = new BigInteger[colCards.length];
@@ -96,6 +93,15 @@ public class UniformRangePartition extends RangePartitionAlgorithm {
 
   public UniformRangePartition(TupleRange range, SortSpec [] sortSpecs) {
     this(range, sortSpecs, true);
+  }
+
+  public static Schema sortSpecsToSchema(SortSpec[] sortSpecs) {
+    Schema schema = new Schema();
+    for (SortSpec spec : sortSpecs) {
+      schema.addColumn(spec.getSortKey());
+    }
+
+    return schema;
   }
 
   @Override
@@ -131,12 +137,13 @@ public class UniformRangePartition extends RangePartitionAlgorithm {
     Tuple last = mergedRange.getStart();
     TupleRange tupleRange;
 
+    TupleComparator comparator = new BaseTupleComparator(sortSpecsToSchema(sortSpecs), sortSpecs);
     while(reminder.compareTo(BigInteger.ZERO) > 0) {
       if (reminder.compareTo(term) <= 0) { // final one is inclusive
-        tupleRange = new TupleRange(sortSpecs, last, mergedRange.getEnd());
+        tupleRange = new TupleRange(last, mergedRange.getEnd(), comparator);
       } else {
         Tuple next = increment(last, term, variableId);
-        tupleRange = new TupleRange(sortSpecs, last, next);
+        tupleRange = new TupleRange(last, next, comparator);
       }
 
       ranges.add(tupleRange);
@@ -315,8 +322,8 @@ public class UniformRangePartition extends RangePartitionAlgorithm {
 
           Preconditions.checkState(lastChars.length == endChars.length);
 
-          BigInteger lastBi = charsToBigInteger(lastChars);
-          BigInteger endBi = charsToBigInteger(endChars);
+          BigInteger lastBi = TupleRangeUtil.charsToBigInteger(lastChars);
+          BigInteger endBi = TupleRangeUtil.charsToBigInteger(endChars);
 
           if (sortSpecs[colId].isAscending()) {
             candidate = incDecimal.add(new BigDecimal(lastBi));
@@ -651,13 +658,13 @@ public class UniformRangePartition extends RangePartitionAlgorithm {
           break;
         case TIMESTAMP:
           if (overflowFlag[i]) {
-            end.put(i, DatumFactory.createTimestmpDatumWithJavaMillis(
+            end.put(i, DatumFactory.createTimestampDatumWithJavaMillis(
                 mergedRange.getStart().getInt8(i) + incs[i].longValue()));
           } else {
             if (sortSpecs[i].isAscending()) {
-              end.put(i, DatumFactory.createTimestmpDatumWithJavaMillis(last.getInt8(i) + incs[i].longValue()));
+              end.put(i, DatumFactory.createTimestampDatumWithJavaMillis(last.getInt8(i) + incs[i].longValue()));
             } else {
-              end.put(i, DatumFactory.createTimestmpDatumWithJavaMillis(last.getInt8(i) - incs[i].longValue()));
+              end.put(i, DatumFactory.createTimestampDatumWithJavaMillis(last.getInt8(i) - incs[i].longValue()));
             }
           }
           break;
@@ -693,20 +700,5 @@ public class UniformRangePartition extends RangePartitionAlgorithm {
     }
 
     return end;
-  }
-
-  public static BigInteger charsToBigInteger(char [] chars) {
-    BigInteger digitBase;
-    BigInteger sum = BigInteger.ZERO;
-    for (int i = chars.length - 1; i >= 0; i--) {
-      BigInteger charVal = BigInteger.valueOf(chars[(chars.length - 1) - i]);
-      if (i > 0) {
-        digitBase = charVal.multiply(BigInteger.valueOf(TextDatum.UNICODE_CHAR_BITS_NUM).pow(i));
-        sum = sum.add(digitBase);
-      } else {
-        sum = sum.add(charVal);
-      }
-    }
-    return sum;
   }
 }

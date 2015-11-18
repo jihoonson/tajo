@@ -20,10 +20,7 @@ package org.apache.tajo.storage;
 
 import com.google.gson.annotations.Expose;
 import org.apache.tajo.common.TajoDataTypes;
-import org.apache.tajo.datum.Datum;
-import org.apache.tajo.datum.Inet4Datum;
-import org.apache.tajo.datum.IntervalDatum;
-import org.apache.tajo.datum.ProtobufDatum;
+import org.apache.tajo.datum.*;
 import org.apache.tajo.exception.NotImplementedException;
 import org.apache.tajo.exception.TajoRuntimeException;
 import org.apache.tajo.util.datetime.TimeMeta;
@@ -65,6 +62,11 @@ public class VTuple implements Tuple, Cloneable {
   @Override
   public boolean isBlankOrNull(int fieldid) {
     return values[fieldid] == null || values[fieldid].isNull();
+  }
+
+  @Override
+  public boolean isInfinite(int fieldId) {
+    return values[fieldId] instanceof PositiveInfiniteDatum || values[fieldId] instanceof NegativeInfiniteDatum;
   }
 
   @Override

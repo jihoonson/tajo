@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -16,34 +16,24 @@
  * limitations under the License.
  */
 
-package org.apache.tajo.tuple.memory;
+package org.apache.tajo.catalog;
 
-import org.apache.tajo.common.TajoDataTypes.DataType;
+import org.apache.tajo.common.TajoDataTypes.Type;
+import org.apache.tajo.datum.DatumFactory;
 import org.apache.tajo.storage.Tuple;
+import org.apache.tajo.storage.VTuple;
 
-public abstract class ZeroCopyTuple implements Tuple {
+public class TestTupleRangeUtil {
 
-  protected int relativePos;
+  public void testComputeCardinality() {
+    Tuple start = new VTuple(13);
+    Tuple end = new VTuple(13);
 
-  public abstract void set(MemoryBlock memoryBlock, int relativePos, DataType[] types);
+    SortSpec[] sortSpecs = new SortSpec[13];
+    sortSpecs[0] = new SortSpec(new Column("col1", Type.BOOLEAN));
+    sortSpecs[1] = new SortSpec(new Column("col2", Type.CHAR), false, false);
+//    sortSpecs[2] = new SortSpec(new Column("col3", Type.BIT), )
 
-  void set(int relativePos) {
-    this.relativePos = relativePos;
-  }
-
-  public int getRelativePos() {
-    return relativePos;
-  }
-
-  public abstract int getLength();
-
-  @Override
-  public boolean isInfinite(int fieldId) {
-    return false;
-  }
-
-  @Override
-  public Tuple clone() throws CloneNotSupportedException {
-    return (Tuple) super.clone();
+    start.put(0, DatumFactory.createBool(false));
   }
 }

@@ -28,12 +28,13 @@ import org.apache.tajo.ExecutionBlockId;
 import org.apache.tajo.SessionVars;
 import org.apache.tajo.algebra.JoinType;
 import org.apache.tajo.catalog.*;
-import org.apache.tajo.catalog.statistics.StatisticsUtil;
-import org.apache.tajo.catalog.statistics.TableStats;
+import org.apache.tajo.catalog.statistics.*;
+import org.apache.tajo.catalog.statistics.FreqHistogram.Bucket;
 import org.apache.tajo.conf.TajoConf.ConfVars;
+import org.apache.tajo.datum.Datum;
+import org.apache.tajo.datum.NegativeInfiniteDatum;
+import org.apache.tajo.datum.PositiveInfiniteDatum;
 import org.apache.tajo.engine.planner.PhysicalPlannerImpl;
-import org.apache.tajo.engine.planner.RangePartitionAlgorithm;
-import org.apache.tajo.engine.planner.UniformRangePartition;
 import org.apache.tajo.engine.planner.enforce.Enforcer;
 import org.apache.tajo.engine.planner.global.DataChannel;
 import org.apache.tajo.engine.planner.global.ExecutionBlock;
@@ -49,7 +50,10 @@ import org.apache.tajo.plan.serder.PlanProto.DistinctGroupbyEnforcer.MultipleAgg
 import org.apache.tajo.plan.serder.PlanProto.EnforceProperty;
 import org.apache.tajo.plan.util.PlannerUtil;
 import org.apache.tajo.querymaster.Task.IntermediateEntry;
-import org.apache.tajo.storage.*;
+import org.apache.tajo.storage.FileTablespace;
+import org.apache.tajo.storage.RowStoreUtil;
+import org.apache.tajo.storage.Tablespace;
+import org.apache.tajo.storage.TablespaceManager;
 import org.apache.tajo.storage.fragment.FileFragment;
 import org.apache.tajo.storage.fragment.Fragment;
 import org.apache.tajo.unit.StorageUnit;
@@ -60,7 +64,8 @@ import org.apache.tajo.worker.FetchImpl;
 
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
-import java.math.BigInteger;
+import java.math.BigDecimal;
+import java.math.MathContext;
 import java.net.URI;
 import java.util.*;
 import java.util.Map.Entry;
@@ -622,6 +627,7 @@ public class Repartitioner {
     ScanNode scan = execBlock.getScanNodes()[0];
 
     ExecutionBlock sampleChildBlock = masterPlan.getChild(stage.getId(), 0);
+
     SortNode sortNode = PlannerUtil.findTopNode(sampleChildBlock.getPlan(), NodeType.SORT);
     SortSpec [] sortSpecs = sortNode.getSortKeys();
     Schema sortSchema = new Schema(channel.getShuffleKeys());
@@ -636,9 +642,11 @@ public class Repartitioner {
     if (totalStat.getNumBytes() == 0 && totalStat.getColumnStats().size() == 0) {
       return;
     }
-    TupleRange mergedRange = TupleUtil.columnStatToRange(sortSpecs, sortSchema, totalStat.getColumnStats(), false);
 
+//    TupleRange mergedRange = TupleUtil.columnStatToRange(sortSpecs, sortSchema, totalStat.getColumnStats(), false);
+    List<ColumnStats> sortKeyStats = TupleUtil.extractSortColumnStats(sortSpecs, totalStat.getColumnStats(), false);
     if (sortNode.getSortPurpose() == SortPurpose.STORAGE_SPECIFIED) {
+
       String dataFormat = PlannerUtil.getDataFormat(masterPlan.getLogicalPlan());
       CatalogService catalog = stage.getContext().getQueryMasterContext().getWorkerContext().getCatalog();
       LogicalRootNode rootNode = masterPlan.getLogicalPlan().getRootBlock().getRoot();
@@ -656,44 +664,147 @@ public class Repartitioner {
           tableDesc,
           sortNode.getInSchema(),
           sortSpecs,
-          mergedRange);
+          sortKeyStats);
 
       determinedTaskNum = ranges.length;
     } else {
-      RangePartitionAlgorithm partitioner = new UniformRangePartition(mergedRange, sortSpecs);
-      BigInteger card = partitioner.getTotalCardinality();
+      // TODO: create partitions by merging the ranges of the histogram
+      FreqHistogram histogram = schedulerContext.getMasterContext().getQuery().getStage(sampleChildBlock.getId()).getHistogramForRangeShuffle();
+      AnalyzedSortSpec[] analyzedSpecs = HistogramUtil.analyzeHistogram(histogram, sortKeyStats);
+      List<Bucket> buckets = histogram.getSortedBuckets();
 
+      // Compute the total cardinality of sort keys.
+      BigDecimal totalCard = histogram.getAllBuckets().stream().map(
+          bucket -> BigDecimal.valueOf(bucket.getCount())
+      ).reduce(BigDecimal.ZERO, (a, b) -> a.add(b));
+//      // Total range is the pair of the first and last tuples.
+//      TupleRange totalRange = new TupleRange(buckets.get(0).getStartKey(), buckets.get(buckets.size()-1).getEndKey(), buckets.get(0).getKey().getInterval(), histogram.getComparator());
+//
       // if the number of the range cardinality is less than the desired number of tasks,
       // we set the the number of tasks to the number of range cardinality.
-      if (card.compareTo(BigInteger.valueOf(maxNum)) < 0) {
-        LOG.info(stage.getId() + ", The range cardinality (" + card
+      if (totalCard.compareTo(BigDecimal.valueOf(maxNum)) < 0) {
+        LOG.info(stage.getId() + ", The range cardinality (" + totalCard
             + ") is less then the desired number of tasks (" + maxNum + ")");
-        determinedTaskNum = card.intValue();
+        determinedTaskNum = totalCard.intValue();
       } else {
         determinedTaskNum = maxNum;
       }
 
-      LOG.info(stage.getId() + ", Try to divide " + mergedRange + " into " + determinedTaskNum +
+      LOG.info(stage.getId() + ", Try to divide " + totalCard + " values into " + determinedTaskNum +
           " sub ranges (total units: " + determinedTaskNum + ")");
-      ranges = partitioner.partition(determinedTaskNum);
-      if (ranges == null) {
-        throw new NullPointerException("ranges is null on " + stage.getId() + " stage.");
-      }
 
-      if (ranges.length == 0) {
-        LOG.warn(stage.getId() + " no range infos.");
-      }
+      if (determinedTaskNum < buckets.size()) {
+        // Merge ranges of the histogram until the number of ranges becomes determinedTaskNum.
+        while (buckets.size() > determinedTaskNum) {
+          buckets.get(buckets.size()-2).merge(buckets.get(buckets.size()-1));
+          buckets.remove(buckets.size()-1);
+        }
 
-      TupleUtil.setMaxRangeIfNull(sortSpecs, sortSchema, totalStat.getColumnStats(), ranges);
-      if (LOG.isDebugEnabled()) {
-        if (ranges != null) {
-          for (TupleRange eachRange : ranges) {
-            LOG.debug(stage.getId() + " range: " + eachRange.getStart() + " ~ " + eachRange.getEnd());
+        // The merged histogram contains the range partitions (buckets).
+        histogram = new FreqHistogram(histogram.getSortSpecs(), buckets);
+
+      } else if (determinedTaskNum > buckets.size()) {
+        while (determinedTaskNum > buckets.size()) {
+          Bucket maxBucket = null;
+          for (Bucket eachBucket : buckets) {
+            maxBucket = maxBucket == null || maxBucket.getCount() < eachBucket.getCount() ?
+                eachBucket : maxBucket;
           }
+          if (maxBucket != null && maxBucket.getCount() > 1) {
+            buckets.addAll(HistogramUtil.splitBucket(histogram, analyzedSpecs, maxBucket, 2));
+          } else {
+            determinedTaskNum = buckets.size();
+            LOG.info("Task number is adjusted to " + determinedTaskNum + " due to the number of buckets.");
+            break;
+          }
+        }
+        histogram = new FreqHistogram(histogram.getSortSpecs(), buckets);
+      }
+
+      // The average cardinality of the original histogram must be same with normalized one.
+      BigDecimal avgCard = totalCard.divide(BigDecimal.valueOf(histogram.size()), MathContext.DECIMAL128);
+
+      // The merged histogram can contain partitions of various lengths.
+      // Thus, they need to be refined to be equal in length.
+      HistogramUtil.refineToEquiDepth(histogram, avgCard, analyzedSpecs);
+      buckets = histogram.getSortedBuckets();
+
+
+//
+//      // Normalize ranges of the histogram
+//      FreqHistogram normalizedHistogram = HistogramUtil.normalize(mergedHistogram, totalRange, totalCard);
+//
+//
+//      // Restore ranges from the normalized one
+//      FreqHistogram denormalized = HistogramUtil.denormalize(normalizedHistogram, histogram.getKeySchema(),
+//          histogram.getSortSpecs(), sortKeyStats, totalRange);
+//
+//      // create new partitions with the remaining passed ranges
+//      buckets = denormalized.getSortedBuckets();
+
+      // Adjust ranges to be last inclusive
+      ranges = new TupleRange[buckets.size()];
+      for (int i = 0; i < buckets.size(); i++) {
+        ranges[i] = buckets.get(i).getKey();
+        for (int j = 0; j < sortKeyStats.size(); j++) {
+          Datum val = ranges[i].getEnd().asDatum(j);
+          if (val instanceof PositiveInfiniteDatum) {
+            ranges[i].getEnd().put(j, HistogramUtil.getLastValue(sortSpecs, sortKeyStats, j));
+//          } else {
+//            ranges[i].setEnd(HistogramUtil.increment(sortSpecs, sortKeyStats, ranges[i].getEnd(), ranges[i].getInterval(), -2));
+          } else if (val instanceof NegativeInfiniteDatum) {
+            ranges[i].getEnd().put(j, HistogramUtil.getFirstValue(sortSpecs, sortKeyStats, j));
+          }
+
+//        for (int j = 0; j < sortSpecs.length; j++) {
+//          if (!sortSpecs[j].isAscending()) {
+//            Datum tmp;
+//            Tuple start = ranges[i].getStart();
+//            Tuple end = ranges[i].getEnd();
+//            tmp = end.asDatum(j);
+//            end.put(j, start.asDatum(j));
+//            start.put(j, tmp);
+//          }
+//        }
         }
       }
     }
 
+
+//      RangePartitionAlgorithm partitioner = new UniformRangePartition(mergedRange, sortSpecs);
+//      BigInteger card = partitioner.getTotalCardinality();
+//
+//      // if the number of the range cardinality is less than the desired number of tasks,
+//      // we set the the number of tasks to the number of range cardinality.
+//      if (card.compareTo(BigInteger.valueOf(maxNum)) < 0) {
+//        LOG.info(stage.getId() + ", The range cardinality (" + card
+//            + ") is less then the desired number of tasks (" + maxNum + ")");
+//        determinedTaskNum = card.intValue();
+//      } else {
+//        determinedTaskNum = maxNum;
+//      }
+//
+//      LOG.info(stage.getId() + ", Try to divide " + mergedRange + " into " + determinedTaskNum +
+//          " sub ranges (total units: " + determinedTaskNum + ")");
+//      ranges = partitioner.partition(determinedTaskNum);
+//      if (ranges == null) {
+//        throw new NullPointerException("ranges is null on " + stage.getId() + " stage.");
+//      }
+//
+//      if (ranges.length == 0) {
+//        LOG.warn(stage.getId() + " no range infos.");
+//      }
+//
+//      TupleUtil.setMaxRangeIfNull(sortSpecs, sortSchema, totalStat.getColumnStats(), ranges);
+//      if (LOG.isDebugEnabled()) {
+//        if (ranges != null) {
+//          for (TupleRange eachRange : ranges) {
+//            LOG.debug(stage.getId() + " range: " + eachRange.getStart() + " ~ " + eachRange.getEnd());
+//          }
+//        }
+//      }
+//    }
+//
     // TODO - We should remove dummy fragment.
     FileFragment dummyFragment = new FileFragment(scan.getTableName(), new Path("/dummy"), 0, 0,
         new String[]{UNKNOWN_HOST});
@@ -712,18 +823,18 @@ public class Repartitioner {
       }
     }
 
-    SortedMap<TupleRange, Collection<FetchImpl>> map;
-    map = new TreeMap<>();
+    SortedMap<TupleRange, Collection<FetchImpl>> map = new TreeMap<>();
 
     Set<FetchImpl> fetchSet;
     try {
       RowStoreUtil.RowStoreEncoder encoder = RowStoreUtil.createEncoder(sortSchema);
       for (int i = 0; i < ranges.length; i++) {
         fetchSet = new HashSet<>();
+        // TODO: create a fetch only when the host has data included in the partition
         for (FetchImpl fetch: fetches) {
           String rangeParam =
               TupleUtil.rangeToQuery(ranges[i], i == (ranges.length - 1) , encoder);
-          FetchImpl copy = null;
+          FetchImpl copy;
           try {
             copy = fetch.clone();
           } catch (CloneNotSupportedException e) {
@@ -1208,13 +1319,20 @@ public class Repartitioner {
         keys = channel.getShuffleKeys();
       }
     } else if (channel.getShuffleType() == RANGE_SHUFFLE) {
-      if (execBlock.getPlan().getType() == NodeType.SORT) {
-        SortNode sort = (SortNode) execBlock.getPlan();
+      SortSpec[] sortSpecs = null;
+      SortNode sort = PlannerUtil.findTopNode(execBlock.getPlan(), NodeType.SORT);
+
+      if (sort != null) {
         keys = new Column[sort.getSortKeys().length];
         for (int i = 0; i < keys.length; i++) {
           keys[i] = sort.getSortKeys()[i].getSortKey();
         }
+        sortSpecs = sort.getSortKeys();
       }
+      if (sortSpecs == null) {
+        throw new TajoInternalError("Cannot find sort specification for range shuffle");
+      }
+      stage.initStatCollect(new Schema(channel.getShuffleKeys()), sortSpecs);
     }
     if (keys != null) {
       if (keys.length == 0) {

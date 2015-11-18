@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -16,34 +16,26 @@
  * limitations under the License.
  */
 
-package org.apache.tajo.tuple.memory;
+package org.apache.tajo.catalog.statistics;
 
-import org.apache.tajo.common.TajoDataTypes.DataType;
-import org.apache.tajo.storage.Tuple;
+/**
+ *
+ * @param <KEY>
+ * @param <BUCKET>
+ */
+public abstract class Histogram<KEY, BUCKET> {
 
-public abstract class ZeroCopyTuple implements Tuple {
+  /**
+   *
+   * @param key
+   * @param change
+   */
+  public abstract void updateBucket(KEY key, double change);
 
-  protected int relativePos;
-
-  public abstract void set(MemoryBlock memoryBlock, int relativePos, DataType[] types);
-
-  void set(int relativePos) {
-    this.relativePos = relativePos;
-  }
-
-  public int getRelativePos() {
-    return relativePos;
-  }
-
-  public abstract int getLength();
-
-  @Override
-  public boolean isInfinite(int fieldId) {
-    return false;
-  }
-
-  @Override
-  public Tuple clone() throws CloneNotSupportedException {
-    return (Tuple) super.clone();
-  }
+  /**
+   *
+   * @param key
+   * @return
+   */
+  public abstract BUCKET getBucket(KEY key);
 }

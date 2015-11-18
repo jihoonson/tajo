@@ -16,34 +16,26 @@
  * limitations under the License.
  */
 
-package org.apache.tajo.storage;
+package org.apache.tajo.catalog;
 
 import com.google.common.base.Objects;
-import org.apache.tajo.catalog.Schema;
-import org.apache.tajo.catalog.SortSpec;
+import org.apache.tajo.storage.Tuple;
+
+import java.util.Comparator;
 
 /**
  * It represents a pair of start and end tuples.
  */
 public class TupleRange implements Comparable<TupleRange>, Cloneable {
   private Tuple start;
-  private Tuple end;
-  private final TupleComparator comp;
+  private Tuple end; // usually exclusive
+  private final Comparator<Tuple> comp;
 
-  public TupleRange(final SortSpec[] sortSpecs, final Tuple start, final Tuple end) {
-    this.comp = new BaseTupleComparator(sortSpecsToSchema(sortSpecs), sortSpecs);
+  public TupleRange(final Tuple start, final Tuple end, final Comparator<Tuple> comp) {
+    this.comp = comp;
     // if there is only one value, start == end
     this.start = start;
     this.end = end;
-  }
-
-  public static Schema sortSpecsToSchema(SortSpec[] sortSpecs) {
-    Schema schema = new Schema();
-    for (SortSpec spec : sortSpecs) {
-      schema.addColumn(spec.getSortKey());
-    }
-
-    return schema;
   }
 
   public void setStart(Tuple tuple) {
@@ -62,8 +54,17 @@ public class TupleRange implements Comparable<TupleRange>, Cloneable {
     return this.end;
   }
 
+  public boolean include(Tuple tuple) {
+    if (start.equals(end)) {
+      return start.equals(tuple);
+    } else {
+      return comp.compare(start, tuple) <= 0
+          && comp.compare(end, tuple) > 0;
+    }
+  }
+
   public String toString() {
-    return "[" + this.start + ", " + this.end + ")";
+    return "[" + this.start + ", " + this.end + "]";
   }
 
   @Override
@@ -75,7 +76,8 @@ public class TupleRange implements Comparable<TupleRange>, Cloneable {
   public boolean equals(Object obj) {
     if (obj instanceof TupleRange) {
       TupleRange other = (TupleRange) obj;
-      return this.start.equals(other.start) && this.end.equals(other.end);
+      return this.start.equals(other.start) &&
+          this.end.equals(other.end);
     } else {
       return false;
     }
@@ -92,6 +94,7 @@ public class TupleRange implements Comparable<TupleRange>, Cloneable {
     }
   }
 
+  @Override
   public TupleRange clone() throws CloneNotSupportedException {
     TupleRange newRange = (TupleRange) super.clone();
     newRange.setStart(start.clone());

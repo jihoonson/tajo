@@ -27,6 +27,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.tajo.ExecutionBlockId;
 import org.apache.tajo.OverridableConf;
 import org.apache.tajo.catalog.*;
+import org.apache.tajo.catalog.statistics.ColumnStats;
 import org.apache.tajo.exception.NotImplementedException;
 import org.apache.tajo.exception.TajoInternalError;
 import org.apache.tajo.exception.TajoRuntimeException;
@@ -34,7 +35,10 @@ import org.apache.tajo.exception.UnsupportedException;
 import org.apache.tajo.plan.LogicalPlan;
 import org.apache.tajo.plan.expr.EvalNode;
 import org.apache.tajo.plan.logical.LogicalNode;
-import org.apache.tajo.storage.*;
+import org.apache.tajo.storage.FormatProperty;
+import org.apache.tajo.storage.Scanner;
+import org.apache.tajo.storage.StorageProperty;
+import org.apache.tajo.storage.Tablespace;
 import org.apache.tajo.storage.fragment.Fragment;
 import org.apache.tajo.util.UriUtil;
 
@@ -151,7 +155,7 @@ public abstract class JdbcTablespace extends Tablespace {
                                           TableDesc tableDesc,
                                           Schema inputSchema,
                                           SortSpec[] sortSpecs,
-                                          TupleRange dataRange) throws IOException {
+                                          List<ColumnStats> columnStatsList) throws IOException {
     throw new TajoRuntimeException(new NotImplementedException());
   }
 

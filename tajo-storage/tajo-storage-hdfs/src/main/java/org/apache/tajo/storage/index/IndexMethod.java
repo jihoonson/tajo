@@ -20,7 +20,7 @@ package org.apache.tajo.storage.index;
 
 import org.apache.hadoop.fs.Path;
 import org.apache.tajo.catalog.Schema;
-import org.apache.tajo.storage.TupleComparator;
+import org.apache.tajo.catalog.TupleComparator;
 
 import java.io.IOException;
 

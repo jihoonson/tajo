@@ -28,9 +28,9 @@ import org.apache.tajo.plan.expr.WindowFunctionEval;
 import org.apache.tajo.plan.function.FunctionContext;
 import org.apache.tajo.plan.logical.WindowAggNode;
 import org.apache.tajo.plan.logical.WindowSpec;
-import org.apache.tajo.storage.BaseTupleComparator;
+import org.apache.tajo.catalog.BaseTupleComparator;
 import org.apache.tajo.storage.Tuple;
-import org.apache.tajo.storage.TupleComparator;
+import org.apache.tajo.catalog.TupleComparator;
 import org.apache.tajo.storage.VTuple;
 import org.apache.tajo.worker.TaskAttemptContext;
 

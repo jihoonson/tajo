@@ -23,9 +23,7 @@ package org.apache.tajo.storage;
 
 import com.google.common.base.Preconditions;
 import org.apache.tajo.common.TajoDataTypes;
-import org.apache.tajo.datum.Datum;
-import org.apache.tajo.datum.IntervalDatum;
-import org.apache.tajo.datum.ProtobufDatum;
+import org.apache.tajo.datum.*;
 import org.apache.tajo.exception.TajoRuntimeException;
 import org.apache.tajo.exception.UnsupportedException;
 import org.apache.tajo.util.datetime.TimeMeta;
@@ -93,6 +91,12 @@ public class FrameTuple implements Tuple, Cloneable {
   public boolean isBlankOrNull(int fieldid) {
     Datum datum = asDatum(fieldid);
     return datum == null || datum.isNull();
+  }
+
+  @Override
+  public boolean isInfinite(int fieldId) {
+    Datum datum = asDatum(fieldId);
+    return datum instanceof PositiveInfiniteDatum || datum instanceof NegativeInfiniteDatum;
   }
 
   @Override

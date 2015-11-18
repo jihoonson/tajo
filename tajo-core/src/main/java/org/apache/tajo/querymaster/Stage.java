@@ -28,20 +28,18 @@ import org.apache.hadoop.yarn.event.Event;
 import org.apache.hadoop.yarn.event.EventHandler;
 import org.apache.hadoop.yarn.state.*;
 import org.apache.tajo.*;
-import org.apache.tajo.catalog.CatalogUtil;
-import org.apache.tajo.catalog.Schema;
-import org.apache.tajo.catalog.TableDesc;
-import org.apache.tajo.catalog.TableMeta;
+import org.apache.tajo.catalog.*;
 import org.apache.tajo.catalog.proto.CatalogProtos.PartitionDescProto;
-import org.apache.tajo.catalog.statistics.ColumnStats;
-import org.apache.tajo.catalog.statistics.StatisticsUtil;
-import org.apache.tajo.catalog.statistics.TableStats;
+import org.apache.tajo.catalog.statistics.*;
+import org.apache.tajo.catalog.statistics.FreqHistogram.Bucket;
 import org.apache.tajo.conf.TajoConf;
 import org.apache.tajo.engine.planner.PhysicalPlannerImpl;
 import org.apache.tajo.engine.planner.enforce.Enforcer;
 import org.apache.tajo.engine.planner.global.DataChannel;
 import org.apache.tajo.engine.planner.global.ExecutionBlock;
 import org.apache.tajo.engine.planner.global.MasterPlan;
+import org.apache.tajo.engine.utils.TupleUtil;
+import org.apache.tajo.exception.ExceptionUtil;
 import org.apache.tajo.exception.TajoException;
 import org.apache.tajo.ipc.TajoWorkerProtocol;
 import org.apache.tajo.master.TaskState;
@@ -107,6 +105,8 @@ public class Stage implements EventHandler<StageEvent> {
   private long finishTime;
   private volatile long lastContactTime;
   private Thread timeoutChecker;
+
+  private FreqHistogram histogramForRangeShuffle;
 
   private final Map<TaskId, Task> tasks = Maps.newConcurrentMap();
   private final Map<Integer, InetSocketAddress> workerMap = Maps.newConcurrentMap();
@@ -709,6 +709,14 @@ public class Stage implements EventHandler<StageEvent> {
     }
   }
 
+  public void initStatCollect(Schema shuffleKeySchema, SortSpec[] sortSpecs) {
+    histogramForRangeShuffle = new FreqHistogram(sortSpecs);
+  }
+
+  public FreqHistogram getHistogramForRangeShuffle() {
+    return histogramForRangeShuffle;
+  }
+
   /**
    * Get the launched worker address
    */
@@ -764,11 +772,31 @@ public class Stage implements EventHandler<StageEvent> {
    * It computes all stats and sets the intermediate result.
    */
   private void finalizeStats() {
-    TableStats[] statsArray;
+//    TableStats[] statsArray;
+//    if (block.isUnionOnly()) {
+//      statsArray = computeStatFromUnionBlock(this);
+//    } else {
+//      statsArray = computeStatFromTasks();
+//    }
+//
+//    DataChannel channel = masterPlan.getOutgoingChannels(getId()).get(0);
+//
+//    // if store plan (i.e., CREATE or INSERT OVERWRITE)
+//    String dataFormat = PlannerUtil.getDataFormat(masterPlan.getLogicalPlan());
+//    if (dataFormat == null) {
+//      // get final output store type (i.e., SELECT)
+//      dataFormat = channel.getDataFormat();
+//    }
+//
+//    schema = channel.getSchema();
+//    meta = CatalogUtil.newTableMeta(dataFormat, new KeyValueSet());
+//    inputStatistics = statsArray[0];
+//    resultStatistics = statsArray[1];
+
     if (block.isUnionOnly()) {
-      statsArray = computeStatFromUnionBlock(this);
-    } else {
-      statsArray = computeStatFromTasks();
+      TableStats[] statsArray = computeStatFromUnionBlock(this);
+      inputStatistics = statsArray[0];
+      resultStatistics = statsArray[1];
     }
 
     DataChannel channel = masterPlan.getOutgoingChannels(getId()).get(0);
@@ -779,11 +807,21 @@ public class Stage implements EventHandler<StageEvent> {
       // get final output store type (i.e., SELECT)
       dataFormat = channel.getDataFormat();
     }
-
     schema = channel.getSchema();
     meta = CatalogUtil.newTableMeta(dataFormat, new KeyValueSet());
-    inputStatistics = statsArray[0];
-    resultStatistics = statsArray[1];
+  }
+
+  private static void updateStats(Stage stage, Task task) {
+    if (stage.inputStatistics == null) {
+      stage.inputStatistics = new TableStats();
+    }
+    if (stage.resultStatistics == null) {
+      stage.resultStatistics = new TableStats();
+    }
+    if (task.getLastAttempt().getInputStats() != null) {
+      StatisticsUtil.aggregateTableStat(stage.inputStatistics, task.getLastAttempt().getInputStats());
+    }
+    StatisticsUtil.aggregateTableStat(stage.resultStatistics, task.getStats());
   }
 
   @Override
@@ -844,40 +882,38 @@ public class Stage implements EventHandler<StageEvent> {
           initTaskScheduler(stage);
           // execute pre-processing asyncronously
           stage.getContext().getQueryMasterContext().getSingleEventExecutor()
-              .submit(new Runnable() {
-                        @Override
-                        public void run() {
-                          try {
-                            schedule(stage);
-                            stage.totalScheduledObjectsCount = stage.getTaskScheduler().remainingScheduledObjectNum();
-                            LOG.info(stage.totalScheduledObjectsCount + " objects are scheduled");
+              .submit(() -> {
+                    try {
+                      schedule(stage);
+                      stage.totalScheduledObjectsCount = stage.getTaskScheduler().remainingScheduledObjectNum();
+                      LOG.info(stage.totalScheduledObjectsCount + " objects are scheduled");
 
-                            if (stage.getTaskScheduler().remainingScheduledObjectNum() == 0) { // if there is no tasks
-                              stage.eventHandler.handle(
-                                  new StageEvent(stage.getId(), StageEventType.SQ_STAGE_COMPLETED));
-                            } else {
-                              if(stage.getSynchronizedState() == StageState.INITED) {
-                                stage.taskScheduler.start();
-                                stage.eventHandler.handle(new StageEvent(stage.getId(), StageEventType.SQ_START));
-                              } else {
+                      if (stage.getTaskScheduler().remainingScheduledObjectNum() == 0) { // if there is no tasks
+                        stage.eventHandler.handle(
+                            new StageEvent(stage.getId(), StageEventType.SQ_STAGE_COMPLETED));
+                      } else {
+                        if(stage.getSynchronizedState() == StageState.INITED) {
+                          stage.taskScheduler.start();
+                          stage.eventHandler.handle(new StageEvent(stage.getId(), StageEventType.SQ_START));
+                        } else {
                                 /* all tasks are killed before stage are inited */
-                                if (stage.getTotalScheduledObjectsCount() == stage.getCompletedTaskCount()) {
-                                  stage.eventHandler.handle(
-                                      new StageEvent(stage.getId(), StageEventType.SQ_STAGE_COMPLETED));
-                                } else {
-                                  stage.eventHandler.handle(
-                                      new StageEvent(stage.getId(), StageEventType.SQ_KILL));
-                                }
-                              }
-                            }
-                          } catch (Throwable e) {
-                            LOG.error("Stage (" + stage.getId() + ") ERROR: ", e);
-                            stage.setFinishTime();
-                            stage.eventHandler.handle(new StageDiagnosticsUpdateEvent(stage.getId(), e.getMessage()));
-                            stage.eventHandler.handle(new StageCompletedEvent(stage.getId(), StageState.ERROR));
+                          if (stage.getTotalScheduledObjectsCount() == stage.getCompletedTaskCount()) {
+                            stage.eventHandler.handle(
+                                new StageEvent(stage.getId(), StageEventType.SQ_STAGE_COMPLETED));
+                          } else {
+                            stage.eventHandler.handle(
+                                new StageEvent(stage.getId(), StageEventType.SQ_KILL));
                           }
                         }
                       }
+                    } catch (Throwable e) {
+                      LOG.error("Stage (" + stage.getId() + ") ERROR: ", e);
+                      stage.setFinishTime();
+                      stage.eventHandler.handle(new StageDiagnosticsUpdateEvent(stage.getId(), e.getMessage()));
+                      stage.eventHandler.handle(new StageCompletedEvent(stage.getId(), StageState.ERROR));
+                    }
+
+                  }
               );
           state = StageState.INITED;
         }
@@ -1209,6 +1245,36 @@ public class Stage implements EventHandler<StageEvent> {
     return unit;
   }
 
+  private static void updateHistogram(Stage stage, StageTaskEvent taskEvent, int maxSize) {
+    FreqHistogram histogram = taskEvent.getHistogram();
+    List<ColumnStats> sortKeyStats = TupleUtil.extractSortColumnStats(
+        histogram.getSortSpecs(),
+        stage.resultStatistics.getColumnStats(),
+        false);
+    AnalyzedSortSpec[] analyzedSpecs = HistogramUtil.analyzeHistogram(histogram, sortKeyStats);
+
+    List<Bucket> buckets = histogram.getSortedBuckets();
+    // 1) Update histograms of range partitions using the report
+    stage.histogramForRangeShuffle.merge(analyzedSpecs, histogram);
+//    FreqHistogram histogram = stage.histogramForRangeShuffle;
+//    HistogramUtil.normalizeLength(histogram);
+//    List<Bucket> buckets = histogram.getSortedBuckets();
+
+    // 2) Calculate ​Θ, the average count of range partitions
+//    BigDecimal avgCard = buckets.stream().map(bucket ->
+//        BigDecimal.valueOf(bucket.getCount())
+//    ).reduce(BigDecimal.ZERO, (a, b) -> a.add(b))
+//        .divide(BigDecimal.valueOf(histogram.size()), MathContext.DECIMAL128);
+
+    // 3) Refine ranges of the selected partition and its adjacent partitions to make their counts not to exceed ​Θ
+//    List<ColumnStats> sortColumnStats = TupleUtil.extractSortColumnStats(
+//        histogram.getSortSpecs(),
+//        TupleUtil.extractSortColumnStats(histogram.getSortSpecs(), stage.resultStatistics.getColumnStats(), false),
+//        false);
+//    HistogramUtil.normalize(histogram, sortColumnStats);
+//    HistogramUtil.refineToEquiDepth(histogram, avgCard, sortColumnStats);
+  }
+
   private static class TaskCompletedTransition implements SingleArcTransition<Stage, StageEvent> {
 
     @Override
@@ -1229,6 +1295,18 @@ public class Stage implements EventHandler<StageEvent> {
 
         if (taskEvent.getState() == TaskState.SUCCEEDED) {
           stage.succeededObjectCount++;
+          try {
+            // Incremental statistics update
+            updateStats(stage, task);
+
+            // Incremental histogram update
+            if (stage.histogramForRangeShuffle != null) {
+              updateHistogram(stage, taskEvent, 100000);
+            }
+          } catch (Exception e) {
+            ExceptionUtil.printStackTraceIfError(LOG, e);
+            stage.eventHandler.handle(new StageEvent(stage.getId(), StageEventType.SQ_INTERNAL_ERROR));
+          }
         } else if (task.getState() == TaskState.KILLED) {
           stage.killedObjectCount++;
         } else if (task.getState() == TaskState.FAILED) {
@@ -1274,6 +1352,7 @@ public class Stage implements EventHandler<StageEvent> {
     stopExecutionBlock();
     this.finalStageHistory = makeStageHistory();
     this.finalStageHistory.setTasks(makeTaskHistories());
+//    this.histogramForRangeShuffle.clear();
   }
 
   public List<IntermediateEntry> getHashShuffleIntermediateEntries() {

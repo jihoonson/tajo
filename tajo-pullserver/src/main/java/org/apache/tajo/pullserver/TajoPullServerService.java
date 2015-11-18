@@ -54,6 +54,7 @@ import org.apache.hadoop.security.ssl.SSLFactory;
 import org.apache.hadoop.service.AbstractService;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.tajo.catalog.Schema;
+import org.apache.tajo.catalog.TupleComparator;
 import org.apache.tajo.conf.TajoConf;
 import org.apache.tajo.conf.TajoConf.ConfVars;
 import org.apache.tajo.pullserver.retriever.FileChunk;
@@ -697,6 +698,8 @@ public class TajoPullServerService extends AbstractService {
       LOG.warn("Out of Scope (indexed data [" + idxReader.getFirstKey() + ", " + idxReader.getLastKey() +
           "], but request start:" + start + ", end: " + end);
       return null;
+    } else {
+      LOG.info("request start:" + start + ", end: " + end + " is processed well");
     }
 
     long startOffset;

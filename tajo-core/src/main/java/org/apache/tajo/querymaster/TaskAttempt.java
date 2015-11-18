@@ -27,6 +27,7 @@ import org.apache.tajo.TajoProtos.TaskAttemptState;
 import org.apache.tajo.TaskAttemptId;
 import org.apache.tajo.catalog.proto.CatalogProtos;
 import org.apache.tajo.catalog.proto.CatalogProtos.PartitionDescProto;
+import org.apache.tajo.catalog.statistics.FreqHistogram;
 import org.apache.tajo.catalog.statistics.TableStats;
 import org.apache.tajo.ResourceProtos.TaskCompletionReport;
 import org.apache.tajo.ResourceProtos.ShuffleFileOutput;
@@ -407,9 +408,10 @@ public class TaskAttempt implements EventHandler<TaskAttemptEvent> {
         }
 
         taskAttempt.fillTaskStatistics(report);
-        taskAttempt.eventHandler.handle(new TaskTAttemptEvent(taskAttempt.getId(), TaskEventType.T_ATTEMPT_SUCCEEDED));
+        taskAttempt.eventHandler.handle(new TaskTAttemptEvent(taskAttempt.getId(), TaskEventType.T_ATTEMPT_SUCCEEDED,
+            report.hasFreqHistogram() ? new FreqHistogram(report.getFreqHistogram()) : null));
       } catch (Throwable t) {
-        taskAttempt.eventHandler.handle(new TaskFatalErrorEvent(taskAttempt.getId(), t.getMessage()));
+        taskAttempt.eventHandler.handle(new TaskFatalErrorEvent(taskAttempt.getId(), ExceptionUtils.getStackTrace(t)));
         taskAttempt.addDiagnosticInfo(ExceptionUtils.getStackTrace(t));
       }
     }
