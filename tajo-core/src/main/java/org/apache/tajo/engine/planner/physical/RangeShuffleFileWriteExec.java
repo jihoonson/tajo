@@ -192,7 +192,7 @@ public class RangeShuffleFileWriteExec extends UnaryPhysicalExec {
     current = countPerTuples.get(countPerTuples.size() - 1);
     freqHistogram.updateBucket(new TupleRange(current.getFirst(), current.getFirst(),
         freqHistogram.getComparator()), current.getSecond(), true);
-//    freqHistogram.getBucket(current.getFirst(), current.getFirst()).setEndKeyInclusive(true);
+    freqHistogram.getBucket(current.getFirst(), current.getFirst()).setEndKeyInclusive(true);
     context.setFreqHistogram(freqHistogram);
     appender = null;
     indexWriter = null;

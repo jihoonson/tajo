@@ -633,6 +633,7 @@ public class Repartitioner {
     Schema sortSchema = new Schema(channel.getShuffleKeys());
 
     TupleRange[] ranges;
+    boolean[] endKeyInclusive = null;
     int determinedTaskNum;
 
     // calculate the number of maximum query ranges
@@ -744,30 +745,25 @@ public class Repartitioner {
 
       // Adjust ranges to be last inclusive
       ranges = new TupleRange[buckets.size()];
+      endKeyInclusive = new boolean[buckets.size()];
       for (int i = 0; i < buckets.size(); i++) {
         ranges[i] = buckets.get(i).getKey();
-        for (int j = 0; j < sortKeyStats.size(); j++) {
-          Datum val = ranges[i].getEnd().asDatum(j);
-          if (val instanceof PositiveInfiniteDatum) {
-            ranges[i].getEnd().put(j, HistogramUtil.getLastValue(sortSpecs, sortKeyStats, j));
-//          } else {
-//            ranges[i].setEnd(HistogramUtil.increment(sortSpecs, sortKeyStats, ranges[i].getEnd(), ranges[i].getInterval(), -2));
-          } else if (val instanceof NegativeInfiniteDatum) {
-            ranges[i].getEnd().put(j, HistogramUtil.getFirstValue(sortSpecs, sortKeyStats, j));
-          }
-
-//        for (int j = 0; j < sortSpecs.length; j++) {
-//          if (!sortSpecs[j].isAscending()) {
-//            Datum tmp;
-//            Tuple start = ranges[i].getStart();
-//            Tuple end = ranges[i].getEnd();
-//            tmp = end.asDatum(j);
-//            end.put(j, start.asDatum(j));
-//            start.put(j, tmp);
+        endKeyInclusive[i] = buckets.get(i).isEndKeyInclusive();
+//        for (int j = 0; j < sortKeyStats.size(); j++) {
+//          Datum val = ranges[i].getEnd().asDatum(j);
+//          if (val instanceof PositiveInfiniteDatum) {
+//            ranges[i].getEnd().put(j, HistogramUtil.getLastValue(sortSpecs, sortKeyStats, j));
+//          } else if (val instanceof NegativeInfiniteDatum) {
+//            ranges[i].getEnd().put(j, HistogramUtil.getFirstValue(sortSpecs, sortKeyStats, j));
 //          }
 //        }
-        }
       }
+    }
+
+    if (endKeyInclusive == null) {
+      endKeyInclusive = new boolean[ranges.length];
+      Arrays.fill(endKeyInclusive, false);
+      endKeyInclusive[endKeyInclusive.length - 1] = true;
     }
 
 
@@ -833,7 +829,8 @@ public class Repartitioner {
         // TODO: create a fetch only when the host has data included in the partition
         for (FetchImpl fetch: fetches) {
           String rangeParam =
-              TupleUtil.rangeToQuery(ranges[i], i == (ranges.length - 1) , encoder);
+//              TupleUtil.rangeToQuery(ranges[i], i == (ranges.length - 1) , encoder);
+              TupleUtil.rangeToQuery(ranges[i], endKeyInclusive[i] , encoder);
           FetchImpl copy;
           try {
             copy = fetch.clone();
