@@ -18,7 +18,6 @@
 
 package org.apache.tajo.catalog.statistics;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.ByteString;
 import org.apache.tajo.catalog.*;
 import org.apache.tajo.catalog.proto.CatalogProtos.FreqBucketProto;
@@ -32,7 +31,6 @@ import org.apache.tajo.storage.Tuple;
 import org.apache.tajo.storage.VTuple;
 import org.apache.tajo.util.TUtil;
 
-import java.math.BigDecimal;
 import java.util.*;
 
 /**
@@ -53,7 +51,7 @@ public class FreqHistogram extends Histogram<TupleRange, Bucket>
     this.comparator = new BaseTupleComparator(keySchema, sortSpecs);
     SortSpec[] baseSortSpecs = new SortSpec[keySchema.size()];
     for (int i = 0; i < keySchema.size(); i++) {
-      baseSortSpecs[i] = new SortSpec(keySchema.getColumn(i), true, sortSpecs[i].isNullFirst());
+      baseSortSpecs[i] = new SortSpec(keySchema.getColumn(i), true, sortSpecs[i].isNullsFirst());
     }
     this.intervalComparator = new BaseTupleComparator(keySchema, baseSortSpecs);
   }
@@ -79,7 +77,7 @@ public class FreqHistogram extends Histogram<TupleRange, Bucket>
     }
     SortSpec[] baseSortSpecs = new SortSpec[keySchema.size()];
     for (int i = 0; i < keySchema.size(); i++) {
-      baseSortSpecs[i] = new SortSpec(keySchema.getColumn(i), true, sortSpecs[i].isNullFirst());
+      baseSortSpecs[i] = new SortSpec(keySchema.getColumn(i), true, sortSpecs[i].isNullsFirst());
     }
     this.intervalComparator = new BaseTupleComparator(keySchema, baseSortSpecs);
   }
@@ -251,7 +249,17 @@ public class FreqHistogram extends Histogram<TupleRange, Bucket>
           }
           this.buckets.put(subBucket.key, subBucket);
         }
+
+        thisBucket = otherBucket = null;
       }
+    }
+
+    if (thisBucket != null) {
+      this.buckets.put(thisBucket.key, thisBucket);
+    }
+
+    if (otherBucket != null) {
+      this.buckets.put(otherBucket.key, otherBucket);
     }
 
     while (thisIt.hasNext()) {

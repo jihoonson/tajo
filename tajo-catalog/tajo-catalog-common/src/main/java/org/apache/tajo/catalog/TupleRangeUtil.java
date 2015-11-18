@@ -104,8 +104,8 @@ public class TupleRangeUtil {
         break;
       case CHAR:
         // TODO: round
-        char startChar = start.isBlankOrNull(i) ? (sortSpec.isNullFirst() ? 0 : Character.MAX_VALUE) : start.getChar(i);
-        char endChar = end.isBlankOrNull(i) ? (sortSpec.isNullFirst() ? 0 : Character.MAX_VALUE) : end.getChar(i);
+        char startChar = start.isBlankOrNull(i) ? (sortSpec.isNullsFirst() ? 0 : Character.MAX_VALUE) : start.getChar(i);
+        char endChar = end.isBlankOrNull(i) ? (sortSpec.isNullsFirst() ? 0 : Character.MAX_VALUE) : end.getChar(i);
 
         if (!sortSpec.isAscending()) {
           char tmp = startChar;
@@ -115,7 +115,7 @@ public class TupleRangeUtil {
         columnCard = BigInteger.valueOf(endChar - startChar);
         break;
 //      case BIT:
-//        byte startByte = start.isBlankOrNull(i) ? (sortSpec.isNullFirst() ? 0 : 0x) : start.getByte(i);
+//        byte startByte = start.isBlankOrNull(i) ? (sortSpec.isNullsFirst() ? 0 : 0x) : start.getByte(i);
 //
 //        if (sortSpec.isAscending()) {
 //          columnCard = BigInteger.valueOf((end.getByte(i) - start.getByte(i)) / base.getByte(i));
@@ -124,8 +124,8 @@ public class TupleRangeUtil {
 //        }
 //        break;
       case INT2:
-        short startShort = start.isBlankOrNull(i) ? (sortSpec.isNullFirst() ? 0 : Short.MAX_VALUE) : start.getInt2(i);
-        short endShort = end.isBlankOrNull(i) ? (sortSpec.isNullFirst() ? 0 : Short.MAX_VALUE) : end.getInt2(i);
+        short startShort = start.isBlankOrNull(i) ? (sortSpec.isNullsFirst() ? 0 : Short.MAX_VALUE) : start.getInt2(i);
+        short endShort = end.isBlankOrNull(i) ? (sortSpec.isNullsFirst() ? 0 : Short.MAX_VALUE) : end.getInt2(i);
 
         if (!sortSpec.isAscending()) {
           short tmp = startShort;
@@ -138,8 +138,8 @@ public class TupleRangeUtil {
       case INT4:
       case DATE:
       case INET4:
-        int startInt = start.isBlankOrNull(i) ? (sortSpec.isNullFirst() ? 0 : Integer.MAX_VALUE) : start.getInt4(i);
-        int endInt = end.isBlankOrNull(i) ? (sortSpec.isNullFirst() ? 0 : Integer.MAX_VALUE) : end.getInt4(i);
+        int startInt = start.isBlankOrNull(i) ? (sortSpec.isNullsFirst() ? 0 : Integer.MAX_VALUE) : start.getInt4(i);
+        int endInt = end.isBlankOrNull(i) ? (sortSpec.isNullsFirst() ? 0 : Integer.MAX_VALUE) : end.getInt4(i);
 
         if (!sortSpec.isAscending()) {
           int tmp = startInt;
@@ -152,8 +152,8 @@ public class TupleRangeUtil {
       case INT8:
       case TIME:
       case TIMESTAMP:
-        long startLong = start.isBlankOrNull(i) ? (sortSpec.isNullFirst() ? 0 : Long.MAX_VALUE) : start.getInt8(i);
-        long endLong = end.isBlankOrNull(i) ? (sortSpec.isNullFirst() ? 0 : Long.MAX_VALUE) : end.getInt8(i);
+        long startLong = start.isBlankOrNull(i) ? (sortSpec.isNullsFirst() ? 0 : Long.MAX_VALUE) : start.getInt8(i);
+        long endLong = end.isBlankOrNull(i) ? (sortSpec.isNullsFirst() ? 0 : Long.MAX_VALUE) : end.getInt8(i);
 
         if (!sortSpec.isAscending()) {
           long tmp = startLong;
@@ -164,8 +164,8 @@ public class TupleRangeUtil {
         columnCard = BigInteger.valueOf(endLong - startLong);
         break;
       case FLOAT4:
-        float startFloat = start.isBlankOrNull(i) ? (sortSpec.isNullFirst() ? 0 : Float.MAX_VALUE) : start.getFloat4(i);
-        float endFloat = end.isBlankOrNull(i) ? (sortSpec.isNullFirst() ? 0 : Float.MAX_VALUE) : end.getFloat4(i);
+        float startFloat = start.isBlankOrNull(i) ? (sortSpec.isNullsFirst() ? 0 : Float.MAX_VALUE) : start.getFloat4(i);
+        float endFloat = end.isBlankOrNull(i) ? (sortSpec.isNullsFirst() ? 0 : Float.MAX_VALUE) : end.getFloat4(i);
 
         if (!sortSpec.isAscending()) {
           float tmp = startFloat;
@@ -177,8 +177,8 @@ public class TupleRangeUtil {
         columnCard = BigDecimal.valueOf(endFloat).subtract(BigDecimal.valueOf(startFloat)).toBigInteger();
         break;
       case FLOAT8:
-        double startDouble = start.isBlankOrNull(i) ? (sortSpec.isNullFirst() ? 0 : Double.MAX_VALUE) : start.getFloat8(i);
-        double endDouble = end.isBlankOrNull(i) ? (sortSpec.isNullFirst() ? 0 : Double.MAX_VALUE) : end.getFloat8(i);
+        double startDouble = start.isBlankOrNull(i) ? (sortSpec.isNullsFirst() ? 0 : Double.MAX_VALUE) : start.getFloat8(i);
+        double endDouble = end.isBlankOrNull(i) ? (sortSpec.isNullsFirst() ? 0 : Double.MAX_VALUE) : end.getFloat8(i);
 
         if (!sortSpec.isAscending()) {
           double tmp = startDouble;

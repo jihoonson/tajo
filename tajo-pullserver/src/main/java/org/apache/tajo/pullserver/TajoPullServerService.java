@@ -698,6 +698,8 @@ public class TajoPullServerService extends AbstractService {
       LOG.warn("Out of Scope (indexed data [" + idxReader.getFirstKey() + ", " + idxReader.getLastKey() +
           "], but request start:" + start + ", end: " + end);
       return null;
+    } else {
+      LOG.info("request start:" + start + ", end: " + end + " is processed well");
     }
 
     long startOffset;

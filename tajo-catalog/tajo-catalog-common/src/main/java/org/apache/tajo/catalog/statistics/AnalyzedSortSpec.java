@@ -79,8 +79,8 @@ public class AnalyzedSortSpec {
     return sortSpec.isAscending();
   }
 
-  public boolean isNullFirst() {
-    return sortSpec.isNullFirst();
+  public boolean isNullsFirst() {
+    return sortSpec.isNullsFirst();
   }
 
   public Datum getMinValue() {

@@ -115,6 +115,7 @@ public class TaskImpl implements Task {
         taskAttemptId.getTaskId().getId() + "_" + taskAttemptId.getId());
     this.context = new TaskAttemptContext(queryContext, executionBlockContext, taskAttemptId,
         request.getFragments().toArray(new FragmentProto[request.getFragments().size()]), taskDir);
+    LOG.info("tid: " + taskAttemptId + ", # of fragments: " + context.getFragmentSize());
     this.context.setDataChannel(request.getDataChannel());
     this.context.setEnforcer(request.getEnforcer());
     this.context.setState(TaskAttemptState.TA_PENDING);

@@ -104,9 +104,9 @@ public class BaseTupleComparator extends TupleComparator implements ProtoObject<
       if (left.isNull() || right.isNull()) {
         if (!left.equals(right)) {
           if (left.isNull()) {
-            compVal = sortSpecs[i].isNullFirst() ? -1 : 1;
+            compVal = sortSpecs[i].isNullsFirst() ? -1 : 1;
           } else {
-            compVal = sortSpecs[i].isNullFirst() ? 1 : -1;
+            compVal = sortSpecs[i].isNullsFirst() ? 1 : -1;
           }
         } else {
           compVal = 0;
@@ -142,7 +142,7 @@ public class BaseTupleComparator extends TupleComparator implements ProtoObject<
       for (int i = 0; i < sortKeyIds.length; i++) {
         if (sortKeyIds[i] != other.sortKeyIds[i] ||
             sortSpecs[i].isAscending() != other.sortSpecs[i].isAscending() ||
-            sortSpecs[i].isNullFirst() != other.sortSpecs[i].isNullFirst()) {
+            sortSpecs[i].isNullsFirst() != other.sortSpecs[i].isNullsFirst()) {
           return false;
         }
       }
@@ -172,7 +172,7 @@ public class BaseTupleComparator extends TupleComparator implements ProtoObject<
     for (int i = 0; i < sortKeyIds.length; i++) {
       sb.append(prefix).append("SortKeyId=").append(sortKeyIds[i])
         .append(",Asc=").append(sortSpecs[i].isAscending())
-        .append(",NullFirst=").append(sortSpecs[i].isNullFirst());
+        .append(",NullFirst=").append(sortSpecs[i].isNullsFirst());
       prefix = " ,";
     }
     return sb.toString();

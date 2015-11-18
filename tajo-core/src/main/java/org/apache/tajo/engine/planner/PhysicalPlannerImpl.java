@@ -905,6 +905,7 @@ public class PhysicalPlannerImpl implements PhysicalPlanner {
       throws IOException {
     // check if an input is sorted in the same order to the subsequence sort operator.
     if (checkIfSortEquivalance(ctx, scanNode, node)) {
+      LOG.info("tid: " + ctx.getTaskId() + ", # of fragments: " + ctx.getFragmentSize());
       if (ctx.getTable(scanNode.getCanonicalName()) == null) {
         return new SeqScanExec(ctx, scanNode, null);
       }

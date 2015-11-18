@@ -340,13 +340,13 @@ public class HistogramUtil {
 
   public static Datum getLastValue(SortSpec[] sortSpecs, List<ColumnStats> columnStatsList, int i) {
     return columnStatsList.get(i).hasNullValue() ?
-        sortSpecs[i].isNullFirst() ? columnStatsList.get(i).getMaxValue() : NullDatum.get()
+        sortSpecs[i].isNullsFirst() ? columnStatsList.get(i).getMaxValue() : NullDatum.get()
         : columnStatsList.get(i).getMaxValue();
   }
 
   public static Datum getFirstValue(SortSpec[] sortSpecs, List<ColumnStats> columnStatsList, int i) {
     return columnStatsList.get(i).hasNullValue() ?
-        sortSpecs[i].isNullFirst() ? NullDatum.get() : columnStatsList.get(i).getMinValue()
+        sortSpecs[i].isNullsFirst() ? NullDatum.get() : columnStatsList.get(i).getMinValue()
         : columnStatsList.get(i).getMinValue();
   }
 
@@ -402,7 +402,7 @@ public class HistogramUtil {
     }
 
     if (sortSpec.hasNullValue()) {
-      if (sortSpec.isNullFirst()) {
+      if (sortSpec.isNullsFirst()) {
         min = min.subtract(BigDecimal.ONE);
       } else {
         max = max.add(BigDecimal.ONE);
@@ -462,9 +462,9 @@ public class HistogramUtil {
   protected static Datum denormalizeDatum(final AnalyzedSortSpec sortSpec,
                                           final BigDecimal val,
                                           final boolean isValue) {
-    if (sortSpec.isNullFirst() && val.equals(BigDecimal.ZERO)) {
+    if (sortSpec.isNullsFirst() && val.equals(BigDecimal.ZERO)) {
       return NullDatum.get();
-    } else if (!sortSpec.isNullFirst() && val.equals(BigDecimal.ONE)) {
+    } else if (!sortSpec.isNullsFirst() && val.equals(BigDecimal.ONE)) {
       return NullDatum.get();
     }
 
@@ -564,7 +564,7 @@ public class HistogramUtil {
                                            final Datum val,
                                            final boolean isValue) {
     if (val.isNull()) {
-      return sortSpec.isNullFirst() ? BigDecimal.ZERO : BigDecimal.ONE;
+      return sortSpec.isNullsFirst() ? BigDecimal.ZERO : BigDecimal.ONE;
     } else {
       BigDecimal normNumber = datumToBigDecimal(sortSpec, val);
       return normalizeVal(sortSpec, normNumber, isValue);
@@ -573,7 +573,7 @@ public class HistogramUtil {
 
   private static BigDecimal datumToBigDecimal(final AnalyzedSortSpec sortSpec, final Datum val) {
     if (val.isNull()) {
-      return sortSpec.isNullFirst() ? BigDecimal.ZERO : BigDecimal.ONE;
+      return sortSpec.isNullsFirst() ? BigDecimal.ZERO : BigDecimal.ONE;
     } else {
       BigDecimal normNumber;
       switch (sortSpec.getType()) {
@@ -663,7 +663,7 @@ public class HistogramUtil {
                                           final boolean textPadFirst,
                                           final boolean isValue) {
     if (val.isNull()) {
-      return sortSpec.isNullFirst() ? BigDecimal.ZERO : BigDecimal.ONE;
+      return sortSpec.isNullsFirst() ? BigDecimal.ZERO : BigDecimal.ONE;
     } else if (val.size() == 0) {
       return BigDecimal.ZERO;
     } else {
