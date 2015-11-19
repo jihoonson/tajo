@@ -43,6 +43,7 @@ import org.apache.tajo.exception.ExceptionUtil;
 import org.apache.tajo.exception.TajoException;
 import org.apache.tajo.ipc.TajoWorkerProtocol;
 import org.apache.tajo.master.TaskState;
+import org.apache.tajo.master.cluster.WorkerConnectionInfo;
 import org.apache.tajo.master.event.*;
 import org.apache.tajo.master.event.TaskAttemptToSchedulerEvent.TaskAttemptScheduleContext;
 import org.apache.tajo.plan.logical.*;
@@ -1245,7 +1246,7 @@ public class Stage implements EventHandler<StageEvent> {
     return unit;
   }
 
-  private static void updateHistogram(Stage stage, StageTaskEvent taskEvent, int maxSize) {
+  private static void updateHistogram(Stage stage, StageTaskEvent taskEvent, WorkerConnectionInfo succeededWorker) {
     FreqHistogram histogram = taskEvent.getHistogram();
     List<ColumnStats> sortKeyStats = TupleUtil.extractSortColumnStats(
         histogram.getSortSpecs(),
@@ -1253,7 +1254,7 @@ public class Stage implements EventHandler<StageEvent> {
         false);
     AnalyzedSortSpec[] analyzedSpecs = HistogramUtil.analyzeHistogram(histogram, sortKeyStats);
 
-    List<Bucket> buckets = histogram.getSortedBuckets();
+//    List<Bucket> buckets = histogram.getSortedBuckets();
     // 1) Update histograms of range partitions using the report
     stage.histogramForRangeShuffle.merge(analyzedSpecs, histogram);
 //    FreqHistogram histogram = stage.histogramForRangeShuffle;
@@ -1301,7 +1302,7 @@ public class Stage implements EventHandler<StageEvent> {
 
             // Incremental histogram update
             if (stage.histogramForRangeShuffle != null) {
-              updateHistogram(stage, taskEvent, 100000);
+              updateHistogram(stage, taskEvent, task.getSucceededWorker());
             }
           } catch (Exception e) {
             ExceptionUtil.printStackTraceIfError(LOG, e);

@@ -82,6 +82,17 @@ public class TupleRange implements Comparable<TupleRange>, Cloneable {
         || (compVal == 0 && small.isEndInclusive());
   }
 
+//  public boolean include(TupleRange other) {
+//    if (comp.compare(this.start, other.start) <= 0) {
+//      if (other.endInclusive) {
+//        return comp.compare(this.end, other.end) > 0;
+//      } else {
+//        return comp.compare(this.end, other.end) >= 0;
+//      }
+//    }
+//    return false;
+//  }
+
   public String toString() {
     return "[" + this.start + ", " + this.end + (endInclusive ? "]" : ")");
   }

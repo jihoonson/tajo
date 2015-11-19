@@ -691,6 +691,7 @@ public class Repartitioner {
         determinedTaskNum = maxNum;
       }
 
+      // TODO: check totalCard
       LOG.info(stage.getId() + ", Try to divide " + totalCard + " values into " + determinedTaskNum +
           " sub ranges (total units: " + determinedTaskNum + ")");
 
@@ -705,20 +706,39 @@ public class Repartitioner {
         histogram = new FreqHistogram(histogram.getSortSpecs(), buckets);
 
       } else if (determinedTaskNum > buckets.size()) {
+
         while (determinedTaskNum > buckets.size()) {
-          Bucket maxBucket = null;
+          buckets.sort((b1, b2) -> {
+            if (b1.getCount() > b2.getCount()) {
+              return -1;
+            } else if (b1.getCount() == b2.getCount()) {
+              return 0;
+            } else {
+              return 1;
+            }
+          });
+
+          List<Bucket> splits = new ArrayList<>();
           for (Bucket eachBucket : buckets) {
-            maxBucket = maxBucket == null || maxBucket.getCount() < eachBucket.getCount() ?
-                eachBucket : maxBucket;
+            if (HistogramUtil.splittable(analyzedSpecs, eachBucket)) {
+              List<Bucket> split = HistogramUtil.splitBucket(histogram, analyzedSpecs, eachBucket, 2);
+              if (split.size() > 1) {
+                splits.addAll(split);
+                if (splits.size() + buckets.size() >= determinedTaskNum) {
+                  break;
+                }
+              }
+            }
           }
-          if (maxBucket != null && maxBucket.getCount() > 1) {
-            buckets.addAll(HistogramUtil.splitBucket(histogram, analyzedSpecs, maxBucket, 2));
+          if (splits.size() > 0) {
+            buckets.addAll(splits);
           } else {
-            determinedTaskNum = buckets.size();
-            LOG.info("Task number is adjusted to " + determinedTaskNum + " due to the number of buckets.");
             break;
           }
         }
+
+        determinedTaskNum = buckets.size();
+        LOG.info("Task number is adjusted to " + determinedTaskNum + " due to the number of buckets.");
         histogram = new FreqHistogram(histogram.getSortSpecs(), buckets);
       }
 

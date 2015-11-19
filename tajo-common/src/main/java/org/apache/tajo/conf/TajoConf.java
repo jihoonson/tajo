@@ -216,6 +216,9 @@ public class TajoConf extends Configuration {
     SHUFFLE_HASH_APPENDER_PAGE_VOLUME("tajo.shuffle.hash.appender.page.volume-mb", 30),
     SHUFFLE_HASH_PARENT_DIRS("tajo.shuffle.hash.parent.dirs.count", 64),
 
+    // Statistics Configuration --------------------------------------------------
+    HISTOGRAM_MAX_SIZE("tajo.stats.histogram.max-size", 100), // 0 for no restriction
+
     // Query output Configuration --------------------------------------------------
     QUERY_OUTPUT_DEFAULT_FILE_FORMAT("tajo.query.output.file-format", BuiltinStorages.DRAW, Validators.javaString()),
 
