@@ -214,7 +214,7 @@ public class HistogramUtil {
     return normTuple;
   }
 
-  public static boolean splitable(AnalyzedSortSpec[] sortSpecs, Bucket bucket) {
+  public static boolean splittable(AnalyzedSortSpec[] sortSpecs, Bucket bucket) {
     // TODO: many bugs. more tests are required.
     if (bucket.getCount() > 1) {
       BigDecimal startVal, endVal;
@@ -255,6 +255,10 @@ public class HistogramUtil {
   protected static Bucket getSubBucket(FreqHistogram histogram,
                                        AnalyzedSortSpec[] analyzedSpecs,
                                        Bucket origin, Tuple start, Tuple end) {
+    if (start.equals(end)) {
+      return origin;
+    }
+
     BigDecimal[] normStart = normalizeTupleAsValue(analyzedSpecs, origin.getStartKey());
     BigDecimal[] normEnd = normalizeTupleAsValue(analyzedSpecs, origin.getEndKey());
     BigDecimal[] normTotalInter = diff(analyzedSpecs, normEnd, normStart);

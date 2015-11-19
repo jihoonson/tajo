@@ -368,7 +368,7 @@ public class FileTablespace extends Tablespace {
   }
 
   /**
-   * Is the given filename splitable? Usually, true, but if the file is
+   * Is the given filename splittable? Usually, true, but if the file is
    * stream compressed, it will not be.
    * <p/>
    * <code>FileInputFormat</code> implementations can override this and return

@@ -18,6 +18,7 @@
 
 package org.apache.tajo.catalog.statistics;
 
+import com.google.common.base.Preconditions;
 import com.google.protobuf.ByteString;
 import org.apache.tajo.catalog.*;
 import org.apache.tajo.catalog.proto.CatalogProtos.FreqBucketProto;
@@ -131,7 +132,9 @@ public class FreqHistogram extends Histogram<TupleRange, Bucket>
 
   public void updateBucket(TupleRange key, double change, boolean endKeyInclusive) {
     updateBucket(key, change);
-    buckets.get(key).setEndKeyInclusive(endKeyInclusive);
+    if (endKeyInclusive) {
+      buckets.get(key).setEndKeyInclusive();
+    }
   }
 
   /**
@@ -139,47 +142,6 @@ public class FreqHistogram extends Histogram<TupleRange, Bucket>
    * @param other
    */
   public void merge(AnalyzedSortSpec[] analyzedSpecs, FreqHistogram other) {
-    // Find the min interval from both histograms
-//    Tuple minInterval;
-//    if (this.size() > 0 && other.size() > 0) {
-//      minInterval = comparator.compare(this.getNonZeroMinInterval(analyzedSpecs),
-//          other.getNonZeroMinInterval(analyzedSpecs)) > 0 ?
-//          other.getNonZeroMinInterval(analyzedSpecs) : this.getNonZeroMinInterval(analyzedSpecs);
-//    } else if (this.size() > 0) {
-//      minInterval = this.getNonZeroMinInterval(analyzedSpecs);
-//    } else if (other.size() > 0) {
-//      minInterval = other.getNonZeroMinInterval(analyzedSpecs);
-//    } else {
-//      return;
-//    }
-//
-//    // Split buckets with the min interval
-//    this.buckets.clear();
-//    List<Bucket> needSplit = new ArrayList<>();
-//    for (Bucket eachBucket : this.buckets.values()) {
-//      if (comparator.compare(eachBucket.getInterval(), minInterval) > 0) {
-//        needSplit.add(eachBucket);
-//      } else {
-//        this.buckets.put(eachBucket.key, eachBucket);
-//      }
-//    }
-//
-//    for (Bucket eachBucket: other.buckets.values()) {
-//      if (comparator.compare(eachBucket.getInterval(), minInterval) > 0) {
-//        needSplit.add(eachBucket);
-//      } else {
-//        this.buckets.put(eachBucket.key, eachBucket);
-//      }
-//    }
-//    for (Bucket eachBucket : needSplit) {
-//      // Split the bucket
-//      for (Bucket split : HistogramUtil.splitBucket(this, analyzedSpecs, eachBucket, minInterval)) {
-//        this.buckets.put(split.key, split);
-//      }
-//    }
-//
-//    this.minInterval = other.minInterval = minInterval;
-
     List<Bucket> thisBuckets = this.getSortedBuckets();
     List<Bucket> otherBuckets = other.getSortedBuckets();
     Iterator<Bucket> thisIt = thisBuckets.iterator();
@@ -192,12 +154,14 @@ public class FreqHistogram extends Histogram<TupleRange, Bucket>
       if (thisBucket == null) thisBucket = thisIt.next();
       if (otherBucket == null) otherBucket = otherIt.next();
 
-      if (thisBucket.key.equals(otherBucket.key)) {
-        thisBucket.incCount(otherBucket.getCount());
-        thisBucket.setEndKeyInclusive(thisBucket.isEndKeyInclusive() || otherBucket.isEndKeyInclusive());
-        this.buckets.put(thisBucket.key, thisBucket);
-        continue;
-      }
+//      if (thisBucket.key.equals(otherBucket.key)) {
+//        thisBucket.incCount(otherBucket.getCount());
+//        if (thisBucket.isEndKeyInclusive() || otherBucket.isEndKeyInclusive()) {
+//          thisBucket.setEndKeyInclusive();
+//        }
+//        this.buckets.put(thisBucket.key, thisBucket);
+//        continue;
+//      }
 
       Bucket smallStartBucket, largeStartBucket;
       boolean isThisSmall = thisBucket.key.compareTo(otherBucket.key) < 0;
@@ -211,9 +175,7 @@ public class FreqHistogram extends Histogram<TupleRange, Bucket>
 
       // check overlap between keys
       // since end is exclusive, the equal case is also included
-      if (!smallStartBucket.isEndKeyInclusive()
-          && comparator.compare(smallStartBucket.key.getEnd(), largeStartBucket.key.getStart()) == 0
-          || comparator.compare(smallStartBucket.key.getEnd(), largeStartBucket.key.getStart()) < 0) {
+      if (!smallStartBucket.key.isOverlap(largeStartBucket.key)) {
         // non-overlap keys
         this.buckets.put(smallStartBucket.key, smallStartBucket);
         if (isThisSmall) {
@@ -222,47 +184,103 @@ public class FreqHistogram extends Histogram<TupleRange, Bucket>
           otherBucket = null;
         }
       } else {
-        // Split buckets into overlapped and non-overlapped portions
-        Bucket[] bucketOrder = new Bucket[3];
-        bucketOrder[0] = smallStartBucket;
+//        boolean overlapped = true;
+//
+//        // While there some overlaps
+//        while (overlapped) {
+//          overlapped = false;
+//          // Check other buckets whether they are overlapped with the last overlapped this bucket
+//          while (otherIt.hasNext()) {
+//            Bucket next = otherIt.next();
+//            if (thisBucket.key.isOverlap(next.key)) {
+//              // Split overlapped buckets
+//              otherBucket = next;
+//              overlapped = true;
+//            } else {
+//              // If not overlapped, break
+//              break;
+//            }
+//          }
+//
+//          // Check this buckets whether they are overlapped with the last overlapped other bucket
+//          while (thisIt.hasNext()) {
+//            Bucket next = thisIt.next();
+//            if (otherBucket.key.isOverlap(next.key)) {
+//              // Split overlapped buckets
+//              thisBucket = next;
+//              overlapped = true;
+//            } else {
+//              // If not overlapped, break
+//              break;
+//            }
+//          }
+//        }
 
-        Tuple[] tuples = new Tuple[4];
-        tuples[0] = smallStartBucket.getStartKey();
-        tuples[1] = largeStartBucket.getStartKey();
 
-        if (comparator.compare(smallStartBucket.getEndKey(), largeStartBucket.getEndKey()) < 0) {
-          tuples[2] = smallStartBucket.getEndKey();
-          tuples[3] = largeStartBucket.getEndKey();
-          bucketOrder[1] = smallStartBucket;
-          bucketOrder[2] = largeStartBucket;
-        } else {
-          tuples[2] = largeStartBucket.getEndKey();
-          tuples[3] = smallStartBucket.getEndKey();
-          bucketOrder[1] = largeStartBucket;
-          bucketOrder[2] = smallStartBucket;
-        }
 
-        for (int i = 0; i < bucketOrder.length; i++) {
-          Tuple start = tuples[i];
-          Tuple end = tuples[i + 1];
-          Bucket subBucket;
-          if (i == 1) {
-            // Overlapped bucket
-            Bucket smallSubBucket = HistogramUtil.getSubBucket(this, analyzedSpecs, smallStartBucket, start, end);
-            Bucket largetSubBucket = HistogramUtil.getSubBucket(this, analyzedSpecs, largeStartBucket, start, end);
-            assert smallSubBucket.getKey().equals(largetSubBucket.getKey());
-            smallSubBucket.incCount(largetSubBucket.getCount());
-            subBucket = smallSubBucket;
+        // If both buckets are splittable
+        if (HistogramUtil.splittable(analyzedSpecs, smallStartBucket)
+            && HistogramUtil.splittable(analyzedSpecs, largeStartBucket)) {
+          // Split buckets into overlapped and non-overlapped portions
+          Bucket[] bucketOrder = new Bucket[3];
+          bucketOrder[0] = smallStartBucket;
+
+          Tuple[] tuples = new Tuple[4];
+          tuples[0] = smallStartBucket.getStartKey();
+          tuples[1] = largeStartBucket.getStartKey();
+
+          if (comparator.compare(smallStartBucket.getEndKey(), largeStartBucket.getEndKey()) < 0) {
+            tuples[2] = smallStartBucket.getEndKey();
+            tuples[3] = largeStartBucket.getEndKey();
+            bucketOrder[1] = smallStartBucket;
+            bucketOrder[2] = largeStartBucket;
           } else {
-            subBucket = HistogramUtil.getSubBucket(this, analyzedSpecs, bucketOrder[i], start, end);
-            if (i > 1) {
-              subBucket.setEndKeyInclusive(bucketOrder[i].endKeyInclusive);
-            }
+            tuples[2] = largeStartBucket.getEndKey();
+            tuples[3] = smallStartBucket.getEndKey();
+            bucketOrder[1] = largeStartBucket;
+            bucketOrder[2] = smallStartBucket;
           }
-          this.buckets.put(subBucket.key, subBucket);
-        }
 
-        thisBucket = otherBucket = null;
+          for (int i = 0; i < bucketOrder.length; i++) {
+            Tuple start = tuples[i];
+            Tuple end = tuples[i + 1];
+            Bucket subBucket;
+            if (i == 1) {
+              // Overlapped bucket
+              Bucket smallSubBucket = HistogramUtil.getSubBucket(this, analyzedSpecs, smallStartBucket, start, end);
+              Bucket largetSubBucket = HistogramUtil.getSubBucket(this, analyzedSpecs, largeStartBucket, start, end);
+              try {
+                Preconditions.checkState(smallSubBucket.getKey().equals(largetSubBucket.getKey()), "small.key: " + smallStartBucket.key + " large.key: " + largeStartBucket.key);
+              } catch (IllegalStateException e) {
+                throw e;
+              }
+              smallSubBucket.incCount(largetSubBucket.getCount());
+              subBucket = smallSubBucket;
+            } else {
+              subBucket = HistogramUtil.getSubBucket(this, analyzedSpecs, bucketOrder[i], start, end);
+              if (i > 1) {
+                if (bucketOrder[i].key.isEndInclusive()) {
+                  subBucket.setEndKeyInclusive();
+                }
+              }
+            }
+            this.buckets.put(subBucket.key, subBucket);
+          }
+          thisBucket = otherBucket = null;
+
+        } else {
+          // Simply merge
+          isThisSmall = comparator.compare(thisBucket.getEndKey(), otherBucket.getEndKey()) < 0;
+          smallStartBucket.merge(largeStartBucket);
+
+          if (isThisSmall) {
+            thisBucket = null;
+            otherBucket = smallStartBucket;
+          } else {
+            thisBucket = smallStartBucket;
+            otherBucket = null;
+          }
+        }
       }
     }
 
@@ -285,8 +303,8 @@ public class FreqHistogram extends Histogram<TupleRange, Bucket>
     }
   }
 
-  public Bucket getBucket(Tuple startKey, Tuple endKey) {
-    return getBucket(new TupleRange(startKey, endKey, comparator));
+  public Bucket getBucket(Tuple startKey, Tuple endKey, boolean endInclusive) {
+    return getBucket(new TupleRange(startKey, endKey, endInclusive, comparator));
   }
 
   @Override
@@ -358,11 +376,9 @@ public class FreqHistogram extends Histogram<TupleRange, Bucket>
   }
 
   public class Bucket implements ProtoObject<FreqBucketProto>, Cloneable, GsonObject {
-    // [start key, end key)
     private final TupleRange key;
     private Tuple interval = null;
     private double count; // can be a floating point number
-    private boolean endKeyInclusive = false; // set for only the last bucket
 
     public Bucket(TupleRange key) {
       this(key, 0);
@@ -384,9 +400,8 @@ public class FreqHistogram extends Histogram<TupleRange, Bucket>
             DatumFactory.createFromBytes(sortSpecs[i].getSortKey().getDataType(),
             proto.getEndKey(i).toByteArray()));
       }
-      this.key = new TupleRange(startKey, endKey, comparator);
+      this.key = new TupleRange(startKey, endKey, proto.getEndKeyInclusive(), comparator);
       this.count = proto.getCount();
-      this.endKeyInclusive = proto.getEndKeyInclusive();
     }
 
     @Override
@@ -396,7 +411,7 @@ public class FreqHistogram extends Histogram<TupleRange, Bucket>
         builder.addStartKey(ByteString.copyFrom(key.getStart().asDatum(i).asByteArray()));
         builder.addEndKey(ByteString.copyFrom(key.getEnd().asDatum(i).asByteArray()));
       }
-      builder.setEndKeyInclusive(endKeyInclusive);
+      builder.setEndKeyInclusive(key.isEndInclusive());
       return builder.setCount(count).build();
     }
 
@@ -443,18 +458,24 @@ public class FreqHistogram extends Histogram<TupleRange, Bucket>
 
     public void merge(Bucket other) {
       Tuple minStart, maxEnd;
+      boolean endKeyInclusive;
       if (this.key.compareTo(other.key) < 0) {
         minStart = key.getStart();
         maxEnd = other.key.getEnd();
+        endKeyInclusive = other.key.isEndInclusive();
       } else {
         minStart = other.key.getStart();
         maxEnd = key.getEnd();
+        endKeyInclusive = this.key.isEndInclusive();
       }
 
       this.key.setStart(minStart);
       this.key.setEnd(maxEnd);
       this.interval = null;
       this.count += other.count;
+      if (endKeyInclusive) {
+        this.setEndKeyInclusive();
+      }
     }
 
     @Override
@@ -473,11 +494,11 @@ public class FreqHistogram extends Histogram<TupleRange, Bucket>
     }
 
     public boolean isEndKeyInclusive() {
-      return endKeyInclusive;
+      return key.isEndInclusive();
     }
 
-    public void setEndKeyInclusive(boolean endKeyInclusive) {
-      this.endKeyInclusive = endKeyInclusive;
+    public void setEndKeyInclusive() {
+      this.key.setEndInclusive();
     }
   }
 }

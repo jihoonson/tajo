@@ -28,7 +28,8 @@ import java.util.Comparator;
  */
 public class TupleRange implements Comparable<TupleRange>, Cloneable {
   private Tuple start;
-  private Tuple end; // usually exclusive
+  private Tuple end;
+  private boolean endInclusive = false;
   private final Comparator<Tuple> comp;
 
   public TupleRange(final Tuple start, final Tuple end, final Comparator<Tuple> comp) {
@@ -36,6 +37,11 @@ public class TupleRange implements Comparable<TupleRange>, Cloneable {
     // if there is only one value, start == end
     this.start = start;
     this.end = end;
+  }
+
+  public TupleRange(final Tuple start, final Tuple end, final boolean endInclusive, final Comparator<Tuple> comp) {
+    this(start, end, comp);
+    this.endInclusive = endInclusive;
   }
 
   public void setStart(Tuple tuple) {
@@ -54,22 +60,35 @@ public class TupleRange implements Comparable<TupleRange>, Cloneable {
     return this.end;
   }
 
-  public boolean include(Tuple tuple) {
-    if (start.equals(end)) {
-      return start.equals(tuple);
+  public void setEndInclusive() {
+    endInclusive = true;
+  }
+
+  public boolean isEndInclusive() {
+    return endInclusive;
+  }
+
+  public boolean isOverlap(TupleRange other) {
+    TupleRange small, large;
+    if (comp.compare(this.start, other.start) < 0) {
+      small = this;
+      large = other;
     } else {
-      return comp.compare(start, tuple) <= 0
-          && comp.compare(end, tuple) > 0;
+      small = other;
+      large = this;
     }
+    int compVal = comp.compare(small.getEnd(), large.getStart());
+    return compVal > 0
+        || (compVal == 0 && small.isEndInclusive());
   }
 
   public String toString() {
-    return "[" + this.start + ", " + this.end + "]";
+    return "[" + this.start + ", " + this.end + (endInclusive ? "]" : ")");
   }
 
   @Override
   public int hashCode() {
-    return Objects.hashCode(start, end);
+    return Objects.hashCode(start, end, endInclusive);
   }
 
   @Override
@@ -77,7 +96,8 @@ public class TupleRange implements Comparable<TupleRange>, Cloneable {
     if (obj instanceof TupleRange) {
       TupleRange other = (TupleRange) obj;
       return this.start.equals(other.start) &&
-          this.end.equals(other.end);
+          this.end.equals(other.end) &&
+          this.endInclusive == other.endInclusive;
     } else {
       return false;
     }

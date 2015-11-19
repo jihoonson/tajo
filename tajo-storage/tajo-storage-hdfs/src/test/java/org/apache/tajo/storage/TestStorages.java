@@ -141,7 +141,7 @@ public class TestStorages {
   @Parameterized.Parameters
   public static Collection<Object[]> generateParameters() {
     return Arrays.asList(new Object[][] {
-        //type, splitable, statsable, seekable, internalType
+        //type, splittable, statsable, seekable, internalType
         {BuiltinStorages.RAW, false, true, true, true},
         {BuiltinStorages.DRAW, false, true, true, true},
         {BuiltinStorages.RCFILE, true, true, false, false},
