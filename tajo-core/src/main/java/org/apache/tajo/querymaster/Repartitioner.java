@@ -29,11 +29,7 @@ import org.apache.tajo.SessionVars;
 import org.apache.tajo.algebra.JoinType;
 import org.apache.tajo.catalog.*;
 import org.apache.tajo.catalog.statistics.*;
-import org.apache.tajo.catalog.statistics.FreqHistogram.Bucket;
 import org.apache.tajo.conf.TajoConf.ConfVars;
-import org.apache.tajo.datum.Datum;
-import org.apache.tajo.datum.NegativeInfiniteDatum;
-import org.apache.tajo.datum.PositiveInfiniteDatum;
 import org.apache.tajo.engine.planner.PhysicalPlannerImpl;
 import org.apache.tajo.engine.planner.enforce.Enforcer;
 import org.apache.tajo.engine.planner.global.DataChannel;
@@ -49,6 +45,7 @@ import org.apache.tajo.plan.logical.SortNode.SortPurpose;
 import org.apache.tajo.plan.serder.PlanProto.DistinctGroupbyEnforcer.MultipleAggregationStage;
 import org.apache.tajo.plan.serder.PlanProto.EnforceProperty;
 import org.apache.tajo.plan.util.PlannerUtil;
+import org.apache.tajo.querymaster.MasterFreqHistogram.BucketWithLocation;
 import org.apache.tajo.querymaster.Task.IntermediateEntry;
 import org.apache.tajo.storage.FileTablespace;
 import org.apache.tajo.storage.RowStoreUtil;
@@ -670,13 +667,13 @@ public class Repartitioner {
       determinedTaskNum = ranges.length;
     } else {
       // TODO: create partitions by merging the ranges of the histogram
-      FreqHistogram histogram = schedulerContext.getMasterContext().getQuery().getStage(sampleChildBlock.getId()).getHistogramForRangeShuffle();
+      MasterFreqHistogram histogram = schedulerContext.getMasterContext().getQuery().getStage(sampleChildBlock.getId()).getHistogramForRangeShuffle();
       AnalyzedSortSpec[] analyzedSpecs = HistogramUtil.analyzeHistogram(histogram, sortKeyStats);
-      List<Bucket> buckets = histogram.getSortedBuckets();
+      List<BucketWithLocation> buckets = histogram.getSortedBuckets();
 
       // Compute the total cardinality of sort keys.
-      BigDecimal totalCard = histogram.getAllBuckets().stream().map(
-          bucket -> BigDecimal.valueOf(bucket.getCount())
+      BigDecimal totalCard = histogram.getSortedBuckets().stream().map(
+          bucket -> BigDecimal.valueOf(bucket.getCard())
       ).reduce(BigDecimal.ZERO, (a, b) -> a.add(b));
 //      // Total range is the pair of the first and last tuples.
 //      TupleRange totalRange = new TupleRange(buckets.get(0).getStartKey(), buckets.get(buckets.size()-1).getEndKey(), buckets.get(0).getKey().getInterval(), histogram.getComparator());
@@ -709,19 +706,19 @@ public class Repartitioner {
 
         while (determinedTaskNum > buckets.size()) {
           buckets.sort((b1, b2) -> {
-            if (b1.getCount() > b2.getCount()) {
+            if (b1.getCard() > b2.getCard()) {
               return -1;
-            } else if (b1.getCount() == b2.getCount()) {
+            } else if (b1.getCard() == b2.getCard()) {
               return 0;
             } else {
               return 1;
             }
           });
 
-          List<Bucket> splits = new ArrayList<>();
-          for (Bucket eachBucket : buckets) {
+          List<BucketWithLocation> splits = new ArrayList<>();
+          for (BucketWithLocation eachBucket : buckets) {
             if (HistogramUtil.splittable(analyzedSpecs, eachBucket)) {
-              List<Bucket> split = HistogramUtil.splitBucket(histogram, analyzedSpecs, eachBucket, 2);
+              List<BucketWithLocation> split = HistogramUtil.splitBucket(histogram, analyzedSpecs, eachBucket, 2);
               if (split.size() > 1) {
                 splits.addAll(split);
                 if (splits.size() + buckets.size() >= determinedTaskNum) {
@@ -739,7 +736,7 @@ public class Repartitioner {
 
         determinedTaskNum = buckets.size();
         LOG.info("Task number is adjusted to " + determinedTaskNum + " due to the number of buckets.");
-        histogram = new FreqHistogram(histogram.getSortSpecs(), buckets);
+        histogram = new MasterFreqHistogram(histogram.getSortSpecs(), buckets);
       }
 
       // The average cardinality of the original histogram must be same with normalized one.

@@ -18,24 +18,110 @@
 
 package org.apache.tajo.catalog.statistics;
 
-/**
- *
- * @param <KEY>
- * @param <BUCKET>
- */
-public abstract class Histogram<KEY, BUCKET> {
+import org.apache.tajo.catalog.*;
+import org.apache.tajo.catalog.statistics.Histogram.Bucket;
+import org.apache.tajo.storage.Tuple;
 
-  /**
-   *
-   * @param key
-   * @param change
-   */
-  public abstract void updateBucket(KEY key, double change);
+import java.util.*;
 
-  /**
-   *
-   * @param key
-   * @return
-   */
-  public abstract BUCKET getBucket(KEY key);
+public abstract class Histogram<BUCKET extends Bucket> {
+
+  protected TupleComparator comparator;
+  protected SortSpec[] sortSpecs;
+  protected Map<TupleRange, BUCKET> buckets;
+
+  protected Histogram() {}
+
+  public Histogram(SortSpec[] sortSpecs) {
+    Schema keySchema = HistogramUtil.sortSpecsToSchema(sortSpecs);
+    this.sortSpecs = sortSpecs;
+    this.comparator = new BaseTupleComparator(keySchema, sortSpecs);
+    buckets = new TreeMap<>();
+  }
+
+  public SortSpec[] getSortSpecs() {
+    return sortSpecs;
+  }
+
+  public Comparator<Tuple> getComparator() {
+    return comparator;
+  }
+
+  public void addBucket(BUCKET bucket) {
+    if (buckets.containsKey(bucket.key)) {
+      throw new RuntimeException("Duplicated bucket");
+    }
+    buckets.put(bucket.key, bucket);
+  }
+
+  public void removeBucket(BUCKET bucket) {
+    buckets.remove(bucket.key);
+  }
+
+  public BUCKET getBucket(TupleRange key) {
+    return buckets.get(key);
+  }
+
+  public List<BUCKET> getSortedBuckets() {
+    return new ArrayList<>(buckets.values());
+  }
+
+  public int size() {
+    return buckets.size();
+  }
+
+  public void clear() {
+    buckets.clear();
+  }
+
+  public abstract BUCKET createBucket(TupleRange key, double card);
+
+  public abstract class Bucket {
+    protected TupleRange key;
+    protected double card;
+
+    protected Bucket() {}
+
+    public Bucket(TupleRange key, double card) {
+      this.key = key;
+      this.card = card;
+    }
+
+    public TupleRange getKey() {
+      return key;
+    }
+
+    public double getCard() {
+      return card;
+    }
+
+    public void setCard(double card) {
+      this.card = card;
+    }
+
+    public Tuple getStartKey() {
+      return key.getStart();
+    }
+
+    public Tuple getEndKey() {
+      return key.getEnd();
+    }
+
+    public void incCount(double inc) {
+      this.card += inc;
+    }
+
+    @Override
+    public String toString() {
+      return key + " (" + card + ")";
+    }
+
+    public boolean isEndKeyInclusive() {
+      return key.isEndInclusive();
+    }
+
+    public void setEndKeyInclusive() {
+      this.key.setEndInclusive();
+    }
+  }
 }

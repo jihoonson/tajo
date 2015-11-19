@@ -23,7 +23,7 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.tajo.catalog.Schema;
 import org.apache.tajo.catalog.SortSpec;
 import org.apache.tajo.catalog.TupleRange;
-import org.apache.tajo.catalog.statistics.FreqHistogram.Bucket;
+import org.apache.tajo.catalog.statistics.Histogram.Bucket;
 import org.apache.tajo.common.TajoDataTypes.Type;
 import org.apache.tajo.datum.*;
 import org.apache.tajo.storage.Tuple;
@@ -53,7 +53,7 @@ public class HistogramUtil {
     return result;
   }
 
-  public static AnalyzedSortSpec[] analyzeHistogram(FreqHistogram histogram, List<ColumnStats> columnStatses) {
+  public static AnalyzedSortSpec[] analyzeHistogram(Histogram histogram, List<ColumnStats> columnStatses) {
     SortSpec[] sortSpecs = histogram.getSortSpecs();
     Set<Datum>[] distValSets = new Set[sortSpecs.length];
     for (int i = 0; i < distValSets.length; i++) {
@@ -77,7 +77,7 @@ public class HistogramUtil {
 //          last.put(i, end.asDatum(i));
 //        }
 //      }
-      sumCard = sumCard.add(BigDecimal.valueOf(bucket.getCount()));
+      sumCard = sumCard.add(BigDecimal.valueOf(bucket.getCard()));
       for (int i = 0; i < sortSpecs.length; i++) {
         distValSets[i].add(start.asDatum(i));
         if (analyzedSpecs[i].getType().equals(Type.TEXT)) {
@@ -91,7 +91,7 @@ public class HistogramUtil {
             analyzedSpecs[i].setMaxLength(Math.max(analyzedSpecs[i].getMaxLength(), start.getUnicodeChars(i).length));
           }
         } else if (analyzedSpecs[i].getType().equals(Type.FLOAT4) || analyzedSpecs[i].getType().equals(Type.FLOAT8)) {
-          double diff = (end.getFloat8(i) - start.getFloat8(i)) / bucket.getCount();
+          double diff = (end.getFloat8(i) - start.getFloat8(i)) / bucket.getCard();
           if (diff > 0 && diff < analyzedSpecs[i].getMinInterval()) {
             analyzedSpecs[i].setMinInterval(diff);
           }
@@ -216,7 +216,7 @@ public class HistogramUtil {
 
   public static boolean splittable(AnalyzedSortSpec[] sortSpecs, Bucket bucket) {
     // TODO: many bugs. more tests are required.
-    if (bucket.getCount() > 1) {
+    if (bucket.getCard() > 1) {
       BigDecimal startVal, endVal;
       Tuple start = bucket.getStartKey();
       Tuple end = bucket.getEndKey();
@@ -252,7 +252,7 @@ public class HistogramUtil {
     }
   }
 
-  protected static Bucket getSubBucket(FreqHistogram histogram,
+  protected static Bucket getSubBucket(Histogram histogram,
                                        AnalyzedSortSpec[] analyzedSpecs,
                                        Bucket origin, Tuple start, Tuple end) {
     if (start.equals(end)) {
@@ -270,14 +270,14 @@ public class HistogramUtil {
     int[] maxScales = HistogramUtil.maxScales(normTotalInter, normSubInter);
     BigDecimal totalRange = HistogramUtil.weightedSum(normTotalInter, maxScales);
     BigDecimal subRange = HistogramUtil.weightedSum(normSubInter, maxScales);
-    BigDecimal totalAmount = BigDecimal.valueOf(origin.getCount());
+    BigDecimal totalAmount = BigDecimal.valueOf(origin.getCard());
     double newAmount = totalAmount.multiply(subRange)
         .divide(totalRange, 64, BigDecimal.ROUND_HALF_UP).doubleValue();
 
     return histogram.createBucket(new TupleRange(start, end, histogram.getComparator()), newAmount);
   }
 
-  public static List<Bucket> splitBucket(FreqHistogram histogram, AnalyzedSortSpec[] sortSpecs,
+  public static List<Bucket> splitBucket(Histogram histogram, AnalyzedSortSpec[] sortSpecs,
                                          Bucket bucket, int splitNum) {
     Comparator<Tuple> comparator = histogram.getComparator();
     List<Bucket> splits = new ArrayList<>();

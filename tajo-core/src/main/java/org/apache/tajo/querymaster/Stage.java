@@ -31,7 +31,6 @@ import org.apache.tajo.*;
 import org.apache.tajo.catalog.*;
 import org.apache.tajo.catalog.proto.CatalogProtos.PartitionDescProto;
 import org.apache.tajo.catalog.statistics.*;
-import org.apache.tajo.catalog.statistics.FreqHistogram.Bucket;
 import org.apache.tajo.conf.TajoConf;
 import org.apache.tajo.engine.planner.PhysicalPlannerImpl;
 import org.apache.tajo.engine.planner.enforce.Enforcer;
@@ -107,7 +106,7 @@ public class Stage implements EventHandler<StageEvent> {
   private volatile long lastContactTime;
   private Thread timeoutChecker;
 
-  private FreqHistogram histogramForRangeShuffle;
+  private MasterFreqHistogram histogramForRangeShuffle;
 
   private final Map<TaskId, Task> tasks = Maps.newConcurrentMap();
   private final Map<Integer, InetSocketAddress> workerMap = Maps.newConcurrentMap();
@@ -711,10 +710,10 @@ public class Stage implements EventHandler<StageEvent> {
   }
 
   public void initStatCollect(Schema shuffleKeySchema, SortSpec[] sortSpecs) {
-    histogramForRangeShuffle = new FreqHistogram(sortSpecs);
+    histogramForRangeShuffle = new MasterFreqHistogram(sortSpecs);
   }
 
-  public FreqHistogram getHistogramForRangeShuffle() {
+  public MasterFreqHistogram getHistogramForRangeShuffle() {
     return histogramForRangeShuffle;
   }
 
