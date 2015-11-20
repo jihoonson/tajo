@@ -29,6 +29,7 @@ import org.apache.tajo.datum.*;
 import org.apache.tajo.storage.Tuple;
 import org.apache.tajo.storage.VTuple;
 import org.apache.tajo.util.Bytes;
+import org.apache.tajo.util.Pair;
 import org.apache.tajo.util.StringUtils;
 
 import java.math.BigDecimal;
@@ -252,11 +253,11 @@ public class HistogramUtil {
     }
   }
 
-  protected static Bucket getSubBucket(Histogram histogram,
-                                       AnalyzedSortSpec[] analyzedSpecs,
-                                       Bucket origin, Tuple start, Tuple end) {
+  public static Pair<TupleRange, Double> getSubBucket(Histogram histogram,
+                                                      AnalyzedSortSpec[] analyzedSpecs,
+                                                      Bucket origin, Tuple start, Tuple end) {
     if (start.equals(end)) {
-      return origin;
+      return new Pair<>(origin.getKey(), origin.card);
     }
 
     BigDecimal[] normStart = normalizeTupleAsValue(analyzedSpecs, origin.getStartKey());
@@ -274,7 +275,8 @@ public class HistogramUtil {
     double newAmount = totalAmount.multiply(subRange)
         .divide(totalRange, 64, BigDecimal.ROUND_HALF_UP).doubleValue();
 
-    return histogram.createBucket(new TupleRange(start, end, histogram.getComparator()), newAmount);
+//    return histogram.createBucket(new TupleRange(start, end, histogram.getComparator()), newAmount);
+    return new Pair<>(new TupleRange(start, end, histogram.getComparator()), newAmount);
   }
 
   public static List<Bucket> splitBucket(Histogram histogram, AnalyzedSortSpec[] sortSpecs,
@@ -840,7 +842,7 @@ public class HistogramUtil {
     return chars;
   }
 
-  public static void refineToEquiDepth(final FreqHistogram histogram,
+  public static void refineToEquiDepth(final Histogram histogram,
                                        final BigDecimal avgCard,
                                        final AnalyzedSortSpec[] sortSpecs) {
 //    List<Bucket> buckets = histogram.getSortedBuckets();

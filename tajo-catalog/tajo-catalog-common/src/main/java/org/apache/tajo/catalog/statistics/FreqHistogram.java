@@ -18,7 +18,6 @@
 
 package org.apache.tajo.catalog.statistics;
 
-import com.google.common.base.Preconditions;
 import com.google.protobuf.ByteString;
 import org.apache.tajo.catalog.BaseTupleComparator;
 import org.apache.tajo.catalog.Schema;
@@ -26,7 +25,6 @@ import org.apache.tajo.catalog.SortSpec;
 import org.apache.tajo.catalog.TupleRange;
 import org.apache.tajo.catalog.proto.CatalogProtos.FreqBucketProto;
 import org.apache.tajo.catalog.proto.CatalogProtos.FreqHistogramProto;
-import org.apache.tajo.catalog.statistics.FreqHistogram.FreqBucket;
 import org.apache.tajo.common.ProtoObject;
 import org.apache.tajo.datum.DatumFactory;
 import org.apache.tajo.datum.NullDatum;
@@ -34,12 +32,13 @@ import org.apache.tajo.storage.Tuple;
 import org.apache.tajo.storage.VTuple;
 import org.apache.tajo.util.TUtil;
 
-import java.util.*;
+import java.util.Collection;
+import java.util.TreeMap;
 
 /**
  * Frequency histogram
  */
-public class FreqHistogram extends Histogram<FreqBucket> implements ProtoObject<FreqHistogramProto>, Cloneable {
+public class FreqHistogram extends Histogram implements ProtoObject<FreqHistogramProto>, Cloneable {
 
   public FreqHistogram(SortSpec[] sortSpecs) {
     super(sortSpecs);
@@ -73,14 +72,7 @@ public class FreqHistogram extends Histogram<FreqBucket> implements ProtoObject<
 
   public void updateBucket(Tuple startKey, Tuple endKey, double change, boolean endKeyInclusive) {
     // TODO: normalize length
-    Tuple startClone, endClone;
-    try {
-      startClone = startKey.clone();
-      endClone = endKey.clone();
-    } catch (CloneNotSupportedException e) {
-      throw new RuntimeException(e);
-    }
-    TupleRange key = new TupleRange(startClone, endClone, comparator);
+    TupleRange key = new TupleRange(startKey, endKey, comparator);
     updateBucket(key, change, endKeyInclusive);
   }
 
@@ -114,32 +106,12 @@ public class FreqHistogram extends Histogram<FreqBucket> implements ProtoObject<
     for (SortSpec sortSpec : sortSpecs) {
       builder.addSortSpec(sortSpec.getProto());
     }
-    for (FreqBucket bucket : buckets.values()) {
-      builder.addBuckets(bucket.getProto());
+    for (Bucket bucket : buckets.values()) {
+      builder.addBuckets(((FreqBucket)bucket).getProto());
     }
     return builder.build();
   }
 
-  @Override
-  public FreqBucket createBucket(TupleRange key, double amount) {
-    return new FreqBucket(key, amount);
-  }
-
-  @Override
-  public boolean equals(Object o) {
-    if (o instanceof FreqHistogram) {
-      FreqHistogram other = (FreqHistogram) o;
-      boolean eq = Arrays.equals(this.sortSpecs, other.sortSpecs);
-      eq &= this.getSortedBuckets().equals(other.getSortedBuckets());
-      return eq;
-    }
-    return false;
-  }
-
-  /**
-   *
-   * Cardinality can be a floating point number
-   */
   public class FreqBucket extends Bucket
       implements ProtoObject<FreqBucketProto>, Cloneable {
 
@@ -176,27 +148,6 @@ public class FreqHistogram extends Histogram<FreqBucket> implements ProtoObject<
     @Override
     public Object clone() throws CloneNotSupportedException {
       return super.clone();
-    }
-
-    public void merge(FreqBucket other) {
-      Tuple minStart, maxEnd;
-      boolean endKeyInclusive;
-      if (this.key.compareTo(other.key) < 0) {
-        minStart = key.getStart();
-        maxEnd = other.key.getEnd();
-        endKeyInclusive = other.key.isEndInclusive();
-      } else {
-        minStart = other.key.getStart();
-        maxEnd = key.getEnd();
-        endKeyInclusive = this.key.isEndInclusive();
-      }
-
-      this.key.setStart(minStart);
-      this.key.setEnd(maxEnd);
-      this.card += other.card;
-      if (endKeyInclusive) {
-        this.setEndKeyInclusive();
-      }
     }
 
     @Override

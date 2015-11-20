@@ -1255,7 +1255,7 @@ public class Stage implements EventHandler<StageEvent> {
 
 //    List<Bucket> buckets = histogram.getSortedBuckets();
     // 1) Update histograms of range partitions using the report
-    stage.histogramForRangeShuffle.merge(analyzedSpecs, histogram);
+    stage.histogramForRangeShuffle.merge(analyzedSpecs, histogram, succeededWorker);
 //    FreqHistogram histogram = stage.histogramForRangeShuffle;
 //    HistogramUtil.normalizeLength(histogram);
 //    List<Bucket> buckets = histogram.getSortedBuckets();

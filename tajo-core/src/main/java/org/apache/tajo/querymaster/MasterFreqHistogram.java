@@ -23,50 +23,47 @@ import org.apache.tajo.catalog.SortSpec;
 import org.apache.tajo.catalog.TupleRange;
 import org.apache.tajo.catalog.statistics.AnalyzedSortSpec;
 import org.apache.tajo.catalog.statistics.FreqHistogram;
-import org.apache.tajo.catalog.statistics.FreqHistogram.FreqBucket;
 import org.apache.tajo.catalog.statistics.Histogram;
 import org.apache.tajo.catalog.statistics.HistogramUtil;
-import org.apache.tajo.querymaster.MasterFreqHistogram.BucketWithLocation;
+import org.apache.tajo.master.cluster.WorkerConnectionInfo;
 import org.apache.tajo.querymaster.Task.PullHost;
 import org.apache.tajo.storage.Tuple;
+import org.apache.tajo.util.Pair;
 
-import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Set;
 
-public class MasterFreqHistogram extends Histogram<BucketWithLocation> {
+public class MasterFreqHistogram extends Histogram {
 
   public MasterFreqHistogram(SortSpec[] sortSpecs) {
     super(sortSpecs);
   }
 
-  public MasterFreqHistogram(SortSpec[] sortSpecs, List<BucketWithLocation> buckets) {
+  public MasterFreqHistogram(SortSpec[] sortSpecs, List<Bucket> buckets) {
     super(sortSpecs);
-    for (BucketWithLocation eachBucket : buckets) {
+    for (Bucket eachBucket : buckets) {
       this.buckets.put(eachBucket.getKey(), eachBucket);
     }
   }
 
-  @Override
-  public BucketWithLocation createBucket(TupleRange key, double amount) {
-    return null;
-  }
-
-  public void merge(AnalyzedSortSpec[] analyzedSpecs, FreqHistogram other) {
-    List<BucketWithLocation> thisBuckets = this.getSortedBuckets();
-    List<FreqBucket> otherBuckets = other.getSortedBuckets();
-    Iterator<BucketWithLocation> thisIt = thisBuckets.iterator();
-    Iterator<FreqBucket> otherIt = otherBuckets.iterator();
+  public void merge(AnalyzedSortSpec[] analyzedSpecs, FreqHistogram other, WorkerConnectionInfo workerInfo) {
+    List<Bucket> thisBuckets = this.getSortedBuckets();
+    List<Bucket> otherBuckets = other.getSortedBuckets();
+    Iterator<Bucket> thisIt = thisBuckets.iterator();
+    Iterator<Bucket> otherIt = otherBuckets.iterator();
 
     this.buckets.clear();
-    Bucket thisBucket = null, otherBucket = null;
+    BucketWithLocation thisBucket = null;
+    BucketWithLocation otherBucket = null;
     while ((thisBucket != null || thisIt.hasNext())
         && (otherBucket != null || otherIt.hasNext())) {
-      if (thisBucket == null) thisBucket = thisIt.next();
-      if (otherBucket == null) otherBucket = otherIt.next();
+      if (thisBucket == null) thisBucket = (BucketWithLocation) thisIt.next();
+      if (otherBucket == null) otherBucket = new BucketWithLocation(otherIt.next(), workerInfo);
 
-      FreqBucket smallStartBucket, largeStartBucket;
-      boolean isThisSmall = thisBucket.key.compareTo(otherBucket.key) < 0;
+      BucketWithLocation smallStartBucket, largeStartBucket;
+      boolean isThisSmall = thisBucket.getKey().compareTo(otherBucket.getKey()) < 0;
       if (isThisSmall) {
         smallStartBucket = thisBucket;
         largeStartBucket = otherBucket;
@@ -76,9 +73,9 @@ public class MasterFreqHistogram extends Histogram<BucketWithLocation> {
       }
 
       // Check overlap between keys
-      if (!smallStartBucket.key.isOverlap(largeStartBucket.key)) {
+      if (!smallStartBucket.getKey().isOverlap(largeStartBucket.getKey())) {
         // non-overlap keys
-        this.buckets.put(smallStartBucket.key, smallStartBucket);
+        this.buckets.put(smallStartBucket.getKey(), smallStartBucket);
         if (isThisSmall) {
           thisBucket = null;
         } else {
@@ -92,7 +89,7 @@ public class MasterFreqHistogram extends Histogram<BucketWithLocation> {
         // If both buckets are splittable
         if (thisSplittable && otherSplittable) {
           // Split buckets into overlapped and non-overlapped portions
-          Bucket[] bucketOrder = new FreqBucket[3];
+          Bucket[] bucketOrder = new Bucket[3];
           bucketOrder[0] = smallStartBucket;
 
           Tuple[] tuples = new Tuple[4];
@@ -111,19 +108,21 @@ public class MasterFreqHistogram extends Histogram<BucketWithLocation> {
             bucketOrder[2] = smallStartBucket;
           }
 
-          FreqBucket lastBucket = null;
+          BucketWithLocation lastBucket = null;
           for (int i = 0; i < bucketOrder.length; i++) {
             Tuple start = tuples[i];
             Tuple end = tuples[i + 1];
 
             if (i == 1) {
               // Overlapped bucket
-              FreqBucket smallSubBucket = (FreqBucket) HistogramUtil.getSubBucket(this, analyzedSpecs, smallStartBucket,
+              Pair<TupleRange, Double> keyAndCard = HistogramUtil.getSubBucket(this, analyzedSpecs, smallStartBucket,
                   start, end);
-              FreqBucket largeSubBucket = (FreqBucket) HistogramUtil.getSubBucket(this, analyzedSpecs, largeStartBucket,
+              BucketWithLocation smallSubBucket = new BucketWithLocation(keyAndCard.getFirst(), keyAndCard.getSecond(), workerInfo);
+              keyAndCard = HistogramUtil.getSubBucket(this, analyzedSpecs, largeStartBucket,
                   start, end);
+              BucketWithLocation largeSubBucket = new BucketWithLocation(keyAndCard.getFirst(), keyAndCard.getSecond(), workerInfo);
               try {
-                Preconditions.checkState(smallSubBucket.getKey().equals(largeSubBucket.getKey()), "small.key: " + smallStartBucket.key + " large.key: " + largeStartBucket.key);
+                Preconditions.checkState(smallSubBucket.getKey().equals(largeSubBucket.getKey()), "small.key: " + smallStartBucket.getKey() + " large.key: " + largeStartBucket.getKey());
               } catch (IllegalStateException e) {
                 throw e;
               }
@@ -132,10 +131,11 @@ public class MasterFreqHistogram extends Histogram<BucketWithLocation> {
               // Note: Don't need to consider end inclusive here
               // because this bucket is always a middle one among the split buckets
             } else {
-              if (!start.equals(end) || bucketOrder[i].key.isEndInclusive()) {
-                FreqBucket subBucket = (FreqBucket) HistogramUtil.getSubBucket(this, analyzedSpecs, bucketOrder[i],
+              if (!start.equals(end) || bucketOrder[i].getKey().isEndInclusive()) {
+                Pair<TupleRange, Double> keyAndCard = HistogramUtil.getSubBucket(this, analyzedSpecs, bucketOrder[i],
                     start, end);
-                if (i > 1 && bucketOrder[i].key.isEndInclusive()) {
+                BucketWithLocation subBucket = new BucketWithLocation(keyAndCard.getFirst(), keyAndCard.getSecond(), workerInfo);
+                if (i > 1 && bucketOrder[i].getKey().isEndInclusive()) {
                   subBucket.setEndKeyInclusive();
                 }
                 lastBucket = subBucket;
@@ -168,34 +168,53 @@ public class MasterFreqHistogram extends Histogram<BucketWithLocation> {
     }
 
     if (thisBucket != null) {
-      this.buckets.put(thisBucket.key, thisBucket);
+      this.buckets.put(thisBucket.getKey(), thisBucket);
     }
 
     if (otherBucket != null) {
-      this.buckets.put(otherBucket.key, otherBucket);
+      this.buckets.put(otherBucket.getKey(), otherBucket);
     }
 
     while (thisIt.hasNext()) {
-      FreqBucket next = thisIt.next();
-      this.buckets.put(next.key, next);
+      Bucket next = thisIt.next();
+      this.buckets.put(next.getKey(), next);
     }
 
     while (otherIt.hasNext()) {
-      FreqBucket next = otherIt.next();
-      this.buckets.put(next.key, next);
+      Bucket next = otherIt.next();
+      this.buckets.put(next.getKey(), new BucketWithLocation(next, workerInfo));
     }
   }
 
   public class BucketWithLocation extends Bucket {
-    private final List<PullHost> hosts = new ArrayList<>();
+    private final Set<PullHost> hosts = new HashSet<>();
+
+    public BucketWithLocation(TupleRange key, double count, WorkerConnectionInfo info) {
+      this(key, count, info.getHost(), info.getPullServerPort());
+    }
 
     public BucketWithLocation(TupleRange key, double count, String host, int port) {
       super(key, count);
       hosts.add(new PullHost(host, port));
     }
 
-    public void merge(BucketWithLocation other) {
+    public BucketWithLocation(Bucket bucket, WorkerConnectionInfo info) {
+      this(bucket.getKey(), bucket.getCard(), info.getHost(), info.getPullServerPort());
+    }
 
+    public BucketWithLocation(Bucket bucket, String host, int port) {
+      this(bucket.getKey(), bucket.getCard(), host, port);
+    }
+
+    public Set<PullHost> getHosts() {
+      return hosts;
+    }
+
+    @Override
+    public void merge(Bucket other) {
+      super.merge(other);
+      BucketWithLocation bucket = (BucketWithLocation) other;
+      this.hosts.addAll(bucket.hosts);
     }
   }
 }

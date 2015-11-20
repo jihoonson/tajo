@@ -19,16 +19,15 @@
 package org.apache.tajo.catalog.statistics;
 
 import org.apache.tajo.catalog.*;
-import org.apache.tajo.catalog.statistics.Histogram.Bucket;
 import org.apache.tajo.storage.Tuple;
 
 import java.util.*;
 
-public abstract class Histogram<BUCKET extends Bucket> {
+public abstract class Histogram {
 
   protected TupleComparator comparator;
   protected SortSpec[] sortSpecs;
-  protected Map<TupleRange, BUCKET> buckets;
+  protected Map<TupleRange, Bucket> buckets;
 
   protected Histogram() {}
 
@@ -47,23 +46,23 @@ public abstract class Histogram<BUCKET extends Bucket> {
     return comparator;
   }
 
-  public void addBucket(BUCKET bucket) {
+  public void addBucket(Bucket bucket) {
     if (buckets.containsKey(bucket.key)) {
       throw new RuntimeException("Duplicated bucket");
     }
     buckets.put(bucket.key, bucket);
   }
 
-  public void removeBucket(BUCKET bucket) {
+  public void removeBucket(Bucket bucket) {
     buckets.remove(bucket.key);
   }
 
-  public BUCKET getBucket(TupleRange key) {
+  public Bucket getBucket(TupleRange key) {
     return buckets.get(key);
   }
 
-  public List<BUCKET> getSortedBuckets() {
-    return new ArrayList<>(buckets.values());
+  public List<Bucket> getSortedBuckets() {
+    return new LinkedList<>(buckets.values());
   }
 
   public int size() {
@@ -74,7 +73,16 @@ public abstract class Histogram<BUCKET extends Bucket> {
     buckets.clear();
   }
 
-  public abstract BUCKET createBucket(TupleRange key, double card);
+  @Override
+  public boolean equals(Object o) {
+    if (o instanceof Histogram) {
+      Histogram other = (Histogram) o;
+      boolean eq = Arrays.equals(this.sortSpecs, other.sortSpecs);
+      eq &= this.getSortedBuckets().equals(other.getSortedBuckets());
+      return eq;
+    }
+    return false;
+  }
 
   public abstract class Bucket {
     protected TupleRange key;
@@ -85,6 +93,11 @@ public abstract class Histogram<BUCKET extends Bucket> {
     public Bucket(TupleRange key, double card) {
       this.key = key;
       this.card = card;
+    }
+
+    public void merge(Bucket other) {
+      this.key = TupleRangeUtil.merge(this.key, other.key);
+      this.card += other.card;
     }
 
     public TupleRange getKey() {

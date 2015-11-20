@@ -26,7 +26,8 @@ import org.apache.hadoop.fs.RawLocalFileSystem;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.tajo.catalog.*;
 import org.apache.tajo.catalog.statistics.FreqHistogram;
-import org.apache.tajo.catalog.statistics.FreqHistogram.Bucket;
+import org.apache.tajo.catalog.statistics.Histogram;
+import org.apache.tajo.catalog.statistics.Histogram.Bucket;
 import org.apache.tajo.conf.TajoConf;
 import org.apache.tajo.conf.TajoConf.ConfVars;
 import org.apache.tajo.engine.planner.KeyProjector;
@@ -34,6 +35,7 @@ import org.apache.tajo.plan.logical.ShuffleFileWriteNode;
 import org.apache.tajo.plan.util.PlannerUtil;
 import org.apache.tajo.storage.*;
 import org.apache.tajo.storage.index.bst.BSTIndex;
+import org.apache.tajo.util.Pair;
 import org.apache.tajo.worker.TaskAttemptContext;
 
 import java.io.IOException;
@@ -57,11 +59,10 @@ public class RangeShuffleFileWriteExec extends UnaryPhysicalExec {
 
   private KeyProjector keyProjector;
 
-  private FreqHistogram freqHistogram;
+//  private FreqHistogram freqHistogram;
   private int maxHistogramSize;
   private final Random random = new Random(System.currentTimeMillis());
-
-//  private List<Pair<Tuple, Long>> countPerTuples;
+  private List<Pair<TupleRange, Double>> keyAndCards;
 
   public RangeShuffleFileWriteExec(final TaskAttemptContext context,
                                    final ShuffleFileWriteNode plan,
@@ -97,10 +98,14 @@ public class RangeShuffleFileWriteExec extends UnaryPhysicalExec {
     this.indexWriter.setLoadNum(100);
     this.indexWriter.open();
 
-    this.freqHistogram = new FreqHistogram(sortSpecs);
+//    this.freqHistogram = new FreqHistogram(sortSpecs);
     this.maxHistogramSize = context.getConf().getIntVar(ConfVars.HISTOGRAM_MAX_SIZE);
-    this.maxHistogramSize = maxHistogramSize == 0 ? Integer.MAX_VALUE : maxHistogramSize;
-//    countPerTuples = new ArrayList<>();
+    if (maxHistogramSize == 0) {
+      this.maxHistogramSize = Integer.MAX_VALUE;
+      this.keyAndCards = new ArrayList<>(10000);
+    } else {
+      this.keyAndCards = new ArrayList<>(maxHistogramSize + 1);
+    }
 
     super.init();
   }
@@ -120,7 +125,7 @@ public class RangeShuffleFileWriteExec extends UnaryPhysicalExec {
       if (!prevKeyTuple.equals(keyTuple)) {
         if (!prevKeyTuple.isBlank(0)) {
           // [prevKeyTuple, keyTuple)
-          updateHistogram(prevKeyTuple, keyTuple, count, false);
+          updateHistogram(prevKeyTuple, keyTuple, count);
 //          countPerTuples.add(new Pair<>(new VTuple(prevKeyTuple.getValues()), count));
 
         }
@@ -132,26 +137,27 @@ public class RangeShuffleFileWriteExec extends UnaryPhysicalExec {
     }
 
     if (count > 0) {
-      updateHistogram(prevKeyTuple, prevKeyTuple, count, true);
+      updateHistogram(prevKeyTuple, prevKeyTuple, count);
 //      countPerTuples.add(new Pair<>(prevKeyTuple, count));
     }
 
     return null;
   }
 
-  private void updateHistogram(Tuple start, Tuple end, double change, boolean endKeyInclusive) {
-    freqHistogram.updateBucket(start, end, change, endKeyInclusive);
-    if (freqHistogram.size() > maxHistogramSize) {
-//      List<Bucket> buckets = findTwoBucketsOfMinCount(freqHistogram);
-      List<Bucket> buckets = freqHistogram.getSortedBuckets();
-      int mergeIndex = random.nextInt(buckets.size() - 1);
-      Bucket b1 = buckets.get(mergeIndex);
-      Bucket b2 = buckets.get(mergeIndex + 1);
-      freqHistogram.removeBucket(b1);
-      freqHistogram.removeBucket(b2);
-      b1.merge(b2);
-      freqHistogram.addBucket(b1);
+  private void updateHistogram(Tuple start, Tuple end, double change) {
+    // Set only when start and end are the same instance
+    try {
+      keyAndCards.add(new Pair<>(new TupleRange(start.clone(), end.clone(), start == end, comp), change));
+    } catch (CloneNotSupportedException e) {
+      throw new RuntimeException(e);
     }
+
+//    if (keyAndCards.size() > maxHistogramSize) {
+//      int mergeIndex = random.nextInt(keyAndCards.size() - 2);
+//      Pair<TupleRange, Double> b1 = keyAndCards.remove(mergeIndex);
+//      Pair<TupleRange, Double> b2 = keyAndCards.remove(mergeIndex + 1);
+//      keyAndCards.add(new Pair<>(TupleRangeUtil.merge(b1.getFirst(), b2.getFirst()), b1.getSecond() + b2.getSecond()));
+//    }
   }
 
   @Override
@@ -204,23 +210,13 @@ public class RangeShuffleFileWriteExec extends UnaryPhysicalExec {
 //    freqHistogram.updateBucket(new TupleRange(current.getFirst(), current.getFirst(),
 //        freqHistogram.getComparator()), current.getSecond(), true);
 
-    LOG.info("histogram size: " + freqHistogram.size());
-    context.setFreqHistogram(freqHistogram);
+    FreqHistogram histogram = new FreqHistogram(sortSpecs);
+    for (Pair<TupleRange, Double> eachKeyAndCard : keyAndCards) {
+      histogram.updateBucket(eachKeyAndCard.getFirst(), eachKeyAndCard.getSecond());
+    }
+    LOG.info("histogram size: " + histogram.size());
+    context.setFreqHistogram(histogram);
     appender = null;
     indexWriter = null;
-  }
-
-  static List<Bucket> findTwoBucketsOfMinCount(FreqHistogram histogram) {
-    List<Bucket> list = new ArrayList<>(histogram.getAllBuckets());
-    Collections.sort(list, (b1, b2) -> {
-      if (b1.getCount() < b2.getCount()) {
-        return -1;
-      } else if (b1.getCount() == b2.getCount()) {
-        return 0;
-      } else {
-        return 1;
-      }
-    });
-    return list.subList(0, 2);
   }
 }

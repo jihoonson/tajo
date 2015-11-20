@@ -44,6 +44,10 @@ public class TupleRange implements Comparable<TupleRange>, Cloneable {
     this.endInclusive = endInclusive;
   }
 
+  public Comparator<Tuple> getComparator() {
+    return comp;
+  }
+
   public void setStart(Tuple tuple) {
     this.start = tuple;
   }

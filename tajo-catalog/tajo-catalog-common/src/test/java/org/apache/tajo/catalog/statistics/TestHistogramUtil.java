@@ -21,7 +21,7 @@ package org.apache.tajo.catalog.statistics;
 import com.sun.tools.javac.util.Convert;
 import org.apache.tajo.catalog.*;
 import org.apache.tajo.catalog.proto.CatalogProtos.FreqHistogramProto;
-import org.apache.tajo.catalog.statistics.FreqHistogram.Bucket;
+import org.apache.tajo.catalog.statistics.Histogram.Bucket;
 import org.apache.tajo.common.TajoDataTypes.Type;
 import org.apache.tajo.datum.*;
 import org.apache.tajo.exception.NotImplementedException;
@@ -659,7 +659,7 @@ public class TestHistogramUtil {
         assertEquals(prevEnd, bucket.getStartKey());
       }
       prevEnd = bucket.getEndKey();
-      count += bucket.getCount();
+      count += bucket.getCard();
     }
     assertEquals(totalCount.longValue(), count);
   }
@@ -913,12 +913,12 @@ public class TestHistogramUtil {
     );
 
     Bucket bucket = histogram.getSortedBuckets().get(0);
-    System.out.println("origin: " + bucket.getKey() + ", " + bucket.getCount());
+    System.out.println("origin: " + bucket.getKey() + ", " + bucket.getCard());
     Tuple diff = HistogramUtil.diff(analyzedSpecs, bucket.getStartKey(), bucket.getEndKey());
     BigDecimal[] normDiff = HistogramUtil.normalizeTupleAsVector(analyzedSpecs, diff);
     int[] maxScales = HistogramUtil.maxScales(normDiff);
     BigDecimal normSum = HistogramUtil.weightedSum(normDiff, maxScales);
-    BigDecimal subSum = normSum.divide(BigDecimal.valueOf(bucket.getCount()), 128, BigDecimal.ROUND_HALF_UP);
+    BigDecimal subSum = normSum.divide(BigDecimal.valueOf(bucket.getCard()), 128, BigDecimal.ROUND_HALF_UP);
     BigDecimal[] normSubDiff = HistogramUtil.normTupleFromWeightedSum(analyzedSpecs, subSum, maxScales);
     Tuple subDiff = HistogramUtil.denormalizeAsVector(analyzedSpecs, normSubDiff);
     System.out.println("diff: " + diff);
@@ -926,26 +926,23 @@ public class TestHistogramUtil {
 
     Tuple start = bucket.getStartKey();
     Tuple end = HistogramUtil.incrementValue(analyzedSpecs, start, subDiff);
-    Bucket subBucket = HistogramUtil.getSubBucket(histogram, analyzedSpecs, bucket, start, end);
-    System.out.println("sub1: " + subBucket.getKey() + ", " + subBucket.getCount());
-    System.out.println("subDiff1: " + HistogramUtil.diff(analyzedSpecs, subBucket.getEndKey(), subBucket.getStartKey()));
+    Pair<TupleRange, Double> keyAndCard = HistogramUtil.getSubBucket(histogram, analyzedSpecs, bucket, start, end);
 
     start = end;
     end = bucket.getEndKey();
-    subBucket = HistogramUtil.getSubBucket(histogram, analyzedSpecs, bucket, start, end);
-    System.out.println("sub2: " + subBucket.getKey() + ", " + subBucket.getCount());
-    System.out.println("subDiff2: " + HistogramUtil.diff(analyzedSpecs, subBucket.getEndKey(), subBucket.getStartKey()));
+    keyAndCard = HistogramUtil.getSubBucket(histogram, analyzedSpecs, bucket, start, end);
 
+    // TODO
   }
 
   @Test
   public void testGetSubBucket() {
     prepareHistogram(TRUE_SET, FALSE_SET);
     Bucket bucket = null;
-    for (Bucket eachBucket : histogram.getAllBuckets()) {
+    for (Bucket eachBucket : histogram.getSortedBuckets()) {
       if (HistogramUtil.splittable(analyzedSpecs, eachBucket)) {
         bucket = eachBucket;
-        System.out.println("origin: " + bucket.getKey() + ", " + bucket.getCount());
+        System.out.println("origin: " + bucket.getKey() + ", " + bucket.getCard());
         break;
       }
     }
@@ -953,7 +950,7 @@ public class TestHistogramUtil {
     BigDecimal[] normDiff = HistogramUtil.normalizeTupleAsVector(analyzedSpecs, diff);
     int[] maxScales = HistogramUtil.maxScales(normDiff);
     BigDecimal normSum = HistogramUtil.weightedSum(normDiff, maxScales);
-    BigDecimal subSum = normSum.divide(BigDecimal.valueOf(bucket.getCount()), 128, BigDecimal.ROUND_HALF_UP);
+    BigDecimal subSum = normSum.divide(BigDecimal.valueOf(bucket.getCard()), 128, BigDecimal.ROUND_HALF_UP);
     BigDecimal[] normSubDiff = HistogramUtil.normTupleFromWeightedSum(analyzedSpecs, subSum, maxScales);
     Tuple subDiff = HistogramUtil.denormalizeAsVector(analyzedSpecs, normSubDiff);
     System.out.println("diff: " + diff);
@@ -961,16 +958,12 @@ public class TestHistogramUtil {
 
     Tuple start = bucket.getStartKey();
     Tuple end = HistogramUtil.incrementValue(analyzedSpecs, start, subDiff);
-    Bucket subBucket = HistogramUtil.getSubBucket(histogram, analyzedSpecs, bucket, start, end);
-    System.out.println("sub1: " + subBucket.getKey() + ", " + subBucket.getCount());
-    System.out.println("subDiff1: " + HistogramUtil.diff(analyzedSpecs, subBucket.getEndKey(), subBucket.getStartKey()));
+    Pair<TupleRange, Double> keyAndCard = HistogramUtil.getSubBucket(histogram, analyzedSpecs, bucket, start, end);
 
     start = end;
     end = bucket.getEndKey();
-    subBucket = HistogramUtil.getSubBucket(histogram, analyzedSpecs, bucket, start, end);
-    System.out.println("sub2: " + subBucket.getKey() + ", " + subBucket.getCount());
-    System.out.println("subDiff2: " + HistogramUtil.diff(analyzedSpecs, subBucket.getEndKey(), subBucket.getStartKey()));
-
+    keyAndCard = HistogramUtil.getSubBucket(histogram, analyzedSpecs, bucket, start, end);
+    // TODO
 //    Tuple start = HistogramUtil.incrementValue(analyzedSpecs, bucket.getStartKey(), 2);
 //    Tuple end = HistogramUtil.incrementValue(analyzedSpecs, start, 3);
 //    Bucket subBucket = HistogramUtil.getSubBucket(histogram, analyzedSpecs, bucket, start, end);

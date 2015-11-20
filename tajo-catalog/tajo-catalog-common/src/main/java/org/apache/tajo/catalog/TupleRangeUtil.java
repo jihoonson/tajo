@@ -274,4 +274,19 @@ public class TupleRangeUtil {
   public static BigInteger computeCardinalityForAllColumns(SortSpec[] sortSpecs, TupleRange range, boolean lastInclusive) {
     return computeCardinalityForAllColumns(sortSpecs, range.getStart(), range.getEnd(), lastInclusive);
   }
+
+  public static TupleRange merge(TupleRange t1, TupleRange t2) {
+    Tuple minStart = t1.getComparator().compare(t1.getStart(), t2.getStart()) < 0 ? t1.getStart() : t2.getStart();
+    Tuple maxEnd;
+    boolean endKeyInclusive;
+    if (t1.getEnd().equals(t2.getEnd())) {
+      maxEnd = t1.getEnd();
+      endKeyInclusive = t1.isEndInclusive() || t2.isEndInclusive();
+    } else {
+      maxEnd = t1.getComparator().compare(t1.getEnd(), t2.getEnd()) > 0 ? t1.getEnd() : t2.getEnd();
+      endKeyInclusive = maxEnd == t1.getEnd() ? t1.isEndInclusive() : t2.isEndInclusive();
+    }
+
+    return new TupleRange(minStart, maxEnd, endKeyInclusive, t1.getComparator());
+  }
 }
