@@ -237,7 +237,7 @@ public class HistogramUtil {
           endVal = datumToBigDecimal(sortSpecs[i], end.asDatum(i));
         }
 
-        if (endVal.subtract(startVal).compareTo(BigDecimal.valueOf(sortSpecs[i].getMinInterval())) > 0) {
+        if (endVal.subtract(startVal).abs().compareTo(BigDecimal.valueOf(sortSpecs[i].getMinInterval())) > 0) {
           return true;
         }
       }

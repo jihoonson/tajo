@@ -31,6 +31,7 @@ import org.apache.tajo.*;
 import org.apache.tajo.catalog.*;
 import org.apache.tajo.catalog.proto.CatalogProtos.PartitionDescProto;
 import org.apache.tajo.catalog.statistics.*;
+import org.apache.tajo.catalog.statistics.Histogram.Bucket;
 import org.apache.tajo.conf.TajoConf;
 import org.apache.tajo.engine.planner.PhysicalPlannerImpl;
 import org.apache.tajo.engine.planner.enforce.Enforcer;
@@ -1255,7 +1256,41 @@ public class Stage implements EventHandler<StageEvent> {
 
 //    List<Bucket> buckets = histogram.getSortedBuckets();
     // 1) Update histograms of range partitions using the report
+    int maxHistogramSize = stage.getContext().getConf().getIntVar(ConfVars.HISTOGRAM_MAX_SIZE);
     stage.histogramForRangeShuffle.merge(analyzedSpecs, histogram, succeededWorker);
+
+    if (maxHistogramSize < stage.histogramForRangeShuffle.size()) {
+      List<Bucket> buckets = stage.histogramForRangeShuffle.getSortedBuckets();
+      float quotient = (float) buckets.size() / (float) maxHistogramSize;
+      if (quotient > 1.f) {
+        int mergeNum = Math.round(quotient);
+        int remain = buckets.size() % mergeNum;
+
+        Bucket mergeBucket = buckets.get(0);
+        for (int i = 1; i < buckets.size() - remain; i++) {
+          if (i % mergeNum == 0) {
+            mergeBucket = buckets.get(i);
+          } else {
+            mergeBucket.merge(buckets.get(i));
+          }
+        }
+
+        for (int i = buckets.size() - remain - 1; i >= 0; i--) {
+          if (i % mergeNum != 0) {
+            buckets.remove(i);
+          }
+        }
+      }
+
+//      for (int i = 0; i < buckets.size() - 1; i++) {
+//        Preconditions.checkState(buckets.get(i).getEndKey().equals(buckets.get(i+1).getStartKey()),
+//            "i's end key: " + buckets.get(i).getEndKey() + ", i+1's start key: " + buckets.get(i+1).getStartKey());
+//      }
+
+      stage.histogramForRangeShuffle.clear();
+      stage.histogramForRangeShuffle.addBuckets(buckets);
+    }
+
 //    FreqHistogram histogram = stage.histogramForRangeShuffle;
 //    HistogramUtil.normalizeLength(histogram);
 //    List<Bucket> buckets = histogram.getSortedBuckets();

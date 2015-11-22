@@ -27,7 +27,7 @@ public abstract class Histogram {
 
   protected TupleComparator comparator;
   protected SortSpec[] sortSpecs;
-  protected Map<TupleRange, Bucket> buckets;
+  protected Map<TupleRange, Bucket> buckets; // -> TODO: consider to change tree set
 
   protected Histogram() {}
 
@@ -51,6 +51,12 @@ public abstract class Histogram {
       throw new RuntimeException("Duplicated bucket");
     }
     buckets.put(bucket.key, bucket);
+  }
+
+  public void addBuckets(List<Bucket> buckets) {
+    for (Bucket eachBucket : buckets) {
+      this.addBucket(eachBucket);
+    }
   }
 
   public void removeBucket(Bucket bucket) {
