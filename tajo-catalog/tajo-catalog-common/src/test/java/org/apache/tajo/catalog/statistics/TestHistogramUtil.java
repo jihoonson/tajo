@@ -645,24 +645,24 @@ public class TestHistogramUtil {
     // TODO
   }
 
-  @Test
-  public void testRefineToEquiDepth() {
-    prepareHistogram(TRUE_SET, FALSE_SET);
-    BigDecimal avgCount = totalCount.divide(BigDecimal.valueOf(21), MathContext.DECIMAL128);
-    HistogramUtil.refineToEquiDepth(histogram, avgCount, analyzedSpecs);
-    List<Bucket> buckets = histogram.getSortedBuckets();
-    assertEquals(21, buckets.size());
-    Tuple prevEnd = null;
-    long count = 0;
-    for (Bucket bucket : buckets) {
-      if (prevEnd != null) {
-        assertEquals(prevEnd, bucket.getStartKey());
-      }
-      prevEnd = bucket.getEndKey();
-      count += bucket.getCard();
-    }
-    assertEquals(totalCount.longValue(), count);
-  }
+//  @Test
+//  public void testRefineToEquiDepth() {
+//    prepareHistogram(TRUE_SET, FALSE_SET);
+//    BigDecimal avgCount = totalCount.divide(BigDecimal.valueOf(21), MathContext.DECIMAL128);
+//    HistogramUtil.refineToEquiDepth(histogram, avgCount, analyzedSpecs);
+//    List<Bucket> buckets = histogram.getSortedBuckets();
+//    assertEquals(21, buckets.size());
+//    Tuple prevEnd = null;
+//    long count = 0;
+//    for (Bucket bucket : buckets) {
+//      if (prevEnd != null) {
+//        assertEquals(prevEnd, bucket.getStartKey());
+//      }
+//      prevEnd = bucket.getEndKey();
+//      count += bucket.getCard();
+//    }
+//    assertEquals(totalCount.longValue(), count);
+//  }
 
   @Test
   public void testDiff() {

@@ -443,6 +443,7 @@ public class TestSortQuery extends QueryTestCaseBase {
       assertResultSet(res);
       cleanupQuery(res);
     } finally {
+      executeString("drop table testOutOfScope");
       testingCluster.setAllTajoDaemonConfValue(ConfVars.$TEST_MIN_TASK_NUM.varname, "0");
     }
   }
@@ -456,6 +457,7 @@ public class TestSortQuery extends QueryTestCaseBase {
 //      assertResultSet(res);
       cleanupQuery(res);
     } finally {
+      executeString("drop table testOutOfScope");
       testingCluster.setAllTajoDaemonConfValue(ConfVars.$TEST_MIN_TASK_NUM.varname, "0");
     }
   }

@@ -120,9 +120,10 @@ public class FreqHistogram extends Histogram implements ProtoObject<FreqHistogra
     }
 
     public FreqBucket(FreqBucketProto proto) {
-      Tuple startKey = new VTuple(sortSpecs.length);
-      Tuple endKey = new VTuple(sortSpecs.length);
-      for (int i = 0; i < sortSpecs.length; i++) {
+      int len = proto.getStartKeyCount();
+      Tuple startKey = new VTuple(len);
+      Tuple endKey = new VTuple(len);
+      for (int i = 0; i < len; i++) {
         startKey.put(i, proto.getStartKey(i).size() == 0 ? NullDatum.get() :
             DatumFactory.createFromBytes(sortSpecs[i].getSortKey().getDataType(),
             proto.getStartKey(i).toByteArray()));

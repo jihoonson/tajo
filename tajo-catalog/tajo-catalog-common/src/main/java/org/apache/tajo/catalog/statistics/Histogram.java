@@ -84,7 +84,7 @@ public abstract class Histogram {
     return false;
   }
 
-  public abstract class Bucket {
+  public static abstract class Bucket {
     protected TupleRange key;
     protected double card;
 

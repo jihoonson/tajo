@@ -186,7 +186,7 @@ public class MasterFreqHistogram extends Histogram {
     }
   }
 
-  public class BucketWithLocation extends Bucket {
+  public static class BucketWithLocation extends Bucket {
     private final Set<PullHost> hosts = new HashSet<>();
 
     public BucketWithLocation(TupleRange key, double count, WorkerConnectionInfo info) {
@@ -196,6 +196,11 @@ public class MasterFreqHistogram extends Histogram {
     public BucketWithLocation(TupleRange key, double count, String host, int port) {
       super(key, count);
       hosts.add(new PullHost(host, port));
+    }
+
+    public BucketWithLocation(TupleRange key, double count, Set<PullHost> hosts) {
+      super(key, count);
+      hosts.addAll(hosts);
     }
 
     public BucketWithLocation(Bucket bucket, WorkerConnectionInfo info) {
