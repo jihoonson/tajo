@@ -24,7 +24,7 @@ import org.apache.tajo.catalog.SortSpec;
 import org.apache.tajo.plan.logical.JoinNode;
 import org.apache.tajo.storage.NullTuple;
 import org.apache.tajo.storage.Tuple;
-import org.apache.tajo.storage.TupleComparator;
+import org.apache.tajo.catalog.TupleComparator;
 import org.apache.tajo.storage.VTuple;
 import org.apache.tajo.worker.TaskAttemptContext;
 

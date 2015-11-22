@@ -16,11 +16,12 @@
  * limitations under the License.
  */
 
-package org.apache.tajo.storage;
+package org.apache.tajo.catalog;
 
 import com.google.common.base.Objects;
-import org.apache.tajo.catalog.Schema;
-import org.apache.tajo.catalog.SortSpec;
+import org.apache.tajo.storage.Tuple;
+
+import java.util.Comparator;
 
 /**
  * It represents a pair of start and end tuples.
@@ -28,22 +29,23 @@ import org.apache.tajo.catalog.SortSpec;
 public class TupleRange implements Comparable<TupleRange>, Cloneable {
   private Tuple start;
   private Tuple end;
-  private final TupleComparator comp;
+  private boolean endInclusive = false;
+  private final Comparator<Tuple> comp;
 
-  public TupleRange(final SortSpec[] sortSpecs, final Tuple start, final Tuple end) {
-    this.comp = new BaseTupleComparator(sortSpecsToSchema(sortSpecs), sortSpecs);
+  public TupleRange(final Tuple start, final Tuple end, final Comparator<Tuple> comp) {
+    this.comp = comp;
     // if there is only one value, start == end
     this.start = start;
     this.end = end;
   }
 
-  public static Schema sortSpecsToSchema(SortSpec[] sortSpecs) {
-    Schema schema = new Schema();
-    for (SortSpec spec : sortSpecs) {
-      schema.addColumn(spec.getSortKey());
-    }
+  public TupleRange(final Tuple start, final Tuple end, final boolean endInclusive, final Comparator<Tuple> comp) {
+    this(start, end, comp);
+    this.endInclusive = endInclusive;
+  }
 
-    return schema;
+  public Comparator<Tuple> getComparator() {
+    return comp;
   }
 
   public void setStart(Tuple tuple) {
@@ -62,20 +64,55 @@ public class TupleRange implements Comparable<TupleRange>, Cloneable {
     return this.end;
   }
 
+  public void setEndInclusive() {
+    endInclusive = true;
+  }
+
+  public boolean isEndInclusive() {
+    return endInclusive;
+  }
+
+  public boolean isOverlap(TupleRange other) {
+    TupleRange small, large;
+    if (comp.compare(this.start, other.start) < 0) {
+      small = this;
+      large = other;
+    } else {
+      small = other;
+      large = this;
+    }
+    int compVal = comp.compare(small.getEnd(), large.getStart());
+    return compVal > 0
+        || (compVal == 0 && small.isEndInclusive());
+  }
+
+//  public boolean include(TupleRange other) {
+//    if (comp.compare(this.start, other.start) <= 0) {
+//      if (other.endInclusive) {
+//        return comp.compare(this.end, other.end) > 0;
+//      } else {
+//        return comp.compare(this.end, other.end) >= 0;
+//      }
+//    }
+//    return false;
+//  }
+
   public String toString() {
-    return "[" + this.start + ", " + this.end + ")";
+    return "[" + this.start + ", " + this.end + (endInclusive ? "]" : ")");
   }
 
   @Override
   public int hashCode() {
-    return Objects.hashCode(start, end);
+    return Objects.hashCode(start, end, endInclusive);
   }
 
   @Override
   public boolean equals(Object obj) {
     if (obj instanceof TupleRange) {
       TupleRange other = (TupleRange) obj;
-      return this.start.equals(other.start) && this.end.equals(other.end);
+      return this.start.equals(other.start) &&
+          this.end.equals(other.end) &&
+          this.endInclusive == other.endInclusive;
     } else {
       return false;
     }
@@ -92,6 +129,7 @@ public class TupleRange implements Comparable<TupleRange>, Cloneable {
     }
   }
 
+  @Override
   public TupleRange clone() throws CloneNotSupportedException {
     TupleRange newRange = (TupleRange) super.clone();
     newRange.setStart(start.clone());

@@ -141,7 +141,7 @@ public class TestStorages {
   @Parameterized.Parameters
   public static Collection<Object[]> generateParameters() {
     return Arrays.asList(new Object[][] {
-        //type, splitable, statsable, seekable, internalType
+        //type, splittable, statsable, seekable, internalType
         {BuiltinStorages.RAW, false, true, true, true},
         {BuiltinStorages.DRAW, false, true, true, true},
         {BuiltinStorages.RCFILE, true, true, false, false},
@@ -842,7 +842,7 @@ public class TestStorages {
       VTuple tuple = new VTuple(new Datum[]{
           DatumFactory.createDate("1980-04-01"),
           DatumFactory.createTime("12:34:56"),
-          DatumFactory.createTimestmpDatumWithUnixTime((int)(System.currentTimeMillis() / 1000))
+          DatumFactory.createTimestampDatumWithUnixTime((int)(System.currentTimeMillis() / 1000))
       });
       appender.addTuple(tuple);
       appender.flush();

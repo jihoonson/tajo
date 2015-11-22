@@ -25,6 +25,7 @@ import org.apache.tajo.OverridableConf;
 import org.apache.tajo.TaskAttemptId;
 import org.apache.tajo.catalog.*;
 import org.apache.tajo.catalog.proto.CatalogProtos.FragmentProto;
+import org.apache.tajo.catalog.statistics.ColumnStats;
 import org.apache.tajo.conf.TajoConf;
 import org.apache.tajo.exception.TajoException;
 import org.apache.tajo.exception.TajoRuntimeException;
@@ -161,7 +162,7 @@ public abstract class Tablespace {
    */
   public abstract TupleRange[] getInsertSortRanges(OverridableConf queryContext, TableDesc tableDesc,
                                                    Schema inputSchema, SortSpec [] sortSpecs,
-                                                   TupleRange dataRange) throws IOException;
+                                                   List<ColumnStats> sortKeyStats) throws IOException;
 
   /**
    * It is called when the query failed.

@@ -1,4 +1,4 @@
-/***
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -16,17 +16,47 @@
  * limitations under the License.
  */
 
-package org.apache.tajo.storage;
+package org.apache.tajo.datum;
 
-import org.apache.tajo.common.ProtoObject;
+import org.apache.tajo.common.TajoDataTypes.Type;
 
-import java.util.Comparator;
+public class PositiveInfiniteDatum extends Datum {
+  private static PositiveInfiniteDatum instance;
 
-import static org.apache.tajo.index.IndexProtos.TupleComparatorProto;
+  static {
+    instance = new PositiveInfiniteDatum();
+  }
 
-public abstract class TupleComparator implements Comparator<Tuple>, ProtoObject<TupleComparatorProto> {
+  public static PositiveInfiniteDatum get() {
+    return instance;
+  }
 
-  public abstract int compare(Tuple o1, Tuple o2);
+  private PositiveInfiniteDatum() {
+    super(Type.POSITIVE_INFINITE);
+  }
 
-  public abstract boolean isAscendingFirstKey();
+  @Override
+  public int size() {
+    return 0;
+  }
+
+  @Override
+  public int compareTo(Datum datum) {
+    return 1;
+  }
+
+  @Override
+  public boolean equals(Object o) {
+    return o instanceof PositiveInfiniteDatum;
+  }
+
+  @Override
+  public int hashCode() {
+    return Integer.MAX_VALUE;
+  }
+
+  @Override
+  public String toString() {
+    return "+INF";
+  }
 }

@@ -102,7 +102,6 @@ public class TestSortQuery extends QueryTestCaseBase {
     cleanupQuery(res);
   }
 
-
   @Test
   public final void testSortFirstDesc() throws Exception {
     try {
@@ -444,6 +443,21 @@ public class TestSortQuery extends QueryTestCaseBase {
       assertResultSet(res);
       cleanupQuery(res);
     } finally {
+      executeString("drop table testOutOfScope");
+      testingCluster.setAllTajoDaemonConfValue(ConfVars.$TEST_MIN_TASK_NUM.varname, "0");
+    }
+  }
+
+  @Test
+  public final void testTest() throws Exception {
+    executeDDL("create_table_with_unique_small_dataset.sql", "table3");
+    testingCluster.setAllTajoDaemonConfValue(ConfVars.$TEST_MIN_TASK_NUM.varname, "2");
+    try {
+      ResultSet res = executeString("select col1, col2 from testOutOfScope order by col1 desc, col2 desc;");
+//      assertResultSet(res);
+      cleanupQuery(res);
+    } finally {
+      executeString("drop table testOutOfScope");
       testingCluster.setAllTajoDaemonConfValue(ConfVars.$TEST_MIN_TASK_NUM.varname, "0");
     }
   }

@@ -19,13 +19,29 @@
 package org.apache.tajo.master.event;
 
 import org.apache.tajo.TaskAttemptId;
+import org.apache.tajo.annotation.Nullable;
+import org.apache.tajo.catalog.statistics.FreqHistogram;
 
 public class TaskTAttemptEvent extends TaskEvent {
   private final TaskAttemptId attemptId;
+  @Nullable
+  private FreqHistogram histogram;
+
   public TaskTAttemptEvent(TaskAttemptId attemptId,
                            TaskEventType eventType) {
+    this(attemptId, eventType, null);
+  }
+
+  public TaskTAttemptEvent(TaskAttemptId attemptId,
+                           TaskEventType eventType,
+                           @Nullable FreqHistogram histogram) {
     super(attemptId.getTaskId(), eventType);
     this.attemptId = attemptId;
+    this.histogram = histogram;
+  }
+
+  public FreqHistogram getHistogram() {
+    return histogram;
   }
 
   public TaskAttemptId getTaskAttemptId() {

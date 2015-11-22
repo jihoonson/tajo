@@ -54,6 +54,7 @@ import org.apache.hadoop.security.ssl.SSLFactory;
 import org.apache.hadoop.service.AbstractService;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.tajo.catalog.Schema;
+import org.apache.tajo.catalog.TupleComparator;
 import org.apache.tajo.conf.TajoConf;
 import org.apache.tajo.conf.TajoConf.ConfVars;
 import org.apache.tajo.pullserver.retriever.FileChunk;
@@ -697,6 +698,8 @@ public class TajoPullServerService extends AbstractService {
       LOG.warn("Out of Scope (indexed data [" + idxReader.getFirstKey() + ", " + idxReader.getLastKey() +
           "], but request start:" + start + ", end: " + end);
       return null;
+    } else {
+      LOG.info("request start:" + start + ", end: " + end + " is processed well");
     }
 
     long startOffset;
@@ -723,6 +726,8 @@ public class TajoPullServerService extends AbstractService {
       throw ioe;
     }
 
+    LOG.info("1) startOffset: " + startOffset + " endOffset: " + endOffset + " start: " + start + " end: " + end);
+
     // if startOffset == -1 then case 2-1 or case 3
     if (startOffset == -1) { // this is a hack
       // if case 2-1 or case 3
@@ -737,6 +742,8 @@ public class TajoPullServerService extends AbstractService {
       }
     }
 
+    LOG.info("2) startOffset: " + startOffset + " endOffset: " + endOffset + " start: " + start + " end: " + end);
+
     if (startOffset == -1) {
       throw new IllegalStateException("startOffset " + startOffset + " is negative \n" +
           "State Dump (the requested range: "
@@ -749,6 +756,8 @@ public class TajoPullServerService extends AbstractService {
         && comparator.compare(idxReader.getLastKey(), end) < 0)) {
       endOffset = data.length();
     }
+
+    LOG.info("3) startOffset: " + startOffset + " endOffset: " + endOffset + " start: " + start + " end: " + end);
 
     idxReader.close();
 

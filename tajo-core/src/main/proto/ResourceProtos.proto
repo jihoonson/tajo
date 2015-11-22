@@ -106,8 +106,9 @@ message TaskCompletionReport {
   optional StatSetProto stats = 2;
   optional TableStatsProto input_stats = 3;
   optional TableStatsProto result_stats = 4;
-  repeated ShuffleFileOutput shuffle_file_outputs = 5;
-  repeated PartitionDescProto partitions = 6;
+  optional FreqHistogramProto freq_histogram = 5;
+  repeated ShuffleFileOutput shuffle_file_outputs = 6;
+  repeated PartitionDescProto partitions = 7;
 }
 
 message TaskFatalErrorReport {

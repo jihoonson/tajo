@@ -26,6 +26,7 @@ import org.apache.hadoop.fs.RawLocalFileSystem;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.tajo.BuiltinStorages;
 import org.apache.tajo.SessionVars;
+import org.apache.tajo.catalog.BaseTupleComparator;
 import org.apache.tajo.catalog.CatalogUtil;
 import org.apache.tajo.catalog.Schema;
 import org.apache.tajo.catalog.TableMeta;

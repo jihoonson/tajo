@@ -19,6 +19,8 @@
 package org.apache.tajo.master.event;
 
 import org.apache.tajo.TaskId;
+import org.apache.tajo.annotation.Nullable;
+import org.apache.tajo.catalog.statistics.FreqHistogram;
 import org.apache.tajo.master.TaskState;
 
 /**
@@ -27,10 +29,18 @@ import org.apache.tajo.master.TaskState;
 public class StageTaskEvent extends StageEvent {
   private TaskId taskId;
   private TaskState state;
+  @Nullable
+  private FreqHistogram histogram;
+
   public StageTaskEvent(TaskId taskId, TaskState state) {
+    this(taskId, state, null);
+  }
+
+  public StageTaskEvent(TaskId taskId, TaskState state, @Nullable FreqHistogram histogram) {
     super(taskId.getExecutionBlockId(), StageEventType.SQ_TASK_COMPLETED);
     this.taskId = taskId;
     this.state = state;
+    this.histogram = histogram;
   }
 
   public TaskId getTaskId() {
@@ -39,5 +49,9 @@ public class StageTaskEvent extends StageEvent {
 
   public TaskState getState() {
     return state;
+  }
+
+  public FreqHistogram getHistogram() {
+    return histogram;
   }
 }

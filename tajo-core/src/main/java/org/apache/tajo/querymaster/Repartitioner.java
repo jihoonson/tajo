@@ -28,12 +28,11 @@ import org.apache.tajo.ExecutionBlockId;
 import org.apache.tajo.SessionVars;
 import org.apache.tajo.algebra.JoinType;
 import org.apache.tajo.catalog.*;
-import org.apache.tajo.catalog.statistics.StatisticsUtil;
-import org.apache.tajo.catalog.statistics.TableStats;
+import org.apache.tajo.catalog.statistics.*;
+import org.apache.tajo.catalog.statistics.FreqHistogram.FreqBucket;
+import org.apache.tajo.catalog.statistics.Histogram.Bucket;
 import org.apache.tajo.conf.TajoConf.ConfVars;
 import org.apache.tajo.engine.planner.PhysicalPlannerImpl;
-import org.apache.tajo.engine.planner.RangePartitionAlgorithm;
-import org.apache.tajo.engine.planner.UniformRangePartition;
 import org.apache.tajo.engine.planner.enforce.Enforcer;
 import org.apache.tajo.engine.planner.global.DataChannel;
 import org.apache.tajo.engine.planner.global.ExecutionBlock;
@@ -48,7 +47,9 @@ import org.apache.tajo.plan.logical.SortNode.SortPurpose;
 import org.apache.tajo.plan.serder.PlanProto.DistinctGroupbyEnforcer.MultipleAggregationStage;
 import org.apache.tajo.plan.serder.PlanProto.EnforceProperty;
 import org.apache.tajo.plan.util.PlannerUtil;
+import org.apache.tajo.querymaster.MasterFreqHistogram.BucketWithLocation;
 import org.apache.tajo.querymaster.Task.IntermediateEntry;
+import org.apache.tajo.querymaster.Task.PullHost;
 import org.apache.tajo.storage.*;
 import org.apache.tajo.storage.fragment.FileFragment;
 import org.apache.tajo.storage.fragment.Fragment;
@@ -60,7 +61,8 @@ import org.apache.tajo.worker.FetchImpl;
 
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
-import java.math.BigInteger;
+import java.math.BigDecimal;
+import java.math.MathContext;
 import java.net.URI;
 import java.util.*;
 import java.util.Map.Entry;
@@ -622,11 +624,14 @@ public class Repartitioner {
     ScanNode scan = execBlock.getScanNodes()[0];
 
     ExecutionBlock sampleChildBlock = masterPlan.getChild(stage.getId(), 0);
+
     SortNode sortNode = PlannerUtil.findTopNode(sampleChildBlock.getPlan(), NodeType.SORT);
     SortSpec [] sortSpecs = sortNode.getSortKeys();
     Schema sortSchema = new Schema(channel.getShuffleKeys());
 
     TupleRange[] ranges;
+    List<Bucket> buckets = null;
+//    boolean[] endKeyInclusive = null;
     int determinedTaskNum;
 
     // calculate the number of maximum query ranges
@@ -636,9 +641,11 @@ public class Repartitioner {
     if (totalStat.getNumBytes() == 0 && totalStat.getColumnStats().size() == 0) {
       return;
     }
-    TupleRange mergedRange = TupleUtil.columnStatToRange(sortSpecs, sortSchema, totalStat.getColumnStats(), false);
 
+//    TupleRange mergedRange = TupleUtil.columnStatToRange(sortSpecs, sortSchema, totalStat.getColumnStats(), false);
+    List<ColumnStats> sortKeyStats = TupleUtil.extractSortColumnStats(sortSpecs, totalStat.getColumnStats(), false);
     if (sortNode.getSortPurpose() == SortPurpose.STORAGE_SPECIFIED) {
+
       String dataFormat = PlannerUtil.getDataFormat(masterPlan.getLogicalPlan());
       CatalogService catalog = stage.getContext().getQueryMasterContext().getWorkerContext().getCatalog();
       LogicalRootNode rootNode = masterPlan.getLogicalPlan().getRootBlock().getRoot();
@@ -656,43 +663,178 @@ public class Repartitioner {
           tableDesc,
           sortNode.getInSchema(),
           sortSpecs,
-          mergedRange);
+          sortKeyStats);
 
       determinedTaskNum = ranges.length;
     } else {
-      RangePartitionAlgorithm partitioner = new UniformRangePartition(mergedRange, sortSpecs);
-      BigInteger card = partitioner.getTotalCardinality();
+      // TODO: create partitions by merging the ranges of the histogram
+      MasterFreqHistogram histogram = schedulerContext.getMasterContext().getQuery().getStage(sampleChildBlock.getId()).getHistogramForRangeShuffle();
+      AnalyzedSortSpec[] analyzedSpecs = HistogramUtil.analyzeHistogram(histogram, sortKeyStats);
+      buckets = histogram.getSortedBuckets();
+
+      // Compute the total cardinality of sort keys.
+      BigDecimal totalCard = histogram.getSortedBuckets().stream().map(
+          bucket -> BigDecimal.valueOf(bucket.getCard())
+      ).reduce(BigDecimal.ZERO, (a, b) -> a.add(b));
 
       // if the number of the range cardinality is less than the desired number of tasks,
       // we set the the number of tasks to the number of range cardinality.
-      if (card.compareTo(BigInteger.valueOf(maxNum)) < 0) {
-        LOG.info(stage.getId() + ", The range cardinality (" + card
+      if (totalCard.compareTo(BigDecimal.valueOf(maxNum)) < 0) {
+        LOG.info(stage.getId() + ", The range cardinality (" + totalCard
             + ") is less then the desired number of tasks (" + maxNum + ")");
-        determinedTaskNum = card.intValue();
+        determinedTaskNum = totalCard.intValue();
       } else {
         determinedTaskNum = maxNum;
       }
 
-      LOG.info(stage.getId() + ", Try to divide " + mergedRange + " into " + determinedTaskNum +
+      // TODO: check totalCard
+      LOG.info(stage.getId() + ", Try to divide " + totalCard + " values into " + determinedTaskNum +
           " sub ranges (total units: " + determinedTaskNum + ")");
-      ranges = partitioner.partition(determinedTaskNum);
-      if (ranges == null) {
-        throw new NullPointerException("ranges is null on " + stage.getId() + " stage.");
-      }
 
-      if (ranges.length == 0) {
-        LOG.warn(stage.getId() + " no range infos.");
-      }
+      if (determinedTaskNum < buckets.size()) {
+        
+//        float quotient = (float) buckets.size() / (float) determinedTaskNum;
+//        if (quotient > 1.f) {
+//          LOG.info("# of buckets is much larger than determined # of tasks");
+//          int mergeNum = Math.round(quotient);
+//          int loop = buckets.size() + 1 - mergeNum;
+//          for (int i = 0; i < loop; i += mergeNum) {
+//            Bucket mergeBucket = buckets.get(i);
+//            for (int j = i + 1; j < mergeNum; j++) {
+//              mergeBucket.merge(buckets.get(j));
+//            }
+//          }
+//          int start = buckets.size() - 1 - (buckets.size() % mergeNum);
+//
+//          for (int i = start; i >= 0; i -= mergeNum) {
+//            for (int j = 0; j < mergeNum - 1; j++) {
+//              buckets.remove(i - j);
+//            }
+//          }
+//        }
 
-      TupleUtil.setMaxRangeIfNull(sortSpecs, sortSchema, totalStat.getColumnStats(), ranges);
-      if (LOG.isDebugEnabled()) {
-        if (ranges != null) {
-          for (TupleRange eachRange : ranges) {
-            LOG.debug(stage.getId() + " range: " + eachRange.getStart() + " ~ " + eachRange.getEnd());
-          }
+        // Merge ranges of the histogram until the number of ranges reaches determinedTaskNum.
+//        while (buckets.size() > determinedTaskNum) {
+//          LOG.info("# of buckets is little larger than determined # of tasks");
+//          int minBucketIdx = -1;
+//          Bucket minBucket = null;
+//
+//          for (int i = 0; i < buckets.size(); i++) {
+//            Bucket eachBucket = buckets.get(i);
+//            if (minBucket == null || minBucket.getCard() > eachBucket.getCard()) {
+//              minBucket = eachBucket;
+//              minBucketIdx = i;
+//            }
+//          }
+//
+//          if (minBucketIdx == buckets.size() - 1) {
+//            minBucket.merge(buckets.remove(minBucketIdx - 1));
+//          } else {
+//            minBucket.merge(buckets.remove(minBucketIdx + 1));
+//          }
+//        }
+
+        while (buckets.size() > determinedTaskNum) {
+          Bucket bucket = buckets.remove(buckets.size() - 1);
+          buckets.get(buckets.size() - 1).merge(bucket);
         }
+
+        // The merged histogram contains the range partitions (buckets).
+        histogram = new MasterFreqHistogram(histogram.getSortSpecs(), buckets);
+
+      } else if (determinedTaskNum > buckets.size()) {
+        LOG.info("# of buckets is smaller than determined # of tasks");
+        do {
+          buckets.sort((b1, b2) -> {
+            if (b1.getCard() > b2.getCard()) {
+              return -1;
+            } else if (b1.getCard() == b2.getCard()) {
+              return 0;
+            } else {
+              return 1;
+            }
+          });
+
+          List<Bucket> added = new ArrayList<>();
+          List<Bucket> removed = new ArrayList<>();
+          for (Bucket eachBucket : buckets) {
+            if (HistogramUtil.splittable(analyzedSpecs, eachBucket)) {
+              List<Bucket> split = HistogramUtil.splitBucket(histogram, analyzedSpecs, eachBucket, 2);
+              if (split.size() > 1) {
+                added.addAll(split);
+                removed.add(eachBucket);
+                if (added.size() + buckets.size() - removed.size() >= determinedTaskNum) {
+                  break;
+                }
+              }
+            }
+          }
+          buckets.addAll(added);
+          buckets.removeAll(removed);
+        } while (determinedTaskNum > buckets.size());
+
+        determinedTaskNum = buckets.size();
+        LOG.info("Task number is adjusted to " + determinedTaskNum + " due to the number of buckets.");
+        histogram = new MasterFreqHistogram(histogram.getSortSpecs(), buckets);
+      }
+
+      BigDecimal avgCard = totalCard.divide(BigDecimal.valueOf(histogram.size()), MathContext.DECIMAL128);
+
+      // The merged histogram can contain partitions of various lengths.
+      // Thus, they need to be refined to be equal in length.
+      refineToEquiDepth(histogram, avgCard, analyzedSpecs);
+      buckets = histogram.getSortedBuckets();
+
+      // Adjust ranges to be last inclusive
+      ranges = new TupleRange[buckets.size()];
+//      endKeyInclusive = new boolean[buckets.size()];
+      for (int i = 0; i < buckets.size(); i++) {
+        ranges[i] = buckets.get(i).getKey();
+        LOG.info("ranges[" + i + "]: " + ranges[i]);
+//        endKeyInclusive[i] = buckets.get(i).isEndKeyInclusive();
       }
     }
+
+//    if (endKeyInclusive == null) {
+//      endKeyInclusive = new boolean[ranges.length];
+//      Arrays.fill(endKeyInclusive, false);
+//      endKeyInclusive[endKeyInclusive.length - 1] = true;
+//    }
+
+
+//      RangePartitionAlgorithm partitioner = new UniformRangePartition(mergedRange, sortSpecs);
+//      BigInteger card = partitioner.getTotalCardinality();
+//
+//      // if the number of the range cardinality is less than the desired number of tasks,
+//      // we set the the number of tasks to the number of range cardinality.
+//      if (card.compareTo(BigInteger.valueOf(maxNum)) < 0) {
+//        LOG.info(stage.getId() + ", The range cardinality (" + card
+//            + ") is less then the desired number of tasks (" + maxNum + ")");
+//        determinedTaskNum = card.intValue();
+//      } else {
+//        determinedTaskNum = maxNum;
+//      }
+//
+//      LOG.info(stage.getId() + ", Try to divide " + mergedRange + " into " + determinedTaskNum +
+//          " sub ranges (total units: " + determinedTaskNum + ")");
+//      ranges = partitioner.partition(determinedTaskNum);
+//      if (ranges == null) {
+//        throw new NullPointerException("ranges is null on " + stage.getId() + " stage.");
+//      }
+//
+//      if (ranges.length == 0) {
+//        LOG.warn(stage.getId() + " no range infos.");
+//      }
+//
+//      TupleUtil.setMaxRangeIfNull(sortSpecs, sortSchema, totalStat.getColumnStats(), ranges);
+//      if (LOG.isDebugEnabled()) {
+//        if (ranges != null) {
+//          for (TupleRange eachRange : ranges) {
+//            LOG.debug(stage.getId() + " range: " + eachRange.getStart() + " ~ " + eachRange.getEnd());
+//          }
+//        }
+//      }
+//    }
 
     // TODO - We should remove dummy fragment.
     FileFragment dummyFragment = new FileFragment(scan.getTableName(), new Path("/dummy"), 0, 0,
@@ -712,27 +854,32 @@ public class Repartitioner {
       }
     }
 
-    SortedMap<TupleRange, Collection<FetchImpl>> map;
-    map = new TreeMap<>();
+    SortedMap<TupleRange, Collection<FetchImpl>> map = new TreeMap<>();
 
     Set<FetchImpl> fetchSet;
     try {
       RowStoreUtil.RowStoreEncoder encoder = RowStoreUtil.createEncoder(sortSchema);
-      for (int i = 0; i < ranges.length; i++) {
+//      for (int i = 0; i < ranges.length; i++) {
+      for (int i = 0; i < buckets.size(); i++) {
         fetchSet = new HashSet<>();
+        BucketWithLocation bucket = (BucketWithLocation) buckets.get(i);
+        Set<PullHost> hosts = bucket.getHosts();
+
         for (FetchImpl fetch: fetches) {
-          String rangeParam =
-              TupleUtil.rangeToQuery(ranges[i], i == (ranges.length - 1) , encoder);
-          FetchImpl copy = null;
-          try {
-            copy = fetch.clone();
-          } catch (CloneNotSupportedException e) {
-            throw new RuntimeException(e);
+          if (hosts.contains(fetch.getPullHost())) {
+            String rangeParam =
+                TupleUtil.rangeToQuery(bucket.getKey(), bucket.isEndKeyInclusive(), encoder);
+            FetchImpl copy;
+            try {
+              copy = fetch.clone();
+            } catch (CloneNotSupportedException e) {
+              throw new RuntimeException(e);
+            }
+            copy.setRangeParams(rangeParam);
+            fetchSet.add(copy);
           }
-          copy.setRangeParams(rangeParam);
-          fetchSet.add(copy);
         }
-        map.put(ranges[i], fetchSet);
+        map.put(bucket.getKey(), fetchSet);
       }
 
     } catch (UnsupportedEncodingException e) {
@@ -742,6 +889,105 @@ public class Repartitioner {
     scheduleFetchesByRoundRobin(stage, map, scan.getTableName(), determinedTaskNum);
 
     schedulerContext.setEstimatedTaskNum(determinedTaskNum);
+  }
+
+  public static void refineToEquiDepth(final Histogram histogram,
+                                       final BigDecimal avgCard,
+                                       final AnalyzedSortSpec[] sortSpecs) {
+    List<Bucket> buckets = histogram.getSortedBuckets();
+    Comparator<Tuple> comparator = histogram.getComparator();
+    Bucket passed = null;
+
+    // Refine from the last to the left direction.
+    for (int i = buckets.size() - 1; i >= 0; i--) {
+      Bucket current = buckets.get(i);
+      // First add the passed range from the previous partition to the current one.
+      if (passed != null) {
+        current.merge(passed);
+        passed = null;
+      }
+
+      if (i > 0 && HistogramUtil.splittable(sortSpecs, current)) {
+        int compare = BigDecimal.valueOf(current.getCard()).compareTo(avgCard);
+        if (compare < 0) {
+          // Take the lacking range from the next partition.
+          double require = avgCard.subtract(BigDecimal.valueOf(current.getCard())).doubleValue();
+          for (int j = i - 1; j >= 0 && require > 0; j--) {
+            Bucket nextBucket = buckets.get(j);
+            double takeAmount = require < nextBucket.getCard() ? require : nextBucket.getCard();
+            Tuple interval = HistogramUtil.subDiff(sortSpecs, nextBucket.getKey(), nextBucket.getCard(), takeAmount);
+
+            Tuple newStart = HistogramUtil.incrementValue(sortSpecs, nextBucket.getEndKey(), interval, 1);
+            current.getKey().setStart(newStart);
+            current.incCount(takeAmount);
+            nextBucket.getKey().setEnd(newStart);
+            nextBucket.incCount(-1 * takeAmount);
+            require -= takeAmount;
+          }
+
+        } else if (compare > 0) {
+          // Pass the remaining range to the next partition.
+          double passAmount = BigDecimal.valueOf(current.getCard()).subtract(avgCard).doubleValue();
+          Tuple diff = HistogramUtil.diff(sortSpecs, current.getStartKey(), current.getEndKey());
+          Tuple interval = HistogramUtil.subDiff(sortSpecs, current.getKey(), current.getCard(), passAmount);
+          Tuple newStart = HistogramUtil.incrementValue(sortSpecs, current.getStartKey(), interval, 1);
+//          passed = histogram.createBucket(new TupleRange(current.getStartKey(), newStart, current.getInterval(), comparator),
+//              passAmount);
+          passed = new BucketWithLocation(new TupleRange(current.getStartKey(), newStart, comparator),
+              passAmount, ((BucketWithLocation)current).getHosts());
+          current.getKey().setStart(newStart);
+          current.incCount(-1 * passAmount);
+        }
+      }
+    }
+
+    // Refine from the first to the right direction
+    for (int i = 0; i < buckets.size(); i++) {
+      Bucket current = buckets.get(i);
+      // First add the passed range from the previous partition to the current one.
+      if (passed != null) {
+        current.merge(passed);
+        passed = null;
+      }
+      if (i < buckets.size() - 1 && HistogramUtil.splittable(sortSpecs, current)) {
+        int compare = BigDecimal.valueOf(current.getCard()).compareTo(avgCard);
+        if (compare < 0) {
+          // Take the lacking range from the next partition.
+          double require = avgCard.subtract(BigDecimal.valueOf(current.getCard())).doubleValue();
+          for (int j = i + 1; j < buckets.size() && require > 0; j++) {
+            Bucket nextBucket = buckets.get(j);
+            double takeAmount = require < nextBucket.getCard() ? require : nextBucket.getCard();
+            Tuple interval = HistogramUtil.subDiff(sortSpecs, nextBucket.getKey(), nextBucket.getCard(), takeAmount);
+
+            Tuple newEnd = HistogramUtil.incrementValue(sortSpecs, current.getEndKey(), interval, 1);
+//            Tuple newEnd = increment(sortSpecs, current.getEndKey(), current.getInterval(), direction * takeAmount);
+            current.getKey().setEnd(newEnd);
+            current.incCount(takeAmount);
+            nextBucket.getKey().setStart(newEnd);
+            nextBucket.incCount(-1 * takeAmount);
+            require -= takeAmount;
+          }
+
+        } else if (compare > 0) {
+          // Pass the remaining range to the next partition.
+          double passAmount = BigDecimal.valueOf(current.getCard()).subtract(avgCard).doubleValue();
+//          Tuple newEnd = increment(sortSpecs, current.getEndKey(), current.getInterval(), direction * passAmount);
+//          passed = histogram.createBucket(new TupleRange(newEnd, current.getEndKey(), current.getKey().getInterval(), comparator), passAmount);
+          Tuple interval = HistogramUtil.subDiff(sortSpecs, current.getKey(), current.getCard(), passAmount);
+          Tuple newEnd = HistogramUtil.incrementValue(sortSpecs, current.getEndKey(), interval, -1);
+          passed = new BucketWithLocation(new TupleRange(newEnd, current.getEndKey(), comparator),
+              passAmount, ((BucketWithLocation)current).getHosts());
+          current.getKey().setEnd(newEnd);
+          current.incCount(-1 * passAmount);
+        }
+      }
+    }
+
+    // TODO: if there are remaining passed bucket,
+    if (passed != null && passed.getCard() > 0) {
+      Bucket lastBucket = buckets.get(buckets.size() - 1);
+      lastBucket.merge(passed);
+    }
   }
 
   public static void scheduleFetchesByRoundRobin(Stage stage, Map<?, Collection<FetchImpl>> partitions,
@@ -1208,13 +1454,20 @@ public class Repartitioner {
         keys = channel.getShuffleKeys();
       }
     } else if (channel.getShuffleType() == RANGE_SHUFFLE) {
-      if (execBlock.getPlan().getType() == NodeType.SORT) {
-        SortNode sort = (SortNode) execBlock.getPlan();
+      SortSpec[] sortSpecs = null;
+      SortNode sort = PlannerUtil.findTopNode(execBlock.getPlan(), NodeType.SORT);
+
+      if (sort != null) {
         keys = new Column[sort.getSortKeys().length];
         for (int i = 0; i < keys.length; i++) {
           keys[i] = sort.getSortKeys()[i].getSortKey();
         }
+        sortSpecs = sort.getSortKeys();
       }
+      if (sortSpecs == null) {
+        throw new TajoInternalError("Cannot find sort specification for range shuffle");
+      }
+      stage.initStatCollect(new Schema(channel.getShuffleKeys()), sortSpecs);
     }
     if (keys != null) {
       if (keys.length == 0) {

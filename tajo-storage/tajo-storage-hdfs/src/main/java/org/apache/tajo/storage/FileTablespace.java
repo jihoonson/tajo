@@ -32,9 +32,12 @@ import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.tajo.*;
 import org.apache.tajo.catalog.*;
+import org.apache.tajo.catalog.statistics.ColumnStats;
 import org.apache.tajo.catalog.statistics.TableStats;
 import org.apache.tajo.conf.TajoConf;
+import org.apache.tajo.exception.NotImplementedException;
 import org.apache.tajo.exception.TajoInternalError;
+import org.apache.tajo.exception.TajoRuntimeException;
 import org.apache.tajo.exception.UnsupportedException;
 import org.apache.tajo.plan.LogicalPlan;
 import org.apache.tajo.plan.expr.EvalNode;
@@ -365,7 +368,7 @@ public class FileTablespace extends Tablespace {
   }
 
   /**
-   * Is the given filename splitable? Usually, true, but if the file is
+   * Is the given filename splittable? Usually, true, but if the file is
    * stream compressed, it will not be.
    * <p/>
    * <code>FileInputFormat</code> implementations can override this and return
@@ -791,9 +794,9 @@ public class FileTablespace extends Tablespace {
 
   @Override
   public TupleRange[] getInsertSortRanges(OverridableConf queryContext, TableDesc tableDesc,
-                                          Schema inputSchema, SortSpec[] sortSpecs, TupleRange dataRange)
+                                          Schema inputSchema, SortSpec[] sortSpecs, List<ColumnStats> columnStatsList)
       throws IOException {
-    return null;
+    throw new TajoRuntimeException(new NotImplementedException());
   }
 
   /**
