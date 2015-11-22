@@ -65,7 +65,7 @@ public class HistogramUtil {
 //    Arrays.fill(rounds, 0);
     AnalyzedSortSpec[] analyzedSpecs = toAnalyzedSortSpecs(sortSpecs, columnStatses);
     BigDecimal sumCard = BigDecimal.ZERO;
-    List<Bucket> buckets = histogram.getSortedBuckets();
+    SortedSet<Bucket> buckets = histogram.getSortedBuckets();
 //    Tuple first = buckets.get(0).getStartKey();
 //    Tuple last = new VTuple(analyzedSpecs.length);
     for (Bucket bucket : buckets) {

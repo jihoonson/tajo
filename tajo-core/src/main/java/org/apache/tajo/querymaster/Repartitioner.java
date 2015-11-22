@@ -630,7 +630,7 @@ public class Repartitioner {
     Schema sortSchema = new Schema(channel.getShuffleKeys());
 
     TupleRange[] ranges;
-    List<Bucket> buckets = null;
+    SortedSet<Bucket> buckets = null;
 //    boolean[] endKeyInclusive = null;
     int determinedTaskNum;
 
@@ -735,8 +735,11 @@ public class Repartitioner {
 //        }
 
         while (buckets.size() > determinedTaskNum) {
-          Bucket bucket = buckets.remove(buckets.size() - 1);
-          buckets.get(buckets.size() - 1).merge(bucket);
+//          Bucket bucket = buckets.remove(buckets.size() - 1);
+          Bucket bucket = buckets.last();
+          buckets.remove(bucket);
+//          buckets.get(buckets.size() - 1).merge(bucket);
+          buckets.last().merge(bucket);
         }
 
         // The merged histogram contains the range partitions (buckets).
@@ -745,15 +748,15 @@ public class Repartitioner {
       } else if (determinedTaskNum > buckets.size()) {
         LOG.info("# of buckets is smaller than determined # of tasks");
         do {
-          buckets.sort((b1, b2) -> {
-            if (b1.getCard() > b2.getCard()) {
-              return -1;
-            } else if (b1.getCard() == b2.getCard()) {
-              return 0;
-            } else {
-              return 1;
-            }
-          });
+//          buckets.sort((b1, b2) -> {
+//            if (b1.getCard() > b2.getCard()) {
+//              return -1;
+//            } else if (b1.getCard() == b2.getCard()) {
+//              return 0;
+//            } else {
+//              return 1;
+//            }
+//          });
 
           List<Bucket> added = new ArrayList<>();
           List<Bucket> removed = new ArrayList<>();
@@ -792,8 +795,10 @@ public class Repartitioner {
       // Adjust ranges to be last inclusive
       ranges = new TupleRange[buckets.size()];
 //      endKeyInclusive = new boolean[buckets.size()];
+      Iterator<Bucket> it = buckets.iterator();
       for (int i = 0; i < buckets.size(); i++) {
-        ranges[i] = buckets.get(i).getKey();
+//        ranges[i] = buckets.get(i).getKey();
+        ranges[i] = it.next().getKey();
         LOG.info("ranges[" + i + "]: " + ranges[i]);
 //        endKeyInclusive[i] = buckets.get(i).isEndKeyInclusive();
       }
@@ -864,9 +869,11 @@ public class Repartitioner {
     try {
       RowStoreUtil.RowStoreEncoder encoder = RowStoreUtil.createEncoder(sortSchema);
 //      for (int i = 0; i < ranges.length; i++) {
+      Iterator<Bucket> it = buckets.iterator();
       for (int i = 0; i < buckets.size(); i++) {
         fetchSet = new HashSet<>();
-        BucketWithLocation bucket = (BucketWithLocation) buckets.get(i);
+//        BucketWithLocation bucket = (BucketWithLocation) buckets.get(i);
+        BucketWithLocation bucket = (BucketWithLocation) it.next();
         Set<PullHost> hosts = bucket.getHosts();
 
         for (FetchImpl fetch: fetches) {
@@ -898,7 +905,7 @@ public class Repartitioner {
   public static void refineToEquiDepth(final Histogram histogram,
                                        final BigDecimal avgCard,
                                        final AnalyzedSortSpec[] sortSpecs) {
-    List<Bucket> buckets = histogram.getSortedBuckets();
+    List<Bucket> buckets = new ArrayList<>(histogram.getSortedBuckets());
     Comparator<Tuple> comparator = histogram.getComparator();
     Bucket passed = null;
 

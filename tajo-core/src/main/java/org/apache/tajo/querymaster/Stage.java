@@ -1260,26 +1260,43 @@ public class Stage implements EventHandler<StageEvent> {
     stage.histogramForRangeShuffle.merge(analyzedSpecs, histogram, succeededWorker);
 
     if (maxHistogramSize < stage.histogramForRangeShuffle.size()) {
-      List<Bucket> buckets = stage.histogramForRangeShuffle.getSortedBuckets();
+      SortedSet<Bucket> buckets = stage.histogramForRangeShuffle.getSortedBuckets();
       float quotient = (float) buckets.size() / (float) maxHistogramSize;
       if (quotient > 1.f) {
         int mergeNum = Math.round(quotient);
         int remain = buckets.size() % mergeNum;
 
-        Bucket mergeBucket = buckets.get(0);
-        for (int i = 1; i < buckets.size() - remain; i++) {
+        int i = 1;
+        Iterator<Bucket> it = buckets.iterator();
+        Bucket mergeBucket = it.next();
+        List<Bucket> removed = new ArrayList<>(buckets.size() - buckets.size() / mergeNum);
+        while (i < buckets.size() - remain && it.hasNext()) {
           if (i % mergeNum == 0) {
-            mergeBucket = buckets.get(i);
+            mergeBucket = it.next();
           } else {
-            mergeBucket.merge(buckets.get(i));
+            Bucket next = it.next();
+            mergeBucket.merge(next);
+            removed.add(next);
           }
+          i++;
         }
 
-        for (int i = buckets.size() - remain - 1; i >= 0; i--) {
-          if (i % mergeNum != 0) {
-            buckets.remove(i);
-          }
-        }
+        buckets.removeAll(removed);
+
+//        Bucket mergeBucket = buckets.get(0);
+//        for (int i = 1; i < buckets.size() - remain; i++) {
+//          if (i % mergeNum == 0) {
+//            mergeBucket = buckets.get(i);
+//          } else {
+//            mergeBucket.merge(buckets.get(i));
+//          }
+//        }
+
+//        for (int i = buckets.size() - remain - 1; i >= 0; i--) {
+//          if (i % mergeNum != 0) {
+//            buckets.remove(i);
+//          }
+//        }
       }
 
 //      for (int i = 0; i < buckets.size() - 1; i++) {
@@ -1287,9 +1304,10 @@ public class Stage implements EventHandler<StageEvent> {
 //            "i's end key: " + buckets.get(i).getEndKey() + ", i+1's start key: " + buckets.get(i+1).getStartKey());
 //      }
 
-      stage.histogramForRangeShuffle.clear();
-      stage.histogramForRangeShuffle.addBuckets(buckets);
+//      stage.histogramForRangeShuffle.clear();
+//      stage.histogramForRangeShuffle.addBuckets(buckets);
     }
+    LOG.info("Merged histogram size: " + stage.histogramForRangeShuffle.size());
 
 //    FreqHistogram histogram = stage.histogramForRangeShuffle;
 //    HistogramUtil.normalizeLength(histogram);

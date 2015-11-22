@@ -30,10 +30,7 @@ import org.apache.tajo.querymaster.Task.PullHost;
 import org.apache.tajo.storage.Tuple;
 import org.apache.tajo.util.Pair;
 
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 
 public class MasterFreqHistogram extends Histogram {
 
@@ -41,16 +38,17 @@ public class MasterFreqHistogram extends Histogram {
     super(sortSpecs);
   }
 
-  public MasterFreqHistogram(SortSpec[] sortSpecs, List<Bucket> buckets) {
+  public MasterFreqHistogram(SortSpec[] sortSpecs, Collection<Bucket> buckets) {
     super(sortSpecs);
-    for (Bucket eachBucket : buckets) {
-      this.buckets.put(eachBucket.getKey(), eachBucket);
-    }
+//    for (Bucket eachBucket : buckets) {
+//      this.buckets.put(eachBucket.getKey(), eachBucket);
+//    }
+    this.buckets.addAll(buckets);
   }
 
   public void merge(AnalyzedSortSpec[] analyzedSpecs, FreqHistogram other, WorkerConnectionInfo workerInfo) {
-    List<Bucket> thisBuckets = this.getSortedBuckets();
-    List<Bucket> otherBuckets = other.getSortedBuckets();
+    SortedSet<Bucket> thisBuckets = this.getSortedBuckets();
+    SortedSet<Bucket> otherBuckets = other.getSortedBuckets();
     Iterator<Bucket> thisIt = thisBuckets.iterator();
     Iterator<Bucket> otherIt = otherBuckets.iterator();
 
@@ -75,7 +73,8 @@ public class MasterFreqHistogram extends Histogram {
       // Check overlap between keys
       if (!smallStartBucket.getKey().isOverlap(largeStartBucket.getKey())) {
         // non-overlap keys
-        this.buckets.put(smallStartBucket.getKey(), smallStartBucket);
+//        this.buckets.put(smallStartBucket.getKey(), smallStartBucket);
+        this.buckets.add(smallStartBucket);
         if (isThisSmall) {
           thisBucket = null;
         } else {
@@ -168,21 +167,25 @@ public class MasterFreqHistogram extends Histogram {
     }
 
     if (thisBucket != null) {
-      this.buckets.put(thisBucket.getKey(), thisBucket);
+//      this.buckets.put(thisBucket.getKey(), thisBucket);
+      this.buckets.add(thisBucket);
     }
 
     if (otherBucket != null) {
-      this.buckets.put(otherBucket.getKey(), otherBucket);
+//      this.buckets.put(otherBucket.getKey(), otherBucket);
+      this.buckets.add(otherBucket);
     }
 
     while (thisIt.hasNext()) {
       Bucket next = thisIt.next();
-      this.buckets.put(next.getKey(), next);
+//      this.buckets.put(next.getKey(), next);
+      this.buckets.add(next);
     }
 
     while (otherIt.hasNext()) {
       Bucket next = otherIt.next();
-      this.buckets.put(next.getKey(), new BucketWithLocation(next, workerInfo));
+//      this.buckets.put(next.getKey(), new BucketWithLocation(next, workerInfo));
+      this.buckets.add(new BucketWithLocation(next, workerInfo));
     }
   }
 
