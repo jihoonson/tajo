@@ -68,6 +68,10 @@ public class TupleRange implements Comparable<TupleRange>, Cloneable {
     endInclusive = true;
   }
 
+  public void unsetEndInclusive() {
+    endInclusive = false;
+  }
+
   public boolean isEndInclusive() {
     return endInclusive;
   }

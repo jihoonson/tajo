@@ -759,6 +759,7 @@ public class Repartitioner {
           List<Bucket> removed = new ArrayList<>();
           for (Bucket eachBucket : buckets) {
             if (HistogramUtil.splittable(analyzedSpecs, eachBucket)) {
+              // TODO: implement splitBucket()
               List<Bucket> split = HistogramUtil.splitBucket(histogram, analyzedSpecs, eachBucket, 2);
               if (split.size() > 1) {
                 added.addAll(split);
@@ -768,6 +769,9 @@ public class Repartitioner {
                 }
               }
             }
+          }
+          if (added.size() == 0 && removed.size() == 0) {
+            break;
           }
           buckets.addAll(added);
           buckets.removeAll(removed);
@@ -921,6 +925,7 @@ public class Repartitioner {
             current.getKey().setStart(newStart);
             current.incCount(takeAmount);
             nextBucket.getKey().setEnd(newStart);
+            nextBucket.getKey().unsetEndInclusive();
             nextBucket.incCount(-1 * takeAmount);
             require -= takeAmount;
           }
@@ -928,7 +933,6 @@ public class Repartitioner {
         } else if (compare > 0) {
           // Pass the remaining range to the next partition.
           double passAmount = BigDecimal.valueOf(current.getCard()).subtract(avgCard).doubleValue();
-          Tuple diff = HistogramUtil.diff(sortSpecs, current.getStartKey(), current.getEndKey());
           Tuple interval = HistogramUtil.subDiff(sortSpecs, current.getKey(), current.getCard(), passAmount);
           Tuple newStart = HistogramUtil.incrementValue(sortSpecs, current.getStartKey(), interval, 1);
 //          passed = histogram.createBucket(new TupleRange(current.getStartKey(), newStart, current.getInterval(), comparator),
@@ -962,6 +966,7 @@ public class Repartitioner {
             Tuple newEnd = HistogramUtil.incrementValue(sortSpecs, current.getEndKey(), interval, 1);
 //            Tuple newEnd = increment(sortSpecs, current.getEndKey(), current.getInterval(), direction * takeAmount);
             current.getKey().setEnd(newEnd);
+            current.getKey().unsetEndInclusive();
             current.incCount(takeAmount);
             nextBucket.getKey().setStart(newEnd);
             nextBucket.incCount(-1 * takeAmount);
@@ -978,6 +983,7 @@ public class Repartitioner {
           passed = new BucketWithLocation(new TupleRange(newEnd, current.getEndKey(), comparator),
               passAmount, ((BucketWithLocation)current).getHosts());
           current.getKey().setEnd(newEnd);
+          current.getKey().unsetEndInclusive();
           current.incCount(-1 * passAmount);
         }
       }
