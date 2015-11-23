@@ -29,11 +29,9 @@ import org.apache.tajo.master.cluster.WorkerConnectionInfo;
 import org.apache.tajo.querymaster.Task.PullHost;
 import org.apache.tajo.storage.Tuple;
 import org.apache.tajo.util.Pair;
+import org.apache.tajo.util.StringUtils;
 
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 
 public class MasterFreqHistogram extends Histogram {
 
@@ -41,16 +39,19 @@ public class MasterFreqHistogram extends Histogram {
     super(sortSpecs);
   }
 
-  public MasterFreqHistogram(SortSpec[] sortSpecs, List<Bucket> buckets) {
+  public MasterFreqHistogram(SortSpec[] sortSpecs, Collection<Bucket> buckets) {
     super(sortSpecs);
-    for (Bucket eachBucket : buckets) {
-      this.buckets.put(eachBucket.getKey(), eachBucket);
-    }
+//    for (Bucket eachBucket : buckets) {
+//      this.buckets.put(eachBucket.getKey(), eachBucket);
+//    }
+    this.buckets.addAll(buckets);
   }
 
-  public void merge(AnalyzedSortSpec[] analyzedSpecs, FreqHistogram other, WorkerConnectionInfo workerInfo) {
-    List<Bucket> thisBuckets = this.getSortedBuckets();
-    List<Bucket> otherBuckets = other.getSortedBuckets();
+  public void merge(AnalyzedSortSpec[] analyzedSpecs, FreqHistogram other, WorkerConnectionInfo workerInfo, int maxSize) {
+    final boolean mergeWithBucketMerge = this.size() + other.size() <= maxSize;
+
+    List<Bucket> thisBuckets = new ArrayList<>(this.getSortedBuckets());
+    List<Bucket> otherBuckets = new ArrayList<>(other.getSortedBuckets());
     Iterator<Bucket> thisIt = thisBuckets.iterator();
     Iterator<Bucket> otherIt = otherBuckets.iterator();
 
@@ -75,114 +76,165 @@ public class MasterFreqHistogram extends Histogram {
       // Check overlap between keys
       if (!smallStartBucket.getKey().isOverlap(largeStartBucket.getKey())) {
         // non-overlap keys
-        this.buckets.put(smallStartBucket.getKey(), smallStartBucket);
+        this.buckets.add(smallStartBucket);
         if (isThisSmall) {
           thisBucket = null;
         } else {
           otherBucket = null;
         }
       } else {
-
-        boolean thisSplittable = HistogramUtil.splittable(analyzedSpecs, smallStartBucket);
-        boolean otherSplittable = HistogramUtil.splittable(analyzedSpecs, largeStartBucket);
-
-        // If both buckets are splittable
-        if (thisSplittable && otherSplittable) {
-          // Split buckets into overlapped and non-overlapped portions
-          Bucket[] bucketOrder = new Bucket[3];
-          bucketOrder[0] = smallStartBucket;
-
-          Tuple[] tuples = new Tuple[4];
-          tuples[0] = smallStartBucket.getStartKey();
-          tuples[1] = largeStartBucket.getStartKey();
-
-          if (comparator.compare(smallStartBucket.getEndKey(), largeStartBucket.getEndKey()) < 0) {
-            tuples[2] = smallStartBucket.getEndKey();
-            tuples[3] = largeStartBucket.getEndKey();
-            bucketOrder[1] = smallStartBucket;
-            bucketOrder[2] = largeStartBucket;
-          } else {
-            tuples[2] = largeStartBucket.getEndKey();
-            tuples[3] = smallStartBucket.getEndKey();
-            bucketOrder[1] = largeStartBucket;
-            bucketOrder[2] = smallStartBucket;
-          }
-
-          BucketWithLocation lastBucket = null;
-          for (int i = 0; i < bucketOrder.length; i++) {
-            Tuple start = tuples[i];
-            Tuple end = tuples[i + 1];
-
-            if (i == 1) {
-              // Overlapped bucket
-              Pair<TupleRange, Double> keyAndCard = HistogramUtil.getSubBucket(this, analyzedSpecs, smallStartBucket,
-                  start, end);
-              BucketWithLocation smallSubBucket = new BucketWithLocation(keyAndCard.getFirst(), keyAndCard.getSecond(), workerInfo);
-              keyAndCard = HistogramUtil.getSubBucket(this, analyzedSpecs, largeStartBucket,
-                  start, end);
-              BucketWithLocation largeSubBucket = new BucketWithLocation(keyAndCard.getFirst(), keyAndCard.getSecond(), workerInfo);
-              try {
-                Preconditions.checkState(smallSubBucket.getKey().equals(largeSubBucket.getKey()), "small.key: " + smallStartBucket.getKey() + " large.key: " + largeStartBucket.getKey());
-              } catch (IllegalStateException e) {
-                throw e;
-              }
-              smallSubBucket.incCount(largeSubBucket.getCard());
-              lastBucket = smallSubBucket;
-              // Note: Don't need to consider end inclusive here
-              // because this bucket is always a middle one among the split buckets
-            } else {
-              if (!start.equals(end) || bucketOrder[i].getKey().isEndInclusive()) {
-                Pair<TupleRange, Double> keyAndCard = HistogramUtil.getSubBucket(this, analyzedSpecs, bucketOrder[i],
-                    start, end);
-                BucketWithLocation subBucket = new BucketWithLocation(keyAndCard.getFirst(), keyAndCard.getSecond(), workerInfo);
-                if (i > 1 && bucketOrder[i].getKey().isEndInclusive()) {
-                  subBucket.setEndKeyInclusive();
-                }
-                lastBucket = subBucket;
-              }
-            }
-          }
-
-          if (thisBucket.getEndKey().equals(lastBucket.getEndKey())) {
-            thisBucket = lastBucket;
-            otherBucket = null;
-          } else {
-            thisBucket = null;
-            otherBucket = lastBucket;
-          }
-
+        Pair<Bucket, Bucket> result;
+        if (mergeWithBucketMerge) {
+          result = mergeWithBucketMerge(thisBucket, otherBucket, smallStartBucket, largeStartBucket);
         } else {
-          // Simply merge
-          isThisSmall = comparator.compare(thisBucket.getEndKey(), otherBucket.getEndKey()) < 0;
-          smallStartBucket.merge(largeStartBucket);
-
-          if (isThisSmall) {
-            thisBucket = null;
-            otherBucket = smallStartBucket;
-          } else {
-            thisBucket = smallStartBucket;
-            otherBucket = null;
-          }
+          result = mergeWithBucketSplit(analyzedSpecs, workerInfo, thisBucket, otherBucket, smallStartBucket, largeStartBucket);
         }
+        thisBucket = (BucketWithLocation) result.getFirst();
+        otherBucket = (BucketWithLocation) result.getSecond();
       }
     }
 
     if (thisBucket != null) {
-      this.buckets.put(thisBucket.getKey(), thisBucket);
+      this.buckets.add(thisBucket);
     }
 
     if (otherBucket != null) {
-      this.buckets.put(otherBucket.getKey(), otherBucket);
+      this.buckets.add(otherBucket);
     }
 
     while (thisIt.hasNext()) {
       Bucket next = thisIt.next();
-      this.buckets.put(next.getKey(), next);
+      this.buckets.add(next);
     }
 
     while (otherIt.hasNext()) {
       Bucket next = otherIt.next();
-      this.buckets.put(next.getKey(), new BucketWithLocation(next, workerInfo));
+      this.buckets.add(new BucketWithLocation(next, workerInfo));
+    }
+  }
+
+  private Pair<Bucket, Bucket> mergeWithBucketMerge(Bucket thisBucket, Bucket otherBucket,
+                                                    Bucket smallStartBucket, Bucket largeStartBucket) {
+    boolean isThisSmall = comparator.compare(thisBucket.getEndKey(), otherBucket.getEndKey()) < 0;
+    smallStartBucket.merge(largeStartBucket);
+
+    if (isThisSmall) {
+      thisBucket = null;
+      otherBucket = smallStartBucket;
+    } else {
+      thisBucket = smallStartBucket;
+      otherBucket = null;
+    }
+    return new Pair<>(thisBucket, otherBucket);
+  }
+
+  private Pair<Bucket, Bucket> mergeWithBucketSplit(AnalyzedSortSpec[] analyzedSpecs, WorkerConnectionInfo workerInfo,
+                                                    Bucket thisBucket, Bucket otherBucket,
+                                                    BucketWithLocation smallStartBucket,
+                                                    BucketWithLocation largeStartBucket) {
+    boolean thisSplittable = HistogramUtil.splittable(analyzedSpecs, smallStartBucket);
+    boolean otherSplittable = HistogramUtil.splittable(analyzedSpecs, largeStartBucket);
+
+    // If both buckets are splittable
+    if (thisSplittable && otherSplittable) {
+      // Split buckets into overlapped and non-overlapped portions
+      Bucket[] bucketOrder = new Bucket[3];
+      bucketOrder[0] = smallStartBucket;
+
+      Tuple[] tuples = new Tuple[4];
+      tuples[0] = smallStartBucket.getStartKey();
+      tuples[1] = largeStartBucket.getStartKey();
+
+      List<BucketWithLocation> splits = new ArrayList<>();
+
+      if (comparator.compare(smallStartBucket.getEndKey(), largeStartBucket.getEndKey()) < 0) {
+        tuples[2] = smallStartBucket.getEndKey();
+        tuples[3] = largeStartBucket.getEndKey();
+        bucketOrder[1] = smallStartBucket;
+        bucketOrder[2] = largeStartBucket;
+      } else {
+        tuples[2] = largeStartBucket.getEndKey();
+        tuples[3] = smallStartBucket.getEndKey();
+        bucketOrder[1] = largeStartBucket;
+        bucketOrder[2] = smallStartBucket;
+      }
+
+      boolean unsplittable = false;
+      for (int i = 0; i < bucketOrder.length; i++) {
+        Tuple start = tuples[i];
+        Tuple end = tuples[i + 1];
+
+        if (i == 1) {
+          // Overlapped bucket
+          Pair<TupleRange, Double> keyAndCard = HistogramUtil.getSubBucket(this, analyzedSpecs, smallStartBucket,
+              start, end);
+          unsplittable = keyAndCard.getFirst().equals(smallStartBucket.getKey());
+          if (unsplittable) break;
+
+          BucketWithLocation smallSubBucket = new BucketWithLocation(keyAndCard.getFirst(), keyAndCard.getSecond(), workerInfo);
+          keyAndCard = HistogramUtil.getSubBucket(this, analyzedSpecs, largeStartBucket,
+              start, end);
+          unsplittable = keyAndCard.getFirst().equals(largeStartBucket.getKey());
+          if (unsplittable) break;
+
+          BucketWithLocation largeSubBucket = new BucketWithLocation(keyAndCard.getFirst(), keyAndCard.getSecond(), workerInfo);
+
+          Preconditions.checkState(smallSubBucket.getKey().equals(largeSubBucket.getKey()),
+              "smallStartBucket.key: " + smallStartBucket.getKey() + " smallSubBucket.key: " + smallSubBucket.getKey()
+                  + " largeStartBucket.key: " + largeStartBucket.getKey() + " largeSubBucket.key: " + largeSubBucket.getKey());
+
+          smallSubBucket.incCount(largeSubBucket.getCard());
+          splits.add(smallSubBucket);
+          // Note: Don't need to consider end inclusive here
+          // because this bucket is always a middle one among the split buckets
+        } else {
+          if (!start.equals(end) || bucketOrder[i].getKey().isEndInclusive()) {
+            Pair<TupleRange, Double> keyAndCard = HistogramUtil.getSubBucket(this, analyzedSpecs, bucketOrder[i],
+                start, end);
+            unsplittable = keyAndCard.getFirst().equals(bucketOrder[i].getKey());
+            if (unsplittable) break;
+
+            BucketWithLocation subBucket = new BucketWithLocation(keyAndCard.getFirst(), keyAndCard.getSecond(), workerInfo);
+            if (i > 1 && bucketOrder[i].getKey().isEndInclusive()) {
+              subBucket.setEndKeyInclusive();
+            }
+//            lastBucket = subBucket;
+            splits.add(subBucket);
+          }
+        }
+      }
+
+      if (unsplittable) {
+        return mergeWithBucketMerge(thisBucket, otherBucket, smallStartBucket, largeStartBucket);
+
+      } else {
+        BucketWithLocation lastBucket = splits.remove(splits.size() - 1);
+
+        this.buckets.addAll(splits);
+
+        if (thisBucket.getEndKey().equals(lastBucket.getEndKey())) {
+          thisBucket = lastBucket;
+          otherBucket = null;
+        } else {
+          thisBucket = null;
+          otherBucket = lastBucket;
+        }
+
+        return new Pair<>(thisBucket, otherBucket);
+      }
+    } else {
+      // Simply merge
+//      boolean isThisSmall = comparator.compare(thisBucket.getEndKey(), otherBucket.getEndKey()) < 0;
+//      smallStartBucket.merge(largeStartBucket);
+//
+//      if (isThisSmall) {
+//        thisBucket = null;
+//        otherBucket = smallStartBucket;
+//      } else {
+//        thisBucket = smallStartBucket;
+//        otherBucket = null;
+//      }
+      return mergeWithBucketMerge(thisBucket, otherBucket, smallStartBucket, largeStartBucket);
     }
   }
 
@@ -200,7 +252,7 @@ public class MasterFreqHistogram extends Histogram {
 
     public BucketWithLocation(TupleRange key, double count, Set<PullHost> hosts) {
       super(key, count);
-      hosts.addAll(hosts);
+      this.hosts.addAll(hosts);
     }
 
     public BucketWithLocation(Bucket bucket, WorkerConnectionInfo info) {
@@ -209,6 +261,10 @@ public class MasterFreqHistogram extends Histogram {
 
     public BucketWithLocation(Bucket bucket, String host, int port) {
       this(bucket.getKey(), bucket.getCard(), host, port);
+    }
+
+    public void addHosts(Set<PullHost> hosts) {
+      this.hosts.addAll(hosts);
     }
 
     public Set<PullHost> getHosts() {
@@ -220,6 +276,11 @@ public class MasterFreqHistogram extends Histogram {
       super.merge(other);
       BucketWithLocation bucket = (BucketWithLocation) other;
       this.hosts.addAll(bucket.hosts);
+    }
+
+    @Override
+    public String toString() {
+      return this.key + ", " + this.card + ", < " + StringUtils.join(hosts) + " >";
     }
   }
 }

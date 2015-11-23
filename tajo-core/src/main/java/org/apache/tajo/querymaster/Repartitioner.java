@@ -29,7 +29,6 @@ import org.apache.tajo.SessionVars;
 import org.apache.tajo.algebra.JoinType;
 import org.apache.tajo.catalog.*;
 import org.apache.tajo.catalog.statistics.*;
-import org.apache.tajo.catalog.statistics.FreqHistogram.FreqBucket;
 import org.apache.tajo.catalog.statistics.Histogram.Bucket;
 import org.apache.tajo.conf.TajoConf.ConfVars;
 import org.apache.tajo.engine.planner.PhysicalPlannerImpl;
@@ -55,6 +54,7 @@ import org.apache.tajo.storage.fragment.FileFragment;
 import org.apache.tajo.storage.fragment.Fragment;
 import org.apache.tajo.unit.StorageUnit;
 import org.apache.tajo.util.Pair;
+import org.apache.tajo.util.StringUtils;
 import org.apache.tajo.util.TUtil;
 import org.apache.tajo.util.TajoIdUtils;
 import org.apache.tajo.worker.FetchImpl;
@@ -600,7 +600,10 @@ public class Repartitioner {
         || channel.getShuffleType() == SCATTERED_HASH_SHUFFLE) {
       scheduleHashShuffledFetches(schedulerContext, masterPlan, stage, channel, maxNum);
     } else if (channel.getShuffleType() == RANGE_SHUFFLE) {
+      long before = System.currentTimeMillis();
       scheduleRangeShuffledFetches(schedulerContext, masterPlan, stage, channel, maxNum);
+      long after = System.currentTimeMillis();
+      LOG.info("scheduling time for range shuffle: " + (after - before) + " ms");
     } else {
       throw new TajoInternalError("Cannot support partition type");
     }
@@ -630,7 +633,7 @@ public class Repartitioner {
     Schema sortSchema = new Schema(channel.getShuffleKeys());
 
     TupleRange[] ranges;
-    List<Bucket> buckets = null;
+    SortedSet<Bucket> buckets = null;
 //    boolean[] endKeyInclusive = null;
     int determinedTaskNum;
 
@@ -671,6 +674,11 @@ public class Repartitioner {
       MasterFreqHistogram histogram = schedulerContext.getMasterContext().getQuery().getStage(sampleChildBlock.getId()).getHistogramForRangeShuffle();
       AnalyzedSortSpec[] analyzedSpecs = HistogramUtil.analyzeHistogram(histogram, sortKeyStats);
       buckets = histogram.getSortedBuckets();
+
+      LOG.info("================== 1 ==================");
+      for (Bucket b : buckets) {
+        LOG.info("bucket: " + b);
+      }
 
       // Compute the total cardinality of sort keys.
       BigDecimal totalCard = histogram.getSortedBuckets().stream().map(
@@ -735,32 +743,22 @@ public class Repartitioner {
 //        }
 
         while (buckets.size() > determinedTaskNum) {
-          Bucket bucket = buckets.remove(buckets.size() - 1);
-          buckets.get(buckets.size() - 1).merge(bucket);
+          Bucket bucket = buckets.last();
+          buckets.remove(bucket);
+          buckets.last().merge(bucket);
         }
 
         // The merged histogram contains the range partitions (buckets).
         histogram = new MasterFreqHistogram(histogram.getSortSpecs(), buckets);
 
       } else if (determinedTaskNum > buckets.size()) {
-        LOG.info("# of buckets is smaller than determined # of tasks");
         do {
-          buckets.sort((b1, b2) -> {
-            if (b1.getCard() > b2.getCard()) {
-              return -1;
-            } else if (b1.getCard() == b2.getCard()) {
-              return 0;
-            } else {
-              return 1;
-            }
-          });
-
           List<Bucket> added = new ArrayList<>();
           List<Bucket> removed = new ArrayList<>();
           for (Bucket eachBucket : buckets) {
             if (HistogramUtil.splittable(analyzedSpecs, eachBucket)) {
-              // TODO: implement splitBucket()
-              List<Bucket> split = HistogramUtil.splitBucket(histogram, analyzedSpecs, eachBucket, 2);
+              // TODO: improve the split number
+              List<Bucket> split = splitBucket(histogram, analyzedSpecs, eachBucket, 2);
               if (split.size() > 1) {
                 added.addAll(split);
                 removed.add(eachBucket);
@@ -782,6 +780,11 @@ public class Repartitioner {
         histogram = new MasterFreqHistogram(histogram.getSortSpecs(), buckets);
       }
 
+      LOG.info("================== 2 ==================");
+      for (Bucket b : histogram.getSortedBuckets()) {
+        LOG.info("bucket: " + b);
+      }
+
       BigDecimal avgCard = totalCard.divide(BigDecimal.valueOf(histogram.size()), MathContext.DECIMAL128);
 
       // The merged histogram can contain partitions of various lengths.
@@ -792,9 +795,11 @@ public class Repartitioner {
       // Adjust ranges to be last inclusive
       ranges = new TupleRange[buckets.size()];
 //      endKeyInclusive = new boolean[buckets.size()];
+      Iterator<Bucket> it = buckets.iterator();
       for (int i = 0; i < buckets.size(); i++) {
-        ranges[i] = buckets.get(i).getKey();
-        LOG.info("ranges[" + i + "]: " + ranges[i]);
+//        ranges[i] = buckets.get(i).getKey();
+        BucketWithLocation bucket = (BucketWithLocation) it.next();
+        ranges[i] = bucket.getKey();
 //        endKeyInclusive[i] = buckets.get(i).isEndKeyInclusive();
       }
     }
@@ -864,15 +869,18 @@ public class Repartitioner {
     try {
       RowStoreUtil.RowStoreEncoder encoder = RowStoreUtil.createEncoder(sortSchema);
 //      for (int i = 0; i < ranges.length; i++) {
+      Iterator<Bucket> it = buckets.iterator();
       for (int i = 0; i < buckets.size(); i++) {
         fetchSet = new HashSet<>();
-        BucketWithLocation bucket = (BucketWithLocation) buckets.get(i);
+//        BucketWithLocation bucket = (BucketWithLocation) buckets.get(i);
+        BucketWithLocation bucket = (BucketWithLocation) it.next();
+        LOG.info("bucket[" + i + "]: " + bucket);
         Set<PullHost> hosts = bucket.getHosts();
 
+        String rangeParam =
+            TupleUtil.rangeToQuery(bucket.getKey(), bucket.isEndKeyInclusive(), encoder);
         for (FetchImpl fetch: fetches) {
           if (hosts.contains(fetch.getPullHost())) {
-            String rangeParam =
-                TupleUtil.rangeToQuery(bucket.getKey(), bucket.isEndKeyInclusive(), encoder);
             FetchImpl copy;
             try {
               copy = fetch.clone();
@@ -895,93 +903,151 @@ public class Repartitioner {
     schedulerContext.setEstimatedTaskNum(determinedTaskNum);
   }
 
+  public static List<Bucket> splitBucket(Histogram histogram, AnalyzedSortSpec[] sortSpecs,
+                                         Bucket bucket, int splitNum) {
+    Comparator<Tuple> comparator = histogram.getComparator();
+    BucketWithLocation bucketWithLoc = (BucketWithLocation) bucket;
+
+    Tuple start = bucketWithLoc.getStartKey();
+    Tuple end = bucketWithLoc.getEndKey();
+    Tuple diff = HistogramUtil.approxDiff(sortSpecs, start, end);
+
+    BigDecimal[] normDiff = HistogramUtil.normalizeTupleAsVector(sortSpecs, diff);
+    BigDecimal[] newNormInter = new BigDecimal[normDiff.length];
+    BigDecimal bigSplitNum = BigDecimal.valueOf(splitNum);
+    for (int i = 0; i < normDiff.length; i++) {
+      newNormInter[i] = normDiff[i].divide(bigSplitNum, 128, BigDecimal.ROUND_HALF_UP);
+    }
+
+    Tuple interval = HistogramUtil.denormalizeAsVector(sortSpecs, newNormInter);
+
+    List<Bucket> splits = new ArrayList<>(splitNum);
+    Tuple newStart = start;
+    Tuple newEnd = HistogramUtil.incrementValue(sortSpecs, newStart, interval);
+    double amount = bucketWithLoc.getCard() / (double)splitNum;
+    double remaining = bucketWithLoc.getCard();
+    do {
+      splits.add(new BucketWithLocation(new TupleRange(newStart, newEnd, comparator), amount, bucketWithLoc.getHosts()));
+      newStart = newEnd;
+      remaining -= amount;
+      try {
+        newEnd = HistogramUtil.incrementValue(sortSpecs, newStart, interval);
+        if (newEnd.equals(newStart)) {
+          break;
+        }
+      } catch (ArithmeticException e) {
+        break;
+      }
+    } while (comparator.compare(newEnd, end) < 0);
+
+    BucketWithLocation last = (BucketWithLocation) splits.get(splits.size() - 1);
+    splits.add(new BucketWithLocation(new TupleRange(last.getEndKey(), end, comparator), remaining, bucketWithLoc.getHosts()));
+
+    Preconditions.checkState(splitNum + 1 >= splits.size(), "splits.size(): " + splits.size());
+    if (splits.size() > 0) {
+      last = (BucketWithLocation) splits.get(splits.size() - 1);
+
+      if (comparator.compare(last.getEndKey(), end) > 0) {
+        last.getKey().setEnd(end);
+      }
+
+      if (bucketWithLoc.getKey().isEndInclusive()) {
+        last.setEndKeyInclusive();
+      }
+    }
+
+    return splits;
+  }
+
   public static void refineToEquiDepth(final Histogram histogram,
                                        final BigDecimal avgCard,
                                        final AnalyzedSortSpec[] sortSpecs) {
-    List<Bucket> buckets = histogram.getSortedBuckets();
+    List<Bucket> buckets = new ArrayList<>(histogram.getSortedBuckets());
     Comparator<Tuple> comparator = histogram.getComparator();
-    Bucket passed = null;
+    BucketWithLocation passed = null;
 
     // Refine from the last to the left direction.
     for (int i = buckets.size() - 1; i >= 0; i--) {
-      Bucket current = buckets.get(i);
+      BucketWithLocation current = (BucketWithLocation) buckets.get(i);
       // First add the passed range from the previous partition to the current one.
       if (passed != null) {
         current.merge(passed);
         passed = null;
       }
 
-      if (i > 0 && HistogramUtil.splittable(sortSpecs, current)) {
-        int compare = BigDecimal.valueOf(current.getCard()).compareTo(avgCard);
-        if (compare < 0) {
-          // Take the lacking range from the next partition.
-          double require = avgCard.subtract(BigDecimal.valueOf(current.getCard())).doubleValue();
-          for (int j = i - 1; j >= 0 && require > 0; j--) {
-            Bucket nextBucket = buckets.get(j);
-            double takeAmount = require < nextBucket.getCard() ? require : nextBucket.getCard();
-            Tuple interval = HistogramUtil.subDiff(sortSpecs, nextBucket.getKey(), nextBucket.getCard(), takeAmount);
+      int compare = BigDecimal.valueOf(current.getCard()).compareTo(avgCard);
+      if (compare < 0 && i > 0) {
+        // Take the lacking range from the next partition.
+        double require = avgCard.subtract(BigDecimal.valueOf(current.getCard())).doubleValue();
 
-            Tuple newStart = HistogramUtil.incrementValue(sortSpecs, nextBucket.getEndKey(), interval, 1);
-            current.getKey().setStart(newStart);
-            current.incCount(takeAmount);
-            nextBucket.getKey().setEnd(newStart);
-            nextBucket.getKey().unsetEndInclusive();
-            nextBucket.incCount(-1 * takeAmount);
-            require -= takeAmount;
-          }
+        BucketWithLocation nextBucket = (BucketWithLocation) buckets.get(i - 1);
+        if (nextBucket.getCard() > 0) {
+          double takeAmount = require < nextBucket.getCard() ? require : nextBucket.getCard();
+          Tuple interval = HistogramUtil.approxSubDiff(sortSpecs, nextBucket.getKey(), nextBucket.getCard(), takeAmount);
 
-        } else if (compare > 0) {
+          Tuple newStart = HistogramUtil.incrementValue(sortSpecs, nextBucket.getEndKey(), interval, -1);
+          current.getKey().setStart(newStart);
+          current.incCount(takeAmount);
+          current.addHosts(nextBucket.getHosts());
+          nextBucket.getKey().setEnd(newStart);
+          nextBucket.getKey().unsetEndInclusive();
+          nextBucket.incCount(-1 * takeAmount);
+        }
+
+      } else if (compare > 0) {
+        if (HistogramUtil.splittable(sortSpecs, current)) {
           // Pass the remaining range to the next partition.
           double passAmount = BigDecimal.valueOf(current.getCard()).subtract(avgCard).doubleValue();
-          Tuple interval = HistogramUtil.subDiff(sortSpecs, current.getKey(), current.getCard(), passAmount);
+          Tuple interval = HistogramUtil.approxSubDiff(sortSpecs, current.getKey(), current.getCard(), passAmount);
           Tuple newStart = HistogramUtil.incrementValue(sortSpecs, current.getStartKey(), interval, 1);
-//          passed = histogram.createBucket(new TupleRange(current.getStartKey(), newStart, current.getInterval(), comparator),
-//              passAmount);
           passed = new BucketWithLocation(new TupleRange(current.getStartKey(), newStart, comparator),
-              passAmount, ((BucketWithLocation)current).getHosts());
+              passAmount, current.getHosts());
           current.getKey().setStart(newStart);
           current.incCount(-1 * passAmount);
         }
       }
     }
 
+    LOG.info("================== 3 ==================");
+    for (Bucket b : buckets) {
+      LOG.info("bucket: " + b);
+    }
+
     // Refine from the first to the right direction
     for (int i = 0; i < buckets.size(); i++) {
-      Bucket current = buckets.get(i);
+      BucketWithLocation current = (BucketWithLocation) buckets.get(i);
       // First add the passed range from the previous partition to the current one.
       if (passed != null) {
         current.merge(passed);
         passed = null;
       }
-      if (i < buckets.size() - 1 && HistogramUtil.splittable(sortSpecs, current)) {
-        int compare = BigDecimal.valueOf(current.getCard()).compareTo(avgCard);
-        if (compare < 0) {
-          // Take the lacking range from the next partition.
-          double require = avgCard.subtract(BigDecimal.valueOf(current.getCard())).doubleValue();
-          for (int j = i + 1; j < buckets.size() && require > 0; j++) {
-            Bucket nextBucket = buckets.get(j);
-            double takeAmount = require < nextBucket.getCard() ? require : nextBucket.getCard();
-            Tuple interval = HistogramUtil.subDiff(sortSpecs, nextBucket.getKey(), nextBucket.getCard(), takeAmount);
 
-            Tuple newEnd = HistogramUtil.incrementValue(sortSpecs, current.getEndKey(), interval, 1);
-//            Tuple newEnd = increment(sortSpecs, current.getEndKey(), current.getInterval(), direction * takeAmount);
-            current.getKey().setEnd(newEnd);
-            current.getKey().unsetEndInclusive();
-            current.incCount(takeAmount);
-            nextBucket.getKey().setStart(newEnd);
-            nextBucket.incCount(-1 * takeAmount);
-            require -= takeAmount;
-          }
+      int compare = BigDecimal.valueOf(current.getCard()).compareTo(avgCard);
+      if (compare < 0 && i < buckets.size() - 1) {
+        // Take the lacking range from the next partition.
+        double require = avgCard.subtract(BigDecimal.valueOf(current.getCard())).doubleValue();
 
-        } else if (compare > 0) {
+        BucketWithLocation nextBucket = (BucketWithLocation) buckets.get(i + 1);
+        if (nextBucket.getCard() > 0) {
+          double takeAmount = require < nextBucket.getCard() ? require : nextBucket.getCard();
+          Tuple interval = HistogramUtil.approxSubDiff(sortSpecs, nextBucket.getKey(), nextBucket.getCard(), takeAmount);
+
+          Tuple newEnd = HistogramUtil.incrementValue(sortSpecs, current.getEndKey(), interval, 1);
+          current.getKey().setEnd(newEnd);
+          current.getKey().unsetEndInclusive();
+          current.incCount(takeAmount);
+          current.addHosts(nextBucket.getHosts());
+          nextBucket.getKey().setStart(newEnd);
+          nextBucket.incCount(-1 * takeAmount);
+        }
+      } else if (compare > 0) {
+        if (HistogramUtil.splittable(sortSpecs, current)) {
           // Pass the remaining range to the next partition.
           double passAmount = BigDecimal.valueOf(current.getCard()).subtract(avgCard).doubleValue();
-//          Tuple newEnd = increment(sortSpecs, current.getEndKey(), current.getInterval(), direction * passAmount);
-//          passed = histogram.createBucket(new TupleRange(newEnd, current.getEndKey(), current.getKey().getInterval(), comparator), passAmount);
-          Tuple interval = HistogramUtil.subDiff(sortSpecs, current.getKey(), current.getCard(), passAmount);
+          Tuple interval = HistogramUtil.approxSubDiff(sortSpecs, current.getKey(), current.getCard(), passAmount);
           Tuple newEnd = HistogramUtil.incrementValue(sortSpecs, current.getEndKey(), interval, -1);
           passed = new BucketWithLocation(new TupleRange(newEnd, current.getEndKey(), comparator),
-              passAmount, ((BucketWithLocation)current).getHosts());
+              passAmount, current.getHosts());
           current.getKey().setEnd(newEnd);
           current.getKey().unsetEndInclusive();
           current.incCount(-1 * passAmount);
@@ -989,8 +1055,14 @@ public class Repartitioner {
       }
     }
 
+    LOG.info("================== 4 ==================");
+    for (Bucket b : buckets) {
+      LOG.info("bucket: " + b);
+    }
+
     // TODO: if there are remaining passed bucket,
     if (passed != null && passed.getCard() > 0) {
+      LOG.warn("Remaining passed range is merged into the last bucket: " + passed);
       Bucket lastBucket = buckets.get(buckets.size() - 1);
       lastBucket.merge(passed);
     }
