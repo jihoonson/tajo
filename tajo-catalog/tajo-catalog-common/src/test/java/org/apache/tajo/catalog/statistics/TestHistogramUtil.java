@@ -336,20 +336,20 @@
 //    Tuple result = HistogramUtil.incrementValue(analyzedSpecs, tuple, vector);
 //    System.out.println(tuple);
 //    System.out.println(result);
-//    Tuple diff = HistogramUtil.diff(analyzedSpecs, tuple, result);
-//    System.out.println(diff);
+//    Tuple approxDiff = HistogramUtil.approxDiff(analyzedSpecs, tuple, result);
+//    System.out.println(approxDiff);
 //
 //    BigDecimal v = HistogramUtil.unicodeCharsToBigDecimal(vector.getUnicodeChars(2));
-//    BigDecimal d = HistogramUtil.unicodeCharsToBigDecimal(diff.getUnicodeChars(2));
+//    BigDecimal d = HistogramUtil.unicodeCharsToBigDecimal(approxDiff.getUnicodeChars(2));
 //
 //    System.out.println(v);
 //    System.out.println(d);
 //
-//    assertEquals(vector.getFloat8(0), diff.getFloat8(0), analyzedSpecs[0].getMinInterval());
-//    assertEquals(vector.getInt8(1), diff.getInt8(1));
+//    assertEquals(vector.getFloat8(0), approxDiff.getFloat8(0), analyzedSpecs[0].getMinInterval());
+//    assertEquals(vector.getInt8(1), approxDiff.getInt8(1));
 //    assertTrue(v.equals(d) || v.equals(d.add(BigDecimal.ONE))
 //    );
-//    assertEquals(vector.getTimeDate(3), diff.getTimeDate(3));
+//    assertEquals(vector.getTimeDate(3), approxDiff.getTimeDate(3));
 //
 ////    Tuple tuple = getVTuple(DatumFactory.createFloat8(0.1), DatumFactory.createInt8(2),
 ////        DatumFactory.createText("가"), DatumFactory.createTimestampDatumWithJavaMillis(10));
@@ -672,11 +672,11 @@
 //        DatumFactory.createText("가"), DatumFactory.createTimestampDatumWithJavaMillis(1000));
 //    Tuple result = HistogramUtil.incrementValue(analyzedSpecs, tuple, totalBase, 1);
 //
-//    long diff = HistogramUtil.diff(analyzedSpecs, totalBase, tuple, result);
-//    assertEquals(1, diff);
+//    long approxDiff = HistogramUtil.approxDiff(analyzedSpecs, totalBase, tuple, result);
+//    assertEquals(1, approxDiff);
 //
-//    diff = HistogramUtil.diff(analyzedSpecs, totalBase, result, tuple);
-//    assertEquals(1, diff);
+//    approxDiff = HistogramUtil.approxDiff(analyzedSpecs, totalBase, result, tuple);
+//    assertEquals(1, approxDiff);
 //  }
 //
 //  @Test
@@ -686,8 +686,8 @@
 //        DatumFactory.createText("가"), DatumFactory.createTimestampDatumWithJavaMillis(1000));
 //    Tuple result = HistogramUtil.incrementValue(analyzedSpecs, tuple, totalBase, 1);
 //
-//    Tuple diff = HistogramUtil.diff(analyzedSpecs, tuple, result);
-//    assertEquals(totalBase, diff);
+//    Tuple approxDiff = HistogramUtil.approxDiff(analyzedSpecs, tuple, result);
+//    assertEquals(totalBase, approxDiff);
 //  }
 //
 //  @Test
@@ -697,7 +697,7 @@
 //        DatumFactory.createText("가"), DatumFactory.createTimestampDatumWithJavaMillis(1000));
 //    Tuple result = HistogramUtil.incrementValue(analyzedSpecs, tuple, totalBase, 10);
 //
-//    Tuple diff = HistogramUtil.diff(analyzedSpecs, tuple, result);
+//    Tuple approxDiff = HistogramUtil.approxDiff(analyzedSpecs, tuple, result);
 //    Tuple expected = getVTuple(DatumFactory.createFloat8(5.0), DatumFactory.createInt8(110),
 //        DatumFactory.createText(Convert.chars2utf(
 //            HistogramUtil.bigDecimalToUnicodeChars(
@@ -706,7 +706,7 @@
 //        )),
 //        DatumFactory.createTimestamp("1970-01-01 00:00:10"));
 //
-//    assertEquals(expected, diff);
+//    assertEquals(expected, approxDiff);
 //  }
 //
 //  @Test
@@ -719,7 +719,7 @@
 //    double amount = 79;
 //    Tuple end = HistogramUtil.incrementValue(analyzedSpecs, start, totalBase, amount);
 //
-//    Tuple diff = HistogramUtil.diff(analyzedSpecs, start, end);
+//    Tuple approxDiff = HistogramUtil.approxDiff(analyzedSpecs, start, end);
 //    Tuple intervalSum = HistogramUtil.incrementVector(analyzedSpecs, totalBase, totalBase, amount-1);
 //
 //    System.out.println(HistogramUtil.unicodeCharsToBigDecimal("च".toCharArray()));
@@ -727,7 +727,7 @@
 //
 ////    assertEquals(end, HistogramUtil.increment(analyzedSpecs, start, totalBase, 200));
 ////    assertEquals(end, HistogramUtil.increment(analyzedSpecs, start, expected, 1));
-//    assertEquals(intervalSum, diff);
+//    assertEquals(intervalSum, approxDiff);
 //  }
 //
 //  @Test
@@ -744,11 +744,11 @@
 //
 //    Tuple result = HistogramUtil.incrementValue(analyzedSpecs, tuple, totalBase, 1);
 //
-//    Tuple diff = HistogramUtil.diff(analyzedSpecs, tuple, result);
+//    Tuple approxDiff = HistogramUtil.approxDiff(analyzedSpecs, tuple, result);
 //
 //    BigDecimal[] n1 = HistogramUtil.normalizeTupleAsValue(analyzedSpecs, tuple);
 //    BigDecimal[] e1 = HistogramUtil.normalizeTupleAsValue(analyzedSpecs, result);
-//    BigDecimal[] normDiff = HistogramUtil.normalizeTupleAsVector(analyzedSpecs, diff);
+//    BigDecimal[] normDiff = HistogramUtil.normalizeTupleAsVector(analyzedSpecs, approxDiff);
 //    BigDecimal[] expDiff = HistogramUtil.normalizeTupleAsVector(analyzedSpecs, totalBase);
 //
 //    int[] maxScales = HistogramUtil.maxScales(n1, e1, normDiff, expDiff);
@@ -761,7 +761,7 @@
 //    BigDecimal expDiffVal = HistogramUtil.weightedSum(expDiff, maxScales);
 //
 ////    System.out.println("end - start: " + sumDiffVal);
-////    System.out.println("diff       : " + normDiffVal);
+////    System.out.println("approxDiff       : " + normDiffVal);
 ////    System.out.println("expected   : " + expDiffVal);
 //
 //    assertEquals(sumDiffVal, normDiffVal);
@@ -804,15 +804,15 @@
 //        ))),
 //        DatumFactory.createTimestampDatumWithJavaMillis(0));
 //
-//    Tuple diff = HistogramUtil.diff(analyzedSpecs, start, incremented);
+//    Tuple approxDiff = HistogramUtil.approxDiff(analyzedSpecs, start, incremented);
 //    Tuple incrementedBase = HistogramUtil.incrementVector(analyzedSpecs, totalBase, totalBase, 9999);
 //
-//    assertEquals(expected, diff);
-//    assertEquals(diff, incrementedBase);
+//    assertEquals(expected, approxDiff);
+//    assertEquals(approxDiff, incrementedBase);
 //
 //    BigDecimal[] n1 = HistogramUtil.normalizeTupleAsValue(analyzedSpecs, start);
 //    BigDecimal[] e1 = HistogramUtil.normalizeTupleAsValue(analyzedSpecs, incremented);
-//    BigDecimal[] normDiff = HistogramUtil.normalizeTupleAsVector(analyzedSpecs, diff);
+//    BigDecimal[] normDiff = HistogramUtil.normalizeTupleAsVector(analyzedSpecs, approxDiff);
 //    BigDecimal[] expDiff = HistogramUtil.normalizeTupleAsVector(analyzedSpecs, incrementedBase);
 //
 //    int[] maxScales = HistogramUtil.maxScales(n1, e1, normDiff, expDiff);
@@ -825,7 +825,7 @@
 //    BigDecimal expDiffVal = HistogramUtil.weightedSum(expDiff, maxScales);
 //
 //    System.out.println("end - start: " + sumDiffVal);
-//    System.out.println("diff       : " + normDiffVal);
+//    System.out.println("approxDiff       : " + normDiffVal);
 //    System.out.println("expected   : " + expDiffVal);
 //
 //    assertEquals(sumDiffVal, normDiffVal);
@@ -915,18 +915,18 @@
 ////
 ////    Bucket bucket = histogram.getSortedBuckets().get(0);
 ////    System.out.println("origin: " + bucket.getKey() + ", " + bucket.getCard());
-////    Tuple diff = HistogramUtil.diff(analyzedSpecs, bucket.getStartKey(), bucket.getEndKey());
-////    BigDecimal[] normDiff = HistogramUtil.normalizeTupleAsVector(analyzedSpecs, diff);
+////    Tuple approxDiff = HistogramUtil.approxDiff(analyzedSpecs, bucket.getStartKey(), bucket.getEndKey());
+////    BigDecimal[] normDiff = HistogramUtil.normalizeTupleAsVector(analyzedSpecs, approxDiff);
 ////    int[] maxScales = HistogramUtil.maxScales(normDiff);
 ////    BigDecimal normSum = HistogramUtil.weightedSum(normDiff, maxScales);
 ////    BigDecimal subSum = normSum.divide(BigDecimal.valueOf(bucket.getCard()), 128, BigDecimal.ROUND_HALF_UP);
 ////    BigDecimal[] normSubDiff = HistogramUtil.normTupleFromWeightedSum(analyzedSpecs, subSum, maxScales);
-////    Tuple subDiff = HistogramUtil.denormalizeAsVector(analyzedSpecs, normSubDiff);
-////    System.out.println("diff: " + diff);
-////    System.out.println("subDiff: " + diff);
+////    Tuple approxSubDiff = HistogramUtil.denormalizeAsVector(analyzedSpecs, normSubDiff);
+////    System.out.println("approxDiff: " + approxDiff);
+////    System.out.println("approxSubDiff: " + approxDiff);
 ////
 ////    Tuple start = bucket.getStartKey();
-////    Tuple end = HistogramUtil.incrementValue(analyzedSpecs, start, subDiff);
+////    Tuple end = HistogramUtil.incrementValue(analyzedSpecs, start, approxSubDiff);
 ////    Pair<TupleRange, Double> keyAndCard = HistogramUtil.getSubBucket(histogram, analyzedSpecs, bucket, start, end);
 ////
 ////    start = end;
@@ -947,18 +947,18 @@
 //        break;
 //      }
 //    }
-//    Tuple diff = HistogramUtil.diff(analyzedSpecs, bucket.getStartKey(), bucket.getEndKey());
-//    BigDecimal[] normDiff = HistogramUtil.normalizeTupleAsVector(analyzedSpecs, diff);
+//    Tuple approxDiff = HistogramUtil.approxDiff(analyzedSpecs, bucket.getStartKey(), bucket.getEndKey());
+//    BigDecimal[] normDiff = HistogramUtil.normalizeTupleAsVector(analyzedSpecs, approxDiff);
 //    int[] maxScales = HistogramUtil.maxScales(normDiff);
 //    BigDecimal normSum = HistogramUtil.weightedSum(normDiff, maxScales);
 //    BigDecimal subSum = normSum.divide(BigDecimal.valueOf(bucket.getCard()), 128, BigDecimal.ROUND_HALF_UP);
 //    BigDecimal[] normSubDiff = HistogramUtil.normTupleFromWeightedSum(analyzedSpecs, subSum, maxScales);
-//    Tuple subDiff = HistogramUtil.denormalizeAsVector(analyzedSpecs, normSubDiff);
-//    System.out.println("diff: " + diff);
-//    System.out.println("subDiff: " + diff);
+//    Tuple approxSubDiff = HistogramUtil.denormalizeAsVector(analyzedSpecs, normSubDiff);
+//    System.out.println("approxDiff: " + approxDiff);
+//    System.out.println("approxSubDiff: " + approxDiff);
 //
 //    Tuple start = bucket.getStartKey();
-//    Tuple end = HistogramUtil.incrementValue(analyzedSpecs, start, subDiff);
+//    Tuple end = HistogramUtil.incrementValue(analyzedSpecs, start, approxSubDiff);
 //    Pair<TupleRange, Double> keyAndCard = HistogramUtil.getSubBucket(histogram, analyzedSpecs, bucket, start, end);
 //
 //    start = end;

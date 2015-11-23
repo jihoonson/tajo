@@ -264,18 +264,18 @@ public class HistogramUtil {
 
     BigDecimal[] normStart = normalizeTupleAsValue(analyzedSpecs, origin.getStartKey());
     BigDecimal[] normEnd = normalizeTupleAsValue(analyzedSpecs, origin.getEndKey());
-    BigDecimal[] normTotalInter = diff(analyzedSpecs, normEnd, normStart);
+    BigDecimal[] normTotalInter = approxDiff(analyzedSpecs, normEnd, normStart);
 
     BigDecimal[] normNewStart = normalizeTupleAsValue(analyzedSpecs, start);
     BigDecimal[] normNewEnd = normalizeTupleAsValue(analyzedSpecs, end);
-    BigDecimal[] normSubInter = diff(analyzedSpecs, normNewEnd, normNewStart);
+    BigDecimal[] normSubInter = approxDiff(analyzedSpecs, normNewEnd, normNewStart);
 
     int[] maxScales = HistogramUtil.maxScales(normTotalInter, normSubInter);
     BigDecimal totalRange = HistogramUtil.weightedSum(normTotalInter, maxScales);
     BigDecimal subRange = HistogramUtil.weightedSum(normSubInter, maxScales);
     BigDecimal totalAmount = BigDecimal.valueOf(origin.getCard());
     double newAmount = totalAmount.multiply(subRange)
-        .divide(totalRange, 64, BigDecimal.ROUND_HALF_UP).doubleValue();
+        .divide(totalRange, 128, BigDecimal.ROUND_HALF_UP).doubleValue();
 
 //    return histogram.createBucket(new TupleRange(start, end, histogram.getComparator()), newAmount);
     return new Pair<>(new TupleRange(start, end, histogram.getComparator()), newAmount);
@@ -671,8 +671,8 @@ public class HistogramUtil {
     return result;
   }
 
-  public static long diff(final AnalyzedSortSpec[] sortSpecs, final Tuple interval,
-                          final Tuple t1, final Tuple t2) {
+  public static long approxDiff(final AnalyzedSortSpec[] sortSpecs, final Tuple interval,
+                                final Tuple t1, final Tuple t2) {
     BigDecimal[] norm1 = normalizeTupleAsValue(sortSpecs, t1);
     BigDecimal[] norm2 = normalizeTupleAsValue(sortSpecs, t2);
     BigDecimal[] normInter = normalizeTupleAsVector(sortSpecs, interval);
@@ -702,11 +702,11 @@ public class HistogramUtil {
    * @param t2
    * @return
    */
-  public static Tuple diff(final AnalyzedSortSpec[] sortSpecs,
-                           final Tuple t1, final Tuple t2) {
+  public static Tuple approxDiff(final AnalyzedSortSpec[] sortSpecs,
+                                 final Tuple t1, final Tuple t2) {
     BigDecimal[] n1 = normalizeTupleAsValue(sortSpecs, t1);
     BigDecimal[] n2 = normalizeTupleAsValue(sortSpecs, t2);
-    BigDecimal[] normDiff = diff(sortSpecs, n1, n2);
+    BigDecimal[] normDiff = approxDiff(sortSpecs, n1, n2);
     return denormalizeAsVector(sortSpecs, normDiff);
   }
 
@@ -714,21 +714,21 @@ public class HistogramUtil {
                                  final Tuple t1, final Tuple t2) {
     BigDecimal[] n1 = normalizeTupleAsVector(sortSpecs, t1);
     BigDecimal[] n2 = normalizeTupleAsVector(sortSpecs, t2);
-    BigDecimal[] normDiff = diff(sortSpecs, n1, n2);
+    BigDecimal[] normDiff = approxDiff(sortSpecs, n1, n2);
     return denormalizeAsVector(sortSpecs, normDiff);
   }
 
-  protected static BigDecimal[] diff(final AnalyzedSortSpec[] sortSpecs,
-                                     final BigDecimal[] n1, final BigDecimal[] n2) {
+  protected static BigDecimal[] approxDiff(final AnalyzedSortSpec[] sortSpecs,
+                                           final BigDecimal[] n1, final BigDecimal[] n2) {
     if (normTupleComparator.compare(n1, n2) < 0) {
-      return approxDiff(sortSpecs, n2, n1);
+      return _approxDiff(sortSpecs, n2, n1);
     } else {
-      return approxDiff(sortSpecs, n1, n2);
+      return _approxDiff(sortSpecs, n1, n2);
     }
   }
 
-  protected static BigDecimal[] approxDiff(final AnalyzedSortSpec[] sortSpecs,
-                                           final BigDecimal[] large, final BigDecimal[] small) {
+  protected static BigDecimal[] _approxDiff(final AnalyzedSortSpec[] sortSpecs,
+                                            final BigDecimal[] large, final BigDecimal[] small) {
     BigDecimal [] diff = new BigDecimal[sortSpecs.length];
     for (int i = 0; i < sortSpecs.length; i++) {
       if (large[i].compareTo(small[i]) >= 0) {
@@ -740,11 +740,11 @@ public class HistogramUtil {
     return diff;
   }
 
-  public static Tuple subDiff(final AnalyzedSortSpec[] sortSpecs,
-                              final TupleRange range, double total, double sub) {
+  public static Tuple approxSubDiff(final AnalyzedSortSpec[] sortSpecs,
+                                    final TupleRange range, double total, double sub) {
     BigDecimal[] n1 = normalizeTupleAsValue(sortSpecs, range.getStart());
     BigDecimal[] n2 = normalizeTupleAsValue(sortSpecs, range.getEnd());
-    BigDecimal[] normDiff = diff(sortSpecs, n1, n2);
+    BigDecimal[] normDiff = approxDiff(sortSpecs, n1, n2);
     BigDecimal bigSub = BigDecimal.valueOf(sub);
     BigDecimal bigTotal = BigDecimal.valueOf(total);
     for (int i = 0; i < sortSpecs.length; i++) {

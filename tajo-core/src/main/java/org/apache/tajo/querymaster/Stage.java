@@ -50,6 +50,7 @@ import org.apache.tajo.plan.logical.*;
 import org.apache.tajo.plan.serder.PlanProto.DistinctGroupbyEnforcer.MultipleAggregationStage;
 import org.apache.tajo.plan.serder.PlanProto.EnforceProperty;
 import org.apache.tajo.plan.util.PlannerUtil;
+import org.apache.tajo.querymaster.MasterFreqHistogram.BucketWithLocation;
 import org.apache.tajo.querymaster.Task.IntermediateEntry;
 import org.apache.tajo.rpc.AsyncRpcClient;
 import org.apache.tajo.rpc.NullCallback;
@@ -62,6 +63,7 @@ import org.apache.tajo.storage.fragment.Fragment;
 import org.apache.tajo.unit.StorageUnit;
 import org.apache.tajo.util.KeyValueSet;
 import org.apache.tajo.util.RpcParameterFactory;
+import org.apache.tajo.util.StringUtils;
 import org.apache.tajo.util.history.StageHistory;
 import org.apache.tajo.util.history.TaskHistory;
 import org.apache.tajo.worker.FetchImpl;
@@ -1248,6 +1250,7 @@ public class Stage implements EventHandler<StageEvent> {
 
   private static void updateHistogram(Stage stage, StageTaskEvent taskEvent, WorkerConnectionInfo succeededWorker) {
     FreqHistogram histogram = taskEvent.getHistogram();
+
     List<ColumnStats> sortKeyStats = TupleUtil.extractSortColumnStats(
         histogram.getSortSpecs(),
         stage.resultStatistics.getColumnStats(),

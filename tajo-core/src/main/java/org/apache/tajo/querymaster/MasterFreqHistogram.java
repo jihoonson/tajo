@@ -29,6 +29,7 @@ import org.apache.tajo.master.cluster.WorkerConnectionInfo;
 import org.apache.tajo.querymaster.Task.PullHost;
 import org.apache.tajo.storage.Tuple;
 import org.apache.tajo.util.Pair;
+import org.apache.tajo.util.StringUtils;
 
 import java.util.*;
 
@@ -84,7 +85,7 @@ public class MasterFreqHistogram extends Histogram {
       } else {
         Pair<Bucket, Bucket> result;
         if (mergeWithBucketMerge) {
-          result = mergeWithBucketMerge(analyzedSpecs, workerInfo, thisBucket, otherBucket, smallStartBucket, largeStartBucket);
+          result = mergeWithBucketMerge(thisBucket, otherBucket, smallStartBucket, largeStartBucket);
         } else {
           result = mergeWithBucketSplit(analyzedSpecs, workerInfo, thisBucket, otherBucket, smallStartBucket, largeStartBucket);
         }
@@ -112,8 +113,7 @@ public class MasterFreqHistogram extends Histogram {
     }
   }
 
-  private Pair<Bucket, Bucket> mergeWithBucketMerge(AnalyzedSortSpec[] analyzedSpecs, WorkerConnectionInfo workerInfo,
-                                                    Bucket thisBucket, Bucket otherBucket,
+  private Pair<Bucket, Bucket> mergeWithBucketMerge(Bucket thisBucket, Bucket otherBucket,
                                                     Bucket smallStartBucket, Bucket largeStartBucket) {
     boolean isThisSmall = comparator.compare(thisBucket.getEndKey(), otherBucket.getEndKey()) < 0;
     smallStartBucket.merge(largeStartBucket);
@@ -130,7 +130,8 @@ public class MasterFreqHistogram extends Histogram {
 
   private Pair<Bucket, Bucket> mergeWithBucketSplit(AnalyzedSortSpec[] analyzedSpecs, WorkerConnectionInfo workerInfo,
                                                     Bucket thisBucket, Bucket otherBucket,
-                                                    Bucket smallStartBucket, Bucket largeStartBucket) {
+                                                    BucketWithLocation smallStartBucket,
+                                                    BucketWithLocation largeStartBucket) {
     boolean thisSplittable = HistogramUtil.splittable(analyzedSpecs, smallStartBucket);
     boolean otherSplittable = HistogramUtil.splittable(analyzedSpecs, largeStartBucket);
 
@@ -144,6 +145,8 @@ public class MasterFreqHistogram extends Histogram {
       tuples[0] = smallStartBucket.getStartKey();
       tuples[1] = largeStartBucket.getStartKey();
 
+      List<BucketWithLocation> splits = new ArrayList<>();
+
       if (comparator.compare(smallStartBucket.getEndKey(), largeStartBucket.getEndKey()) < 0) {
         tuples[2] = smallStartBucket.getEndKey();
         tuples[3] = largeStartBucket.getEndKey();
@@ -156,7 +159,7 @@ public class MasterFreqHistogram extends Histogram {
         bucketOrder[2] = smallStartBucket;
       }
 
-      BucketWithLocation lastBucket = null;
+      boolean unsplittable = false;
       for (int i = 0; i < bucketOrder.length; i++) {
         Tuple start = tuples[i];
         Tuple end = tuples[i + 1];
@@ -165,41 +168,60 @@ public class MasterFreqHistogram extends Histogram {
           // Overlapped bucket
           Pair<TupleRange, Double> keyAndCard = HistogramUtil.getSubBucket(this, analyzedSpecs, smallStartBucket,
               start, end);
+          unsplittable = keyAndCard.getFirst().equals(smallStartBucket.getKey());
+          if (unsplittable) break;
+
           BucketWithLocation smallSubBucket = new BucketWithLocation(keyAndCard.getFirst(), keyAndCard.getSecond(), workerInfo);
           keyAndCard = HistogramUtil.getSubBucket(this, analyzedSpecs, largeStartBucket,
               start, end);
+          unsplittable = keyAndCard.getFirst().equals(largeStartBucket.getKey());
+          if (unsplittable) break;
+
           BucketWithLocation largeSubBucket = new BucketWithLocation(keyAndCard.getFirst(), keyAndCard.getSecond(), workerInfo);
-          try {
-            Preconditions.checkState(smallSubBucket.getKey().equals(largeSubBucket.getKey()), "small.key: " + smallStartBucket.getKey() + " large.key: " + largeStartBucket.getKey());
-          } catch (IllegalStateException e) {
-            throw e;
-          }
+
+          Preconditions.checkState(smallSubBucket.getKey().equals(largeSubBucket.getKey()),
+              "smallStartBucket.key: " + smallStartBucket.getKey() + " smallSubBucket.key: " + smallSubBucket.getKey()
+                  + " largeStartBucket.key: " + largeStartBucket.getKey() + " largeSubBucket.key: " + largeSubBucket.getKey());
+
           smallSubBucket.incCount(largeSubBucket.getCard());
-          lastBucket = smallSubBucket;
+          splits.add(smallSubBucket);
           // Note: Don't need to consider end inclusive here
           // because this bucket is always a middle one among the split buckets
         } else {
           if (!start.equals(end) || bucketOrder[i].getKey().isEndInclusive()) {
             Pair<TupleRange, Double> keyAndCard = HistogramUtil.getSubBucket(this, analyzedSpecs, bucketOrder[i],
                 start, end);
+            unsplittable = keyAndCard.getFirst().equals(bucketOrder[i].getKey());
+            if (unsplittable) break;
+
             BucketWithLocation subBucket = new BucketWithLocation(keyAndCard.getFirst(), keyAndCard.getSecond(), workerInfo);
             if (i > 1 && bucketOrder[i].getKey().isEndInclusive()) {
               subBucket.setEndKeyInclusive();
             }
-            lastBucket = subBucket;
+//            lastBucket = subBucket;
+            splits.add(subBucket);
           }
         }
       }
 
-      if (thisBucket.getEndKey().equals(lastBucket.getEndKey())) {
-        thisBucket = lastBucket;
-        otherBucket = null;
-      } else {
-        thisBucket = null;
-        otherBucket = lastBucket;
-      }
+      if (unsplittable) {
+        return mergeWithBucketMerge(thisBucket, otherBucket, smallStartBucket, largeStartBucket);
 
-      return new Pair<>(thisBucket, otherBucket);
+      } else {
+        BucketWithLocation lastBucket = splits.remove(splits.size() - 1);
+
+        this.buckets.addAll(splits);
+
+        if (thisBucket.getEndKey().equals(lastBucket.getEndKey())) {
+          thisBucket = lastBucket;
+          otherBucket = null;
+        } else {
+          thisBucket = null;
+          otherBucket = lastBucket;
+        }
+
+        return new Pair<>(thisBucket, otherBucket);
+      }
     } else {
       // Simply merge
 //      boolean isThisSmall = comparator.compare(thisBucket.getEndKey(), otherBucket.getEndKey()) < 0;
@@ -212,7 +234,7 @@ public class MasterFreqHistogram extends Histogram {
 //        thisBucket = smallStartBucket;
 //        otherBucket = null;
 //      }
-      return mergeWithBucketMerge(analyzedSpecs, workerInfo, thisBucket, otherBucket, smallStartBucket, largeStartBucket);
+      return mergeWithBucketMerge(thisBucket, otherBucket, smallStartBucket, largeStartBucket);
     }
   }
 
@@ -230,7 +252,7 @@ public class MasterFreqHistogram extends Histogram {
 
     public BucketWithLocation(TupleRange key, double count, Set<PullHost> hosts) {
       super(key, count);
-      hosts.addAll(hosts);
+      this.hosts.addAll(hosts);
     }
 
     public BucketWithLocation(Bucket bucket, WorkerConnectionInfo info) {
@@ -239,6 +261,10 @@ public class MasterFreqHistogram extends Histogram {
 
     public BucketWithLocation(Bucket bucket, String host, int port) {
       this(bucket.getKey(), bucket.getCard(), host, port);
+    }
+
+    public void addHosts(Set<PullHost> hosts) {
+      this.hosts.addAll(hosts);
     }
 
     public Set<PullHost> getHosts() {
@@ -250,6 +276,11 @@ public class MasterFreqHistogram extends Histogram {
       super.merge(other);
       BucketWithLocation bucket = (BucketWithLocation) other;
       this.hosts.addAll(bucket.hosts);
+    }
+
+    @Override
+    public String toString() {
+      return this.key + ", " + this.card + ", < " + StringUtils.join(hosts) + " >";
     }
   }
 }

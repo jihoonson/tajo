@@ -152,12 +152,25 @@ public class RangeShuffleFileWriteExec extends UnaryPhysicalExec {
       throw new RuntimeException(e);
     }
 
-//    if (keyAndCards.size() > maxHistogramSize) {
+    if (keyAndCards.size() > maxHistogramSize) {
+      int startIdx = keyAndCards.size() - 2;
+      if (startIdx % 2 == 1) {
+        startIdx--;
+      }
+      Pair<TupleRange, Double> merged;
+      Pair<TupleRange, Double> removed;
+      for (int i = startIdx; i >= 0; i -= 2) {
+        merged = keyAndCards.get(i);
+        removed = keyAndCards.remove(i + 1);
+        merged.setFirst(TupleRangeUtil.merge(merged.getFirst(), removed.getFirst()));
+        merged.setSecond(merged.getSecond() + removed.getSecond());
+      }
+
 //      int mergeIndex = random.nextInt(keyAndCards.size() - 2);
 //      Pair<TupleRange, Double> b1 = keyAndCards.remove(mergeIndex);
 //      Pair<TupleRange, Double> b2 = keyAndCards.remove(mergeIndex + 1);
 //      keyAndCards.add(new Pair<>(TupleRangeUtil.merge(b1.getFirst(), b2.getFirst()), b1.getSecond() + b2.getSecond()));
-//    }
+    }
   }
 
   @Override
@@ -175,40 +188,6 @@ public class RangeShuffleFileWriteExec extends UnaryPhysicalExec {
     // Collect statistics data
     context.setResultStats(appender.getStats());
     context.addShuffleFileOutput(0, context.getTaskId().toString());
-
-    // Check isPureAscii and find the maxLength
-//    List<ColumnStats> sortKeyStats = TupleUtil.extractSortColumnStats(sortSpecs, context.getResultStats().getColumnStats(), false);)
-//    AnalyzedSortSpec[] analyzedSpecs = HistogramUtil.toAnalyzedSortSpecs(sortSpecs, sortKeyStats);
-//
-//    for (Pair<Tuple, Long> eachPair : countPerTuples) {
-//      Tuple tuple = eachPair.getFirst();
-//      for (int i = 0; i < keySchema.size(); i++) {
-//        if (keySchema.getColumn(i).getDataType().getType().equals(Type.TEXT)) {
-//          boolean isCurrentPureAscii = StringUtils.isPureAscii(tuple.getText(i));
-//          if (analyzedSpecs[i].isPureAscii()) {
-//            analyzedSpecs[i].setPureAscii(isCurrentPureAscii);
-//          }
-//          if (isCurrentPureAscii) {
-//            analyzedSpecs[i].setMaxLength(Math.max(analyzedSpecs[i].getMaxLength(), tuple.getText(i).length()));
-//          } else {
-//            analyzedSpecs[i].setMaxLength(Math.max(analyzedSpecs[i].getMaxLength(), tuple.getUnicodeChars(i).length));
-//          }
-//        }
-//      }
-//    }
-//
-//    FreqHistogram freqHistogram = new FreqHistogram(sortSpecs);
-//    Pair<Tuple, Long> current, next = null;
-//    for (int i = 0; i < countPerTuples.size() - 1; i++) {
-//      current = countPerTuples.get(i);
-//      next = countPerTuples.get(i + 1);
-//
-//      freqHistogram.updateBucket(new TupleRange(current.getFirst(), next.getFirst(),
-//          freqHistogram.getComparator()), current.getSecond());
-//    }
-//    current = countPerTuples.get(countPerTuples.size() - 1);
-//    freqHistogram.updateBucket(new TupleRange(current.getFirst(), current.getFirst(),
-//        freqHistogram.getComparator()), current.getSecond(), true);
 
     FreqHistogram histogram = new FreqHistogram(sortSpecs);
     for (Pair<TupleRange, Double> eachKeyAndCard : keyAndCards) {
