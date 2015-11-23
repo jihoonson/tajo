@@ -281,56 +281,6 @@ public class HistogramUtil {
     return new Pair<>(new TupleRange(start, end, histogram.getComparator()), newAmount);
   }
 
-  public static List<Bucket> splitBucket(Histogram histogram, AnalyzedSortSpec[] sortSpecs,
-                                         Bucket bucket, int splitNum) {
-    Comparator<Tuple> comparator = histogram.getComparator();
-    List<Bucket> splits = new ArrayList<>();
-
-    Tuple start = bucket.getStartKey();
-    Tuple end = bucket.getEndKey();
-    Tuple diff = diff(sortSpecs, start, end);
-//    BigDecimal[] normStart = normalizeTupleAsValue(sortSpecs, start);
-//    BigDecimal[] normEnd = normalizeTupleAsValue(sortSpecs, end);
-    BigDecimal[] normDiff = normalizeTupleAsVector(sortSpecs, diff);
-    int[] maxScales = maxScales(normDiff, normDiff);
-
-
-    BigDecimal diffVal = weightedSum(normDiff, maxScales);
-    BigDecimal newInter = diffVal.divide(BigDecimal.valueOf(splitNum), 128, BigDecimal.ROUND_HALF_UP);
-    BigDecimal[] newNormInter = normTupleFromWeightedSum(sortSpecs, newInter, maxScales);
-    Tuple interval = denormalizeAsVector(sortSpecs, newNormInter);
-
-//    Tuple interval = denormalizeAsVector(sortSpecs, normInter);
-
-//    BigDecimal[] normInterval = normalizeTupleAsVector(sortSpecs, bucket.getInterval());
-//
-//    if (bucket.getCount() == 1 || isMinNormTuple(normInterval)) {
-//      splits.add(bucket);
-//    } else {
-//      long newCard = HistogramUtil.diff(sortSpecs, interval, bucket.getStartKey(), bucket.getEndKey());
-//      long origCard = bucket.getCount();
-//
-//      // newCard must be smaller than origCard
-//      Preconditions.checkState(newCard <= origCard);
-//
-//      long desire = Math.round((double)origCard / newCard);
-//      long remaining = origCard;
-//      Tuple start = bucket.getStartKey(), end;
-//      while (remaining > desire) {
-//        end = increment(sortSpecs, start, interval, desire);
-//        splits.add(histogram.createBucket(new TupleRange(start, end, interval, comparator), desire));
-//        remaining -= desire;
-//      }
-//
-//      if (remaining > 0) {e
-//        end = increment(sortSpecs, start, interval, remaining);
-//        splits.add(histogram.createBucket(new TupleRange(start, end, interval, comparator), remaining));
-//      }
-//    }
-
-    return splits;
-  }
-
   protected static int[] maxScales(BigDecimal[]...tuples) {
     int[] maxScales = new int[tuples[0].length];
     Arrays.fill(maxScales, 0);

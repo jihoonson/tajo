@@ -1257,7 +1257,7 @@ public class Stage implements EventHandler<StageEvent> {
 //    List<Bucket> buckets = histogram.getSortedBuckets();
     // 1) Update histograms of range partitions using the report
     int maxHistogramSize = stage.getContext().getConf().getIntVar(ConfVars.HISTOGRAM_MAX_SIZE);
-    stage.histogramForRangeShuffle.merge(analyzedSpecs, histogram, succeededWorker);
+    stage.histogramForRangeShuffle.merge(analyzedSpecs, histogram, succeededWorker, maxHistogramSize);
 
     if (maxHistogramSize < stage.histogramForRangeShuffle.size()) {
       SortedSet<Bucket> buckets = stage.histogramForRangeShuffle.getSortedBuckets();
@@ -1282,21 +1282,6 @@ public class Stage implements EventHandler<StageEvent> {
         }
 
         buckets.removeAll(removed);
-
-//        Bucket mergeBucket = buckets.get(0);
-//        for (int i = 1; i < buckets.size() - remain; i++) {
-//          if (i % mergeNum == 0) {
-//            mergeBucket = buckets.get(i);
-//          } else {
-//            mergeBucket.merge(buckets.get(i));
-//          }
-//        }
-
-//        for (int i = buckets.size() - remain - 1; i >= 0; i--) {
-//          if (i % mergeNum != 0) {
-//            buckets.remove(i);
-//          }
-//        }
       }
 
 //      for (int i = 0; i < buckets.size() - 1; i++) {

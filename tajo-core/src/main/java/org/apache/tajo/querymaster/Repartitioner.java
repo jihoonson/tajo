@@ -748,22 +748,12 @@ public class Repartitioner {
       } else if (determinedTaskNum > buckets.size()) {
         LOG.info("# of buckets is smaller than determined # of tasks");
         do {
-//          buckets.sort((b1, b2) -> {
-//            if (b1.getCard() > b2.getCard()) {
-//              return -1;
-//            } else if (b1.getCard() == b2.getCard()) {
-//              return 0;
-//            } else {
-//              return 1;
-//            }
-//          });
-
           List<Bucket> added = new ArrayList<>();
           List<Bucket> removed = new ArrayList<>();
           for (Bucket eachBucket : buckets) {
             if (HistogramUtil.splittable(analyzedSpecs, eachBucket)) {
-              // TODO: implement splitBucket()
-              List<Bucket> split = HistogramUtil.splitBucket(histogram, analyzedSpecs, eachBucket, 2);
+              // TODO: improve the split number
+              List<Bucket> split = splitBucket(histogram, analyzedSpecs, eachBucket, 2);
               if (split.size() > 1) {
                 added.addAll(split);
                 removed.add(eachBucket);
@@ -900,6 +890,88 @@ public class Repartitioner {
     scheduleFetchesByRoundRobin(stage, map, scan.getTableName(), determinedTaskNum);
 
     schedulerContext.setEstimatedTaskNum(determinedTaskNum);
+  }
+
+  public static List<Bucket> splitBucket(Histogram histogram, AnalyzedSortSpec[] sortSpecs,
+                                         Bucket bucket, int splitNum) {
+    Comparator<Tuple> comparator = histogram.getComparator();
+
+    BucketWithLocation bucketWithLoc = (BucketWithLocation) bucket;
+    Tuple start = bucket.getStartKey();
+    Tuple end = bucket.getEndKey();
+    Tuple diff = HistogramUtil.diff(sortSpecs, start, end);
+//    BigDecimal[] normStart = HistogramUtil.normalizeTupleAsValue(sortSpecs, start);
+//    BigDecimal[] normEnd = HistogramUtil.normalizeTupleAsValue(sortSpecs, end);
+    BigDecimal[] normDiff = HistogramUtil.normalizeTupleAsVector(sortSpecs, diff);
+//    BigDecimal[] normDiff = HistogramUtil.diff(sortSpecs, normStart, normEnd);
+    BigDecimal[] newNormInter = new BigDecimal[normDiff.length];
+    BigDecimal bigSplitNum = BigDecimal.valueOf(splitNum);
+    for (int i = 0; i < normDiff.length; i++) {
+      newNormInter[i] = normDiff[i].divide(bigSplitNum, 128, BigDecimal.ROUND_HALF_UP);
+    }
+
+    Tuple interval = HistogramUtil.denormalizeAsVector(sortSpecs, newNormInter);
+
+    List<Bucket> splits = new ArrayList<>(splitNum);
+    Tuple newStart = start;
+    Tuple newEnd = HistogramUtil.incrementValue(sortSpecs, newStart, interval);
+    double amount = bucket.getCard() / (double)splitNum;
+    do {
+      splits.add(new BucketWithLocation(new TupleRange(newStart, newEnd, comparator), amount, bucketWithLoc.getHosts()));
+      newStart = newEnd;
+      newEnd = HistogramUtil.incrementValue(sortSpecs, newStart, interval);
+    } while (comparator.compare(newEnd, end) < 0);
+
+    Preconditions.checkState(splitNum >= splits.size());
+    if (splits.size() > 0) {
+      Bucket last = splits.get(splits.size() - 1);
+
+      if (comparator.compare(last.getEndKey(), end) > 0) {
+        last.getKey().setEnd(end);
+      }
+
+      if (bucket.getKey().isEndInclusive()) {
+        last.setEndKeyInclusive();
+      }
+    }
+
+//    int[] maxScales = maxScales(normDiff, normDiff);
+//    BigDecimal diffVal = weightedSum(normDiff, maxScales);
+//    BigDecimal newInter = diffVal.divide(BigDecimal.valueOf(splitNum), 128, BigDecimal.ROUND_HALF_UP);
+//    BigDecimal[] newNormInter = normTupleFromWeightedSum(sortSpecs, newInter, maxScales);
+//    Tuple interval = denormalizeAsVector(sortSpecs, newNormInter);
+
+
+
+//    Tuple interval = denormalizeAsVector(sortSpecs, normInter);
+
+//    BigDecimal[] normInterval = normalizeTupleAsVector(sortSpecs, bucket.getInterval());
+//
+//    if (bucket.getCount() == 1 || isMinNormTuple(normInterval)) {
+//      splits.add(bucket);
+//    } else {
+//      long newCard = HistogramUtil.diff(sortSpecs, interval, bucket.getStartKey(), bucket.getEndKey());
+//      long origCard = bucket.getCount();
+//
+//      // newCard must be smaller than origCard
+//      Preconditions.checkState(newCard <= origCard);
+//
+//      long desire = Math.round((double)origCard / newCard);
+//      long remaining = origCard;
+//      Tuple start = bucket.getStartKey(), end;
+//      while (remaining > desire) {
+//        end = increment(sortSpecs, start, interval, desire);
+//        splits.add(histogram.createBucket(new TupleRange(start, end, interval, comparator), desire));
+//        remaining -= desire;
+//      }
+//
+//      if (remaining > 0) {e
+//        end = increment(sortSpecs, start, interval, remaining);
+//        splits.add(histogram.createBucket(new TupleRange(start, end, interval, comparator), remaining));
+//      }
+//    }
+
+    return splits;
   }
 
   public static void refineToEquiDepth(final Histogram histogram,
