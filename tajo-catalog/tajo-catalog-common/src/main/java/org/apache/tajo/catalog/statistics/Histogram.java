@@ -18,6 +18,7 @@
 
 package org.apache.tajo.catalog.statistics;
 
+import org.apache.tajo.annotation.NotNull;
 import org.apache.tajo.catalog.*;
 import org.apache.tajo.storage.Tuple;
 
@@ -27,7 +28,9 @@ public abstract class Histogram {
 
   protected TupleComparator comparator;
   protected SortSpec[] sortSpecs;
-  protected Map<TupleRange, Bucket> buckets; // -> TODO: consider to change tree set
+//  protected Map<TupleRange, Bucket> buckets; // -> TODO: consider to change tree set
+//  protected List<Bucket> buckets;
+  protected SortedSet<Bucket> buckets;
 
   protected Histogram() {}
 
@@ -35,7 +38,9 @@ public abstract class Histogram {
     Schema keySchema = HistogramUtil.sortSpecsToSchema(sortSpecs);
     this.sortSpecs = sortSpecs;
     this.comparator = new BaseTupleComparator(keySchema, sortSpecs);
-    buckets = new TreeMap<>();
+//    buckets = new TreeMap<>();
+//    buckets = new LinkedList<>();
+    buckets = new TreeSet<>();
   }
 
   public SortSpec[] getSortSpecs() {
@@ -47,28 +52,31 @@ public abstract class Histogram {
   }
 
   public void addBucket(Bucket bucket) {
-    if (buckets.containsKey(bucket.key)) {
-      throw new RuntimeException("Duplicated bucket");
-    }
-    buckets.put(bucket.key, bucket);
+//    if (buckets.containsKey(bucket.key)) {
+//      throw new RuntimeException("Duplicated bucket");
+//    }
+//    buckets.put(bucket.key, bucket);
+    buckets.add(bucket);
   }
 
   public void addBuckets(List<Bucket> buckets) {
-    for (Bucket eachBucket : buckets) {
-      this.addBucket(eachBucket);
-    }
+//    for (Bucket eachBucket : buckets) {
+//      this.addBucket(eachBucket);
+//    }
+    this.buckets.addAll(buckets);
   }
 
   public void removeBucket(Bucket bucket) {
     buckets.remove(bucket.key);
   }
 
-  public Bucket getBucket(TupleRange key) {
-    return buckets.get(key);
-  }
+//  public Bucket getBucket(TupleRange key) {
+//    return buckets.get(key);
+//  }
 
-  public List<Bucket> getSortedBuckets() {
-    return new LinkedList<>(buckets.values());
+  public SortedSet<Bucket> getSortedBuckets() {
+//    return new LinkedList<>(buckets.values());
+    return buckets;
   }
 
   public int size() {
@@ -90,7 +98,7 @@ public abstract class Histogram {
     return false;
   }
 
-  public static abstract class Bucket {
+  public static abstract class Bucket implements Comparable<Bucket> {
     protected TupleRange key;
     protected double card;
 
@@ -141,6 +149,11 @@ public abstract class Histogram {
 
     public void setEndKeyInclusive() {
       this.key.setEndInclusive();
+    }
+
+    @Override
+    public int compareTo(Bucket other) {
+      return this.key.compareTo(other.key);
     }
   }
 }
