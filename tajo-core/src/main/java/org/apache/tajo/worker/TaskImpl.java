@@ -459,10 +459,7 @@ public class TaskImpl implements Task {
         executionBlockContext.succeededTasksNum.incrementAndGet();
 
         TaskCompletionReport report = getTaskCompletionReport();
-        long before = System.currentTimeMillis();
         queryMasterStub.done(null, report, NullCallback.get());
-        long after = System.currentTimeMillis();
-        LOG.info("report time: " + (after - before) + " ms");
       }
       endTime = System.currentTimeMillis();
       LOG.info(String.format("%s is complete. %d ms elapsed, final state:%s",
