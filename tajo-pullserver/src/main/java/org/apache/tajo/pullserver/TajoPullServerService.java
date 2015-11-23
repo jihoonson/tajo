@@ -699,7 +699,7 @@ public class TajoPullServerService extends AbstractService {
           "], but request start:" + start + ", end: " + end);
       return null;
     } else {
-      LOG.info("request start:" + start + ", end: " + end + " is processed well");
+//      LOG.info("request start:" + start + ", end: " + end + " is processed well");
     }
 
     long startOffset;
@@ -726,7 +726,7 @@ public class TajoPullServerService extends AbstractService {
       throw ioe;
     }
 
-    LOG.info("1) startOffset: " + startOffset + " endOffset: " + endOffset + " start: " + start + " end: " + end);
+//    LOG.info("1) startOffset: " + startOffset + " endOffset: " + endOffset + " start: " + start + " end: " + end);
 
     // if startOffset == -1 then case 2-1 or case 3
     if (startOffset == -1) { // this is a hack
@@ -742,7 +742,7 @@ public class TajoPullServerService extends AbstractService {
       }
     }
 
-    LOG.info("2) startOffset: " + startOffset + " endOffset: " + endOffset + " start: " + start + " end: " + end);
+//    LOG.info("2) startOffset: " + startOffset + " endOffset: " + endOffset + " start: " + start + " end: " + end);
 
     if (startOffset == -1) {
       throw new IllegalStateException("startOffset " + startOffset + " is negative \n" +
@@ -757,7 +757,7 @@ public class TajoPullServerService extends AbstractService {
       endOffset = data.length();
     }
 
-    LOG.info("3) startOffset: " + startOffset + " endOffset: " + endOffset + " start: " + start + " end: " + end);
+//    LOG.info("3) startOffset: " + startOffset + " endOffset: " + endOffset + " start: " + start + " end: " + end);
 
     idxReader.close();
 
