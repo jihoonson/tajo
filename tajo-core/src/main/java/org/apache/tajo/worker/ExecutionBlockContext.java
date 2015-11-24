@@ -20,6 +20,7 @@ package org.apache.tajo.worker;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Queues;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.fs.FileSystem;
@@ -31,10 +32,17 @@ import org.apache.tajo.ExecutionBlockId;
 import org.apache.tajo.TajoProtos;
 import org.apache.tajo.TaskAttemptId;
 import org.apache.tajo.TaskId;
+import org.apache.tajo.catalog.statistics.FreqHistogram;
+import org.apache.tajo.catalog.statistics.FreqHistogram.FreqBucket;
+import org.apache.tajo.catalog.statistics.Histogram;
+import org.apache.tajo.catalog.statistics.Histogram.Bucket;
+import org.apache.tajo.catalog.statistics.HistogramUtil;
 import org.apache.tajo.conf.TajoConf;
 import org.apache.tajo.engine.query.QueryContext;
 import org.apache.tajo.ipc.QueryMasterProtocol;
+import org.apache.tajo.master.cluster.WorkerConnectionInfo;
 import org.apache.tajo.plan.serder.PlanProto;
+import org.apache.tajo.plan.serder.PlanProto.ShuffleType;
 import org.apache.tajo.pullserver.TajoPullServerService;
 import org.apache.tajo.rpc.AsyncRpcClient;
 import org.apache.tajo.rpc.CallFuture;
@@ -47,9 +55,10 @@ import org.apache.tajo.worker.event.ExecutionBlockErrorEvent;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -86,6 +95,8 @@ public class ExecutionBlockContext {
 
   private Reporter reporter;
 
+  private HistogramManager histogramManager;
+
   private AtomicBoolean stop = new AtomicBoolean();
 
   private PlanProto.ShuffleType shuffleType;
@@ -102,6 +113,7 @@ public class ExecutionBlockContext {
     this.connManager = RpcClientManager.getInstance();
     this.systemConf = workerContext.getConf();
     this.reporter = new Reporter();
+    this.histogramManager = new HistogramManager();
     this.defaultFS = TajoConf.getTajoRootDir(systemConf).getFileSystem(systemConf);
     this.localFS = FileSystem.getLocal(systemConf);
 
@@ -134,7 +146,7 @@ public class ExecutionBlockContext {
     this.reporter.startReporter();
     // resource intiailization
     try{
-      this.resource.initialize(queryContext, plan);
+      this.resource.initialize(queryContext, plan, shuffleType.equals(ShuffleType.RANGE_SHUFFLE));
     } catch (Throwable e) {
       try {
         getStub().killQuery(null, executionBlockId.getQueryId().getProto(), NullCallback.get());
@@ -143,6 +155,7 @@ public class ExecutionBlockContext {
       }
       throw e;
     }
+    this.histogramManager.start();
   }
 
   public ExecutionBlockSharedResource getSharedResource() {
@@ -173,6 +186,7 @@ public class ExecutionBlockContext {
 
     try {
       reporter.stop();
+      histogramManager.stop();
     } catch (InterruptedException e) {
       LOG.error(e);
     }
@@ -281,33 +295,65 @@ public class ExecutionBlockContext {
       case SCATTERED_HASH_SHUFFLE:
         sendHashShuffleReport(executionBlockId);
         break;
-      case NONE_SHUFFLE:
       case RANGE_SHUFFLE:
+        sendRangeShuffleReport(executionBlockId);
+      case NONE_SHUFFLE:
       default:
         break;
     }
+  }
+
+  private ExecutionBlockReport.Builder getEbReportBuilder(ExecutionBlockId ebId) {
+    WorkerConnectionInfo info = getWorkerContext().getConnectionInfo();
+    return ExecutionBlockReport.newBuilder()
+        .setEbId(ebId.getProto())
+        .setReportSuccess(true)
+        .setSucceededTasks(succeededTasksNum.get())
+        .setHost(info.getHost())
+        .setPort(info.getPullServerPort());
+  }
+
+  private void sendEbReport(ExecutionBlockReport report) {
+    Interface stub = getStub();
+    try {
+      CallFuture<PrimitiveProtos.NullProto> callFuture = new CallFuture<>();
+      stub.doneExecutionBlock(callFuture.getController(), report, callFuture);
+      callFuture.get();
+    } catch (Throwable e) {
+      // can't send report to query master
+      LOG.fatal(e.getMessage(), e);
+      throw new RuntimeException(e);
+    }
+  }
+
+  private void sendRangeShuffleReport(ExecutionBlockId ebId) throws Exception {
+    if(completedTasksNum.get() == 0) return;
+
+    histogramManager.stop();
+    ExecutionBlockReport.Builder reportBuilder = getEbReportBuilder(ebId);
+    RangeShuffleReport.Builder shuffleReportBuilder = RangeShuffleReport.newBuilder();
+    shuffleReportBuilder.setHistogram(histogramManager.getHistogram().get().getProto());
+    reportBuilder.setRangeShuffleReport(shuffleReportBuilder);
+    sendEbReport(reportBuilder.build());
   }
 
   private void sendHashShuffleReport(ExecutionBlockId ebId) throws Exception {
     /* This case is that worker did not ran tasks */
     if(completedTasksNum.get() == 0) return;
 
-    Interface stub = getStub();
+    ExecutionBlockReport.Builder reporterBuilder = getEbReportBuilder(ebId);
+    HashShuffleReport.Builder shuffleReportBuilder = HashShuffleReport.newBuilder();
 
-    ExecutionBlockReport.Builder reporterBuilder = ExecutionBlockReport.newBuilder();
-    reporterBuilder.setEbId(ebId.getProto());
-    reporterBuilder.setReportSuccess(true);
-    reporterBuilder.setSucceededTasks(succeededTasksNum.get());
     try {
       List<IntermediateEntryProto> intermediateEntries = Lists.newArrayList();
       List<HashShuffleAppenderManager.HashShuffleIntermediate> shuffles =
           getWorkerContext().getHashShuffleAppenderManager().close(ebId);
       if (shuffles == null) {
-        reporterBuilder.addAllIntermediateEntries(intermediateEntries);
+//        reporterBuilder.addAllIntermediateEntries(intermediateEntries);
+        shuffleReportBuilder.addAllIntermediateEntries(intermediateEntries);
+        reporterBuilder.setHashShuffleReport(shuffleReportBuilder);
 
-        CallFuture<PrimitiveProtos.NullProto> callFuture = new CallFuture<>();
-        stub.doneExecutionBlock(callFuture.getController(), reporterBuilder.build(), callFuture);
-        callFuture.get();
+        sendEbReport(reporterBuilder.build());
         return;
       }
 
@@ -336,8 +382,8 @@ public class ExecutionBlockContext {
         intermediateBuilder.clear();
 
         intermediateBuilder.setEbId(ebId.getProto())
-            .setHost(getWorkerContext().getConnectionInfo().getHost() + ":" +
-                getWorkerContext().getConnectionInfo().getPullServerPort())
+//            .setHost(getWorkerContext().getConnectionInfo().getHost() + ":" +
+//                getWorkerContext().getConnectionInfo().getPullServerPort())
             .setTaskId(-1)
             .setAttemptId(-1)
             .setPartId(eachShuffle.getPartId())
@@ -348,7 +394,9 @@ public class ExecutionBlockContext {
       }
 
       // send intermediateEntries to QueryMaster
-      reporterBuilder.addAllIntermediateEntries(intermediateEntries);
+//      reporterBuilder.addAllIntermediateEntries(intermediateEntries);
+      shuffleReportBuilder.addAllIntermediateEntries(intermediateEntries);
+      reporterBuilder.setHashShuffleReport(shuffleReportBuilder);
 
     } catch (Throwable e) {
       LOG.error(e.getMessage(), e);
@@ -359,15 +407,7 @@ public class ExecutionBlockContext {
         reporterBuilder.setReportErrorMessage(e.getMessage());
       }
     }
-    try {
-      CallFuture<PrimitiveProtos.NullProto> callFuture = new CallFuture<>();
-      stub.doneExecutionBlock(callFuture.getController(), reporterBuilder.build(), callFuture);
-      callFuture.get();
-    } catch (Throwable e) {
-      // can't send report to query master
-      LOG.fatal(e.getMessage(), e);
-      throw new RuntimeException(e);
-    }
+    sendEbReport(reporterBuilder.build());
   }
 
   protected class Reporter {
@@ -439,6 +479,174 @@ public class ExecutionBlockContext {
           reporterThread.notifyAll();
         }
       }
+    }
+  }
+
+  public static class HistogramFuture implements Future<FreqHistogram> {
+    private boolean done = false;
+    private FreqHistogram histogram;
+    private CountDownLatch latch = new CountDownLatch(1);
+
+    public void done(FreqHistogram histogram) {
+      this.histogram = histogram;
+      this.done = true;
+      this.latch.countDown();
+    }
+
+    @Override
+    public boolean cancel(boolean mayInterruptIfRunning) {
+      return false;
+    }
+
+    @Override
+    public boolean isCancelled() {
+      return false;
+    }
+
+    @Override
+    public boolean isDone() {
+      return done;
+    }
+
+    @Override
+    public FreqHistogram get() throws InterruptedException, ExecutionException {
+      this.latch.await();
+      return histogram;
+    }
+
+    @Override
+    public FreqHistogram get(long timeout, TimeUnit unit)
+        throws InterruptedException, ExecutionException, TimeoutException {
+      if (latch.await(timeout, unit)) {
+        return histogram;
+      } else {
+        throw new TimeoutException();
+      }
+    }
+  }
+
+  protected class HistogramManager {
+    private Thread mergeThread;
+    private static final int MERGE_INTERVAL = 10;
+//    private final int histogramMaxSize;
+    private HistogramFuture histogramFuture;
+    private AtomicBoolean isStopped = new AtomicBoolean(false);
+
+    public HistogramManager() {
+//      histogramMaxSize = queryContext.getInt(ConfVars.HISTOGRAM_MAX_SIZE);
+      histogramFuture = new HistogramFuture();
+    }
+
+    public void start() {
+      mergeThread = new Thread(() -> {
+        List<FreqHistogram> buffer = new ArrayList<>(10);
+        FreqHistogram histogram = resource.getHistogram();
+
+        while (!isStopped.get() && !isStopped() && !Thread.interrupted()) {
+          if (resource.getBucketBuffer() != null) {
+            buffer.clear();
+            Queues.drainUninterruptibly(resource.getBucketBuffer(), buffer, 10, MERGE_INTERVAL, TimeUnit.MILLISECONDS);
+            for (FreqHistogram eachHist : buffer) {
+              merge(histogram, eachHist);
+            }
+          }
+        }
+
+        histogramFuture.done(histogram);
+      });
+
+      this.mergeThread.start();
+    }
+
+    public Future<FreqHistogram> getHistogram() {
+      return histogramFuture;
+    }
+
+    public void stop() throws InterruptedException {
+      isStopped.set(true);
+      if (mergeThread != null) {
+        synchronized (mergeThread) {
+          mergeThread.notifyAll();
+        }
+        mergeThread.join();
+      }
+    }
+
+    private void merge(FreqHistogram h1, FreqHistogram h2) {
+
+      List<Bucket> thisBuckets = new ArrayList<>(h1.getSortedBuckets());
+      List<Bucket> otherBuckets = new ArrayList<>(h2.getSortedBuckets());
+      Iterator<Bucket> thisIt = thisBuckets.iterator();
+      Iterator<Bucket> otherIt = otherBuckets.iterator();
+
+      h1.clear();
+      FreqBucket thisBucket = null;
+      FreqBucket otherBucket = null;
+      while ((thisBucket != null || thisIt.hasNext())
+          && (otherBucket != null || otherIt.hasNext())) {
+        if (thisBucket == null) thisBucket = (FreqBucket) thisIt.next();
+        if (otherBucket == null) otherBucket = (FreqBucket) otherIt.next();
+
+        FreqBucket smallStartBucket, largeStartBucket;
+        boolean isThisSmall = thisBucket.getKey().compareTo(otherBucket.getKey()) < 0;
+        if (isThisSmall) {
+          smallStartBucket = thisBucket;
+          largeStartBucket = otherBucket;
+        } else {
+          smallStartBucket = otherBucket;
+          largeStartBucket = thisBucket;
+        }
+
+        // Check overlap between keys
+        if (!smallStartBucket.getKey().isOverlap(largeStartBucket.getKey())) {
+          // non-overlap keys
+          h1.addBucket(smallStartBucket);
+          if (isThisSmall) {
+            thisBucket = null;
+          } else {
+            otherBucket = null;
+          }
+        } else {
+          Pair<Bucket, Bucket> result = mergeWithBucketMerge(h1, thisBucket, otherBucket, smallStartBucket,
+              largeStartBucket);
+          thisBucket = (FreqBucket) result.getFirst();
+          otherBucket = (FreqBucket) result.getSecond();
+        }
+      }
+
+      if (thisBucket != null) {
+        h1.addBucket(thisBucket);
+      }
+
+      if (otherBucket != null) {
+        h1.addBucket(otherBucket);
+      }
+
+      while (thisIt.hasNext()) {
+        Bucket next = thisIt.next();
+        h1.addBucket(next);
+      }
+
+      while (otherIt.hasNext()) {
+        Bucket next = otherIt.next();
+        h1.addBucket(next);
+      }
+    }
+
+    private Pair<Bucket, Bucket> mergeWithBucketMerge(Histogram histogram,
+                                                      Bucket thisBucket, Bucket otherBucket,
+                                                      Bucket smallStartBucket, Bucket largeStartBucket) {
+      boolean isThisSmall = histogram.getComparator().compare(thisBucket.getEndKey(), otherBucket.getEndKey()) < 0;
+      smallStartBucket.merge(largeStartBucket);
+
+      if (isThisSmall) {
+        thisBucket = null;
+        otherBucket = smallStartBucket;
+      } else {
+        thisBucket = smallStartBucket;
+        otherBucket = null;
+      }
+      return new Pair<>(thisBucket, otherBucket);
     }
   }
 }

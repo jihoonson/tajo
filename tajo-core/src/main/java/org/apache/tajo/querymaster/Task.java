@@ -55,8 +55,8 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-import static org.apache.tajo.catalog.proto.CatalogProtos.FragmentProto;
 import static org.apache.tajo.ResourceProtos.*;
+import static org.apache.tajo.catalog.proto.CatalogProtos.FragmentProto;
 
 public class Task implements EventHandler<TaskEvent> {
   /** Class Logger */
@@ -614,7 +614,8 @@ public class Task implements EventHandler<TaskEvent> {
       task.succeededWorker = attempt.getWorkerConnectionInfo();
 
       task.finishTask();
-      task.eventHandler.handle(new StageTaskEvent(event.getTaskId(), TaskState.SUCCEEDED, attemptEvent.getHistogram()));
+//      task.eventHandler.handle(new StageTaskEvent(event.getTaskId(), TaskState.SUCCEEDED, attemptEvent.getHistogram()));
+      task.eventHandler.handle(new StageTaskEvent(event.getTaskId(), TaskState.SUCCEEDED));
     }
   }
 
@@ -785,14 +786,15 @@ public class Task implements EventHandler<TaskEvent> {
     List<Pair<Long, Integer>> pages;
     List<Pair<Long, Pair<Integer, Integer>>> failureRowNums;
 
-    public IntermediateEntry(IntermediateEntryProto proto) {
+    public IntermediateEntry(PullHost pullHost, IntermediateEntryProto proto) {
       this.ebId = new ExecutionBlockId(proto.getEbId());
       this.taskId = proto.getTaskId();
       this.attemptId = proto.getAttemptId();
       this.partId = proto.getPartId();
 
-      String[] pullHost = proto.getHost().split(":");
-      this.host = new PullHost(pullHost[0], Integer.parseInt(pullHost[1]));
+//      String[] pullHost = proto.getHost().split(":");
+//      this.host = new PullHost(pullHost[0], Integer.parseInt(pullHost[1]));
+      this.host = pullHost;
       this.volume = proto.getVolume();
 
       failureRowNums = new ArrayList<>();

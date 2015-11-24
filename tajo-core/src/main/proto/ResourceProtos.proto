@@ -106,9 +106,8 @@ message TaskCompletionReport {
   optional StatSetProto stats = 2;
   optional TableStatsProto input_stats = 3;
   optional TableStatsProto result_stats = 4;
-  optional FreqHistogramProto freq_histogram = 5;
-  repeated ShuffleFileOutput shuffle_file_outputs = 6;
-  repeated PartitionDescProto partitions = 7;
+  repeated ShuffleFileOutput shuffle_file_outputs = 5;
+  repeated PartitionDescProto partitions = 6;
 }
 
 message TaskFatalErrorReport {
@@ -132,10 +131,9 @@ message IntermediateEntryProto {
   required int32 task_id = 2;
   required int32 attempt_id = 3;
   required int32 part_id = 4;
-  required string host = 5;
-  required int64 volume = 6;
-  repeated PageProto pages = 7;
-  repeated FailureIntermediateProto failures = 8;
+  required int64 volume = 5;
+  repeated PageProto pages = 6;
+  repeated FailureIntermediateProto failures = 7;
 }
 
 message ExecutionBlockReport {
@@ -143,7 +141,18 @@ message ExecutionBlockReport {
   required bool report_success = 2;
   optional string report_error_message = 3;
   required int32 succeeded_tasks = 4;
-  repeated IntermediateEntryProto intermediate_entries = 5;
+  required string host = 5;
+  required int32 port = 6;
+  optional HashShuffleReport hash_shuffle_report = 7;
+  optional RangeShuffleReport range_shuffle_report = 8;
+}
+
+message HashShuffleReport {
+  repeated IntermediateEntryProto intermediate_entries = 1;
+}
+
+message RangeShuffleReport {
+  required FreqHistogramProto histogram = 1;
 }
 
 // deprecated

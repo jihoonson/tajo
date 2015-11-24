@@ -24,25 +24,26 @@ import org.apache.tajo.catalog.statistics.FreqHistogram;
 
 public class TaskTAttemptEvent extends TaskEvent {
   private final TaskAttemptId attemptId;
-  @Nullable
-  private FreqHistogram histogram;
+//  @Nullable
+//  private FreqHistogram histogram;
 
   public TaskTAttemptEvent(TaskAttemptId attemptId,
                            TaskEventType eventType) {
-    this(attemptId, eventType, null);
-  }
-
-  public TaskTAttemptEvent(TaskAttemptId attemptId,
-                           TaskEventType eventType,
-                           @Nullable FreqHistogram histogram) {
     super(attemptId.getTaskId(), eventType);
     this.attemptId = attemptId;
-    this.histogram = histogram;
   }
 
-  public FreqHistogram getHistogram() {
-    return histogram;
-  }
+//  public TaskTAttemptEvent(TaskAttemptId attemptId,
+//                           TaskEventType eventType,
+//                           @Nullable FreqHistogram histogram) {
+//    super(attemptId.getTaskId(), eventType);
+//    this.attemptId = attemptId;
+//    this.histogram = histogram;
+//  }
+
+//  public FreqHistogram getHistogram() {
+//    return histogram;
+//  }
 
   public TaskAttemptId getTaskAttemptId() {
     return attemptId;

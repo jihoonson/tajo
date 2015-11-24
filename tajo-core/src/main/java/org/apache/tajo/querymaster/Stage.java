@@ -43,15 +43,14 @@ import org.apache.tajo.exception.ExceptionUtil;
 import org.apache.tajo.exception.TajoException;
 import org.apache.tajo.ipc.TajoWorkerProtocol;
 import org.apache.tajo.master.TaskState;
-import org.apache.tajo.master.cluster.WorkerConnectionInfo;
 import org.apache.tajo.master.event.*;
 import org.apache.tajo.master.event.TaskAttemptToSchedulerEvent.TaskAttemptScheduleContext;
 import org.apache.tajo.plan.logical.*;
 import org.apache.tajo.plan.serder.PlanProto.DistinctGroupbyEnforcer.MultipleAggregationStage;
 import org.apache.tajo.plan.serder.PlanProto.EnforceProperty;
 import org.apache.tajo.plan.util.PlannerUtil;
-import org.apache.tajo.querymaster.MasterFreqHistogram.BucketWithLocation;
 import org.apache.tajo.querymaster.Task.IntermediateEntry;
+import org.apache.tajo.querymaster.Task.PullHost;
 import org.apache.tajo.rpc.AsyncRpcClient;
 import org.apache.tajo.rpc.NullCallback;
 import org.apache.tajo.rpc.RpcClientManager;
@@ -63,7 +62,6 @@ import org.apache.tajo.storage.fragment.Fragment;
 import org.apache.tajo.unit.StorageUnit;
 import org.apache.tajo.util.KeyValueSet;
 import org.apache.tajo.util.RpcParameterFactory;
-import org.apache.tajo.util.StringUtils;
 import org.apache.tajo.util.history.StageHistory;
 import org.apache.tajo.util.history.TaskHistory;
 import org.apache.tajo.worker.FetchImpl;
@@ -1248,8 +1246,8 @@ public class Stage implements EventHandler<StageEvent> {
     return unit;
   }
 
-  private static void updateHistogram(Stage stage, StageTaskEvent taskEvent, WorkerConnectionInfo succeededWorker) {
-    FreqHistogram histogram = taskEvent.getHistogram();
+  private static void updateHistogram(Stage stage, RangeShuffleReport report, PullHost pullHost) {
+    FreqHistogram histogram = new FreqHistogram(report.getHistogram());
 
     List<ColumnStats> sortKeyStats = TupleUtil.extractSortColumnStats(
         histogram.getSortSpecs(),
@@ -1260,7 +1258,7 @@ public class Stage implements EventHandler<StageEvent> {
 //    List<Bucket> buckets = histogram.getSortedBuckets();
     // 1) Update histograms of range partitions using the report
     int maxHistogramSize = stage.getContext().getConf().getIntVar(ConfVars.HISTOGRAM_MAX_SIZE);
-    stage.histogramForRangeShuffle.merge(analyzedSpecs, histogram, succeededWorker, maxHistogramSize);
+    stage.histogramForRangeShuffle.merge(analyzedSpecs, histogram, pullHost, maxHistogramSize);
 
     if (maxHistogramSize < stage.histogramForRangeShuffle.size()) {
       SortedSet<Bucket> buckets = stage.histogramForRangeShuffle.getSortedBuckets();
@@ -1287,33 +1285,8 @@ public class Stage implements EventHandler<StageEvent> {
         buckets.removeAll(removed);
       }
 
-//      for (int i = 0; i < buckets.size() - 1; i++) {
-//        Preconditions.checkState(buckets.get(i).getEndKey().equals(buckets.get(i+1).getStartKey()),
-//            "i's end key: " + buckets.get(i).getEndKey() + ", i+1's start key: " + buckets.get(i+1).getStartKey());
-//      }
-
-//      stage.histogramForRangeShuffle.clear();
-//      stage.histogramForRangeShuffle.addBuckets(buckets);
     }
     LOG.info("Merged histogram size: " + stage.histogramForRangeShuffle.size());
-
-//    FreqHistogram histogram = stage.histogramForRangeShuffle;
-//    HistogramUtil.normalizeLength(histogram);
-//    List<Bucket> buckets = histogram.getSortedBuckets();
-
-    // 2) Calculate ​Θ, the average count of range partitions
-//    BigDecimal avgCard = buckets.stream().map(bucket ->
-//        BigDecimal.valueOf(bucket.getCount())
-//    ).reduce(BigDecimal.ZERO, (a, b) -> a.add(b))
-//        .divide(BigDecimal.valueOf(histogram.size()), MathContext.DECIMAL128);
-
-    // 3) Refine ranges of the selected partition and its adjacent partitions to make their counts not to exceed ​Θ
-//    List<ColumnStats> sortColumnStats = TupleUtil.extractSortColumnStats(
-//        histogram.getSortSpecs(),
-//        TupleUtil.extractSortColumnStats(histogram.getSortSpecs(), stage.resultStatistics.getColumnStats(), false),
-//        false);
-//    HistogramUtil.normalize(histogram, sortColumnStats);
-//    HistogramUtil.refineToEquiDepth(histogram, avgCard, sortColumnStats);
   }
 
   private static class TaskCompletedTransition implements SingleArcTransition<Stage, StageEvent> {
@@ -1340,13 +1313,13 @@ public class Stage implements EventHandler<StageEvent> {
             // Incremental statistics update
             updateStats(stage, task);
 
-            // Incremental histogram update
-            if (stage.histogramForRangeShuffle != null) {
-              long before = System.currentTimeMillis();
-              updateHistogram(stage, taskEvent, task.getSucceededWorker());
-              long after = System.currentTimeMillis();
-              LOG.info("merge time: " + (after - before) + " ms");
-            }
+//            // Incremental histogram update
+//            if (stage.histogramForRangeShuffle != null) {
+//              long before = System.currentTimeMillis();
+//              updateHistogram(stage, taskEvent, task.getSucceededWorker());
+//              long after = System.currentTimeMillis();
+//              LOG.info("merge time: " + (after - before) + " ms");
+//            }
           } catch (Exception e) {
             ExceptionUtil.printStackTraceIfError(LOG, e);
             stage.eventHandler.handle(new StageEvent(stage.getId(), StageEventType.SQ_INTERNAL_ERROR));
@@ -1419,10 +1392,17 @@ public class Stage implements EventHandler<StageEvent> {
     }
 
     completedShuffleTasks.addAndGet(report.getSucceededTasks());
-    if (report.getIntermediateEntriesCount() > 0) {
-      for (IntermediateEntryProto eachInterm : report.getIntermediateEntriesList()) {
-        hashShuffleIntermediateEntries.add(new IntermediateEntry(eachInterm));
+
+    PullHost pullHost = new PullHost(report.getHost(), report.getPort());
+    if (report.hasHashShuffleReport()) {
+      HashShuffleReport hashShuffleReport = report.getHashShuffleReport();
+      if (hashShuffleReport.getIntermediateEntriesCount() > 0) {
+        for (IntermediateEntryProto eachInterm : hashShuffleReport.getIntermediateEntriesList()) {
+          hashShuffleIntermediateEntries.add(new IntermediateEntry(pullHost, eachInterm));
+        }
       }
+    } else if (report.hasRangeShuffleReport()) {
+      updateHistogram(this, report.getRangeShuffleReport(), pullHost);
     }
 
     if (completedShuffleTasks.get() >= succeededObjectCount) {
@@ -1448,6 +1428,7 @@ public class Stage implements EventHandler<StageEvent> {
     switch (type) {
       case HASH_SHUFFLE:
       case SCATTERED_HASH_SHUFFLE:
+      case RANGE_SHUFFLE:
         return true;
       default:
         return false;
