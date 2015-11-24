@@ -675,10 +675,10 @@ public class Repartitioner {
       AnalyzedSortSpec[] analyzedSpecs = HistogramUtil.analyzeHistogram(histogram, sortKeyStats);
       buckets = histogram.getSortedBuckets();
 
-//      LOG.info("================== 1 ==================");
-//      for (Bucket b : buckets) {
-//        LOG.info("bucket: " + b);
-//      }
+      LOG.info("================== 1 ==================");
+      for (Bucket b : buckets) {
+        LOG.info("bucket: " + b);
+      }
 
       // Compute the total cardinality of sort keys.
       BigDecimal totalCard = histogram.getSortedBuckets().stream().map(
@@ -780,10 +780,10 @@ public class Repartitioner {
         histogram = new MasterFreqHistogram(histogram.getSortSpecs(), buckets);
       }
 
-//      LOG.info("================== 2 ==================");
-//      for (Bucket b : histogram.getSortedBuckets()) {
-//        LOG.info("bucket: " + b);
-//      }
+      LOG.info("================== 2 ==================");
+      for (Bucket b : histogram.getSortedBuckets()) {
+        LOG.info("bucket: " + b);
+      }
 
       BigDecimal avgCard = totalCard.divide(BigDecimal.valueOf(histogram.size()), MathContext.DECIMAL128);
 
@@ -850,7 +850,7 @@ public class Repartitioner {
         new String[]{UNKNOWN_HOST});
     Stage.scheduleFragment(stage, dummyFragment);
 
-    List<FetchImpl> fetches = new ArrayList<>();
+    List<FetchImpl> fetchCandidates = new ArrayList<>();
     List<ExecutionBlock> childBlocks = masterPlan.getChilds(stage.getId());
     for (ExecutionBlock childBlock : childBlocks) {
       Stage childExecSM = stage.getContext().getStage(childBlock.getId());
@@ -858,7 +858,7 @@ public class Repartitioner {
         for (IntermediateEntry p : qu.getIntermediateData()) {
           FetchImpl fetch = new FetchImpl(p.getPullHost(), RANGE_SHUFFLE, childBlock.getId(), 0);
           fetch.addPart(p.getTaskId(), p.getAttemptId());
-          fetches.add(fetch);
+          fetchCandidates.add(fetch);
         }
       }
     }
@@ -879,7 +879,7 @@ public class Repartitioner {
 
         String rangeParam =
             TupleUtil.rangeToQuery(bucket.getKey(), bucket.isEndKeyInclusive(), encoder);
-        for (FetchImpl fetch: fetches) {
+        for (FetchImpl fetch: fetchCandidates) {
           if (hosts.contains(fetch.getPullHost())) {
             FetchImpl copy;
             try {
@@ -1008,10 +1008,10 @@ public class Repartitioner {
       }
     }
 
-//    LOG.info("================== 3 ==================");
-//    for (Bucket b : buckets) {
-//      LOG.info("bucket: " + b);
-//    }
+    LOG.info("================== 3 ==================");
+    for (Bucket b : buckets) {
+      LOG.info("bucket: " + b);
+    }
 
     // Refine from the first to the right direction
     for (int i = 0; i < buckets.size(); i++) {
@@ -1055,10 +1055,10 @@ public class Repartitioner {
       }
     }
 
-//    LOG.info("================== 4 ==================");
-//    for (Bucket b : buckets) {
-//      LOG.info("bucket: " + b);
-//    }
+    LOG.info("================== 4 ==================");
+    for (Bucket b : buckets) {
+      LOG.info("bucket: " + b);
+    }
 
     // TODO: if there are remaining passed bucket,
     if (passed != null && passed.getCard() > 0) {
