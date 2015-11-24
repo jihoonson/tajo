@@ -59,7 +59,7 @@ public class ExecutionBlockSharedResource {
   private LogicalNode plan;
   private boolean codeGenEnabled = false;
   private FreqHistogram histogram;
-  private LinkedBlockingQueue<FreqBucket> bucketBuffer;
+  private LinkedBlockingQueue<FreqHistogram> bucketBuffer;
 
   public void initialize(final QueryContext context, final String planJson, final boolean prepareStatistics) {
 
@@ -90,6 +90,7 @@ public class ExecutionBlockSharedResource {
   private void prepareStatistics() {
     SortNode sortNode = PlannerUtil.findTopNode(plan, NodeType.SORT);
     if (sortNode != null) {
+      histogram = new FreqHistogram(sortNode.getSortKeys());
       bucketBuffer = new LinkedBlockingQueue<>();
     } else {
       throw new IllegalStateException("Cannot find any sort node");
@@ -154,11 +155,11 @@ public class ExecutionBlockSharedResource {
     TableCache.getInstance().releaseCache(id);
   }
 
-  public void collectStatistics(FreqBucket bucket) {
+  public void collectStatistics(FreqHistogram bucket) {
     this.bucketBuffer.add(bucket);
   }
 
-  public LinkedBlockingQueue<FreqBucket> getBucketBuffer() {
+  public LinkedBlockingQueue<FreqHistogram> getBucketBuffer() {
     return bucketBuffer;
   }
 

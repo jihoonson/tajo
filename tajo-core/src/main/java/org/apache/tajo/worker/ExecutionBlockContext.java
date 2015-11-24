@@ -20,6 +20,7 @@ package org.apache.tajo.worker;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Queues;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.fs.FileSystem;
@@ -35,8 +36,8 @@ import org.apache.tajo.catalog.statistics.FreqHistogram;
 import org.apache.tajo.catalog.statistics.FreqHistogram.FreqBucket;
 import org.apache.tajo.catalog.statistics.Histogram;
 import org.apache.tajo.catalog.statistics.Histogram.Bucket;
+import org.apache.tajo.catalog.statistics.HistogramUtil;
 import org.apache.tajo.conf.TajoConf;
-import org.apache.tajo.conf.TajoConf.ConfVars;
 import org.apache.tajo.engine.query.QueryContext;
 import org.apache.tajo.ipc.QueryMasterProtocol;
 import org.apache.tajo.master.cluster.WorkerConnectionInfo;
@@ -57,7 +58,7 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -112,6 +113,7 @@ public class ExecutionBlockContext {
     this.connManager = RpcClientManager.getInstance();
     this.systemConf = workerContext.getConf();
     this.reporter = new Reporter();
+    this.histogramManager = new HistogramManager();
     this.defaultFS = TajoConf.getTajoRootDir(systemConf).getFileSystem(systemConf);
     this.localFS = FileSystem.getLocal(systemConf);
 
@@ -153,7 +155,6 @@ public class ExecutionBlockContext {
       }
       throw e;
     }
-    this.histogramManager = new HistogramManager();
     this.histogramManager.start();
   }
 
@@ -323,9 +324,10 @@ public class ExecutionBlockContext {
   private void sendRangeShuffleReport(ExecutionBlockId ebId) throws Exception {
     if(completedTasksNum.get() == 0) return;
 
+    histogramManager.stop();
     ExecutionBlockReport.Builder reportBuilder = getEbReportBuilder(ebId);
     RangeShuffleReport.Builder shuffleReportBuilder = RangeShuffleReport.newBuilder();
-    shuffleReportBuilder.setHistogram(resource.getHistogram().getProto());
+    shuffleReportBuilder.setHistogram(histogramManager.getHistogram().get().getProto());
     reportBuilder.setRangeShuffleReport(shuffleReportBuilder);
     sendEbReport(reportBuilder.build());
   }
@@ -475,60 +477,110 @@ public class ExecutionBlockContext {
     }
   }
 
+  public static class HistogramFuture implements Future<FreqHistogram> {
+    private boolean done = false;
+    private FreqHistogram histogram;
+    private CountDownLatch latch = new CountDownLatch(1);
+
+    public void done(FreqHistogram histogram) {
+      this.histogram = histogram;
+      this.done = true;
+      this.latch.countDown();
+    }
+
+    @Override
+    public boolean cancel(boolean mayInterruptIfRunning) {
+      return false;
+    }
+
+    @Override
+    public boolean isCancelled() {
+      return false;
+    }
+
+    @Override
+    public boolean isDone() {
+      return done;
+    }
+
+    @Override
+    public FreqHistogram get() throws InterruptedException, ExecutionException {
+      this.latch.await();
+      return histogram;
+    }
+
+    @Override
+    public FreqHistogram get(long timeout, TimeUnit unit)
+        throws InterruptedException, ExecutionException, TimeoutException {
+      if (latch.await(timeout, unit)) {
+        return histogram;
+      } else {
+        throw new TimeoutException();
+      }
+    }
+  }
+
   protected class HistogramManager {
     private Thread mergeThread;
-    private static final int MERGE_INTERVAL = 100;
+    private static final int MERGE_INTERVAL = 10;
 //    private final int histogramMaxSize;
+    private HistogramFuture histogramFuture;
+    private AtomicBoolean isStopped = new AtomicBoolean(false);
 
     public HistogramManager() {
 //      histogramMaxSize = queryContext.getInt(ConfVars.HISTOGRAM_MAX_SIZE);
+      histogramFuture = new HistogramFuture();
     }
 
     public void start() {
       mergeThread = new Thread(() -> {
-        List<FreqBucket> buffer = new ArrayList<>(1000);
+        List<FreqHistogram> buffer = new ArrayList<>(10);
         FreqHistogram histogram = resource.getHistogram();
 
-        while (!isStopped() && !Thread.interrupted()) {
-          buffer.clear();
-          resource.getBucketBuffer().drainTo(buffer, 1000);
-          merge(histogram, buffer);
-
-          if (!isStopped()) {
-            synchronized (mergeThread) {
-              try {
-                mergeThread.wait(MERGE_INTERVAL);
-              } catch (InterruptedException e) {
-              }
+        while (!isStopped.get() && !isStopped() && !Thread.interrupted()) {
+          if (resource.getBucketBuffer() != null) {
+            buffer.clear();
+            Queues.drainUninterruptibly(resource.getBucketBuffer(), buffer, 10, MERGE_INTERVAL, TimeUnit.MILLISECONDS);
+            for (FreqHistogram eachHist : buffer) {
+              merge(histogram, eachHist);
             }
           }
         }
+
+        histogramFuture.done(histogram);
       });
 
       this.mergeThread.start();
     }
 
-    public void stop() {
+    public Future<FreqHistogram> getHistogram() {
+      return histogramFuture;
+    }
+
+    public void stop() throws InterruptedException {
+      isStopped.set(true);
       if (mergeThread != null) {
         synchronized (mergeThread) {
           mergeThread.notifyAll();
         }
+        mergeThread.join();
       }
     }
 
-    private void merge(FreqHistogram histogram, List<FreqBucket> buckets) {
+    private void merge(FreqHistogram h1, FreqHistogram h2) {
 
-      List<Bucket> thisBuckets = new ArrayList<>(histogram.getSortedBuckets());
+      List<Bucket> thisBuckets = new ArrayList<>(h1.getSortedBuckets());
+      List<Bucket> otherBuckets = new ArrayList<>(h2.getSortedBuckets());
       Iterator<Bucket> thisIt = thisBuckets.iterator();
-      Iterator<FreqBucket> otherIt = buckets.iterator();
+      Iterator<Bucket> otherIt = otherBuckets.iterator();
 
-      histogram.clear();
+      h1.clear();
       FreqBucket thisBucket = null;
       FreqBucket otherBucket = null;
       while ((thisBucket != null || thisIt.hasNext())
           && (otherBucket != null || otherIt.hasNext())) {
         if (thisBucket == null) thisBucket = (FreqBucket) thisIt.next();
-        if (otherBucket == null) otherBucket = otherIt.next();
+        if (otherBucket == null) otherBucket = (FreqBucket) otherIt.next();
 
         FreqBucket smallStartBucket, largeStartBucket;
         boolean isThisSmall = thisBucket.getKey().compareTo(otherBucket.getKey()) < 0;
@@ -543,14 +595,14 @@ public class ExecutionBlockContext {
         // Check overlap between keys
         if (!smallStartBucket.getKey().isOverlap(largeStartBucket.getKey())) {
           // non-overlap keys
-          histogram.addBucket(smallStartBucket);
+          h1.addBucket(smallStartBucket);
           if (isThisSmall) {
             thisBucket = null;
           } else {
             otherBucket = null;
           }
         } else {
-          Pair<Bucket, Bucket> result = mergeWithBucketMerge(histogram, thisBucket, otherBucket, smallStartBucket,
+          Pair<Bucket, Bucket> result = mergeWithBucketMerge(h1, thisBucket, otherBucket, smallStartBucket,
               largeStartBucket);
           thisBucket = (FreqBucket) result.getFirst();
           otherBucket = (FreqBucket) result.getSecond();
@@ -558,21 +610,21 @@ public class ExecutionBlockContext {
       }
 
       if (thisBucket != null) {
-        histogram.addBucket(thisBucket);
+        h1.addBucket(thisBucket);
       }
 
       if (otherBucket != null) {
-        histogram.addBucket(otherBucket);
+        h1.addBucket(otherBucket);
       }
 
       while (thisIt.hasNext()) {
         Bucket next = thisIt.next();
-        histogram.addBucket(next);
+        h1.addBucket(next);
       }
 
       while (otherIt.hasNext()) {
         Bucket next = otherIt.next();
-        histogram.addBucket(next);
+        h1.addBucket(next);
       }
     }
 
