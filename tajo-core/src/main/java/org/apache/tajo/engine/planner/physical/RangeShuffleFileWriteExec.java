@@ -26,8 +26,6 @@ import org.apache.hadoop.fs.RawLocalFileSystem;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.tajo.catalog.*;
 import org.apache.tajo.catalog.statistics.FreqHistogram;
-import org.apache.tajo.catalog.statistics.Histogram;
-import org.apache.tajo.catalog.statistics.Histogram.Bucket;
 import org.apache.tajo.conf.TajoConf;
 import org.apache.tajo.conf.TajoConf.ConfVars;
 import org.apache.tajo.engine.planner.KeyProjector;
@@ -39,7 +37,8 @@ import org.apache.tajo.util.Pair;
 import org.apache.tajo.worker.TaskAttemptContext;
 
 import java.io.IOException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * <code>RangeShuffleFileWriteExec</code> is a physical executor to store intermediate data into a number of
@@ -61,7 +60,6 @@ public class RangeShuffleFileWriteExec extends UnaryPhysicalExec {
 
 //  private FreqHistogram freqHistogram;
   private int maxHistogramSize;
-  private final Random random = new Random(System.currentTimeMillis());
   private List<Pair<TupleRange, Double>> keyAndCards;
 
   public RangeShuffleFileWriteExec(final TaskAttemptContext context,
@@ -165,11 +163,6 @@ public class RangeShuffleFileWriteExec extends UnaryPhysicalExec {
         merged.setFirst(TupleRangeUtil.merge(merged.getFirst(), removed.getFirst()));
         merged.setSecond(merged.getSecond() + removed.getSecond());
       }
-
-//      int mergeIndex = random.nextInt(keyAndCards.size() - 2);
-//      Pair<TupleRange, Double> b1 = keyAndCards.remove(mergeIndex);
-//      Pair<TupleRange, Double> b2 = keyAndCards.remove(mergeIndex + 1);
-//      keyAndCards.add(new Pair<>(TupleRangeUtil.merge(b1.getFirst(), b2.getFirst()), b1.getSecond() + b2.getSecond()));
     }
   }
 

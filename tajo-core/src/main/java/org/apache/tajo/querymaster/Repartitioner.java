@@ -675,10 +675,10 @@ public class Repartitioner {
       AnalyzedSortSpec[] analyzedSpecs = HistogramUtil.analyzeHistogram(histogram, sortKeyStats);
       buckets = histogram.getSortedBuckets();
 
-      LOG.info("================== 1 ==================");
-      for (Bucket b : buckets) {
-        LOG.info("bucket: " + b);
-      }
+//      LOG.info("================== 1 ==================");
+//      for (Bucket b : buckets) {
+//        LOG.info("bucket: " + b);
+//      }
 
       // Compute the total cardinality of sort keys.
       BigDecimal totalCard = histogram.getSortedBuckets().stream().map(
@@ -780,10 +780,10 @@ public class Repartitioner {
         histogram = new MasterFreqHistogram(histogram.getSortSpecs(), buckets);
       }
 
-      LOG.info("================== 2 ==================");
-      for (Bucket b : histogram.getSortedBuckets()) {
-        LOG.info("bucket: " + b);
-      }
+//      LOG.info("================== 2 ==================");
+//      for (Bucket b : histogram.getSortedBuckets()) {
+//        LOG.info("bucket: " + b);
+//      }
 
       BigDecimal avgCard = totalCard.divide(BigDecimal.valueOf(histogram.size()), MathContext.DECIMAL128);
 
@@ -1008,10 +1008,10 @@ public class Repartitioner {
       }
     }
 
-    LOG.info("================== 3 ==================");
-    for (Bucket b : buckets) {
-      LOG.info("bucket: " + b);
-    }
+//    LOG.info("================== 3 ==================");
+//    for (Bucket b : buckets) {
+//      LOG.info("bucket: " + b);
+//    }
 
     // Refine from the first to the right direction
     for (int i = 0; i < buckets.size(); i++) {
@@ -1055,10 +1055,10 @@ public class Repartitioner {
       }
     }
 
-    LOG.info("================== 4 ==================");
-    for (Bucket b : buckets) {
-      LOG.info("bucket: " + b);
-    }
+//    LOG.info("================== 4 ==================");
+//    for (Bucket b : buckets) {
+//      LOG.info("bucket: " + b);
+//    }
 
     // TODO: if there are remaining passed bucket,
     if (passed != null && passed.getCard() > 0) {

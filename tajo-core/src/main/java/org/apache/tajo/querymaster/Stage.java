@@ -1342,7 +1342,10 @@ public class Stage implements EventHandler<StageEvent> {
 
             // Incremental histogram update
             if (stage.histogramForRangeShuffle != null) {
+              long before = System.currentTimeMillis();
               updateHistogram(stage, taskEvent, task.getSucceededWorker());
+              long after = System.currentTimeMillis();
+              LOG.info("merge time: " + (after - before) + " ms");
             }
           } catch (Exception e) {
             ExceptionUtil.printStackTraceIfError(LOG, e);
