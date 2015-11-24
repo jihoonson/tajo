@@ -728,38 +728,40 @@ public class Repartitioner {
 //        histogram = new MasterFreqHistogram(histogram.getSortSpecs(), buckets);
 //
 //      } else if (determinedTaskNum > buckets.size()) {
-//        do {
-//          List<Bucket> added = new ArrayList<>();
-//          List<Bucket> removed = new ArrayList<>();
-//          for (Bucket eachBucket : buckets) {
-//            if (HistogramUtil.splittable(analyzedSpecs, eachBucket)) {
-//              // TODO: improve the split number
-//              List<Bucket> split = splitBucket(histogram, analyzedSpecs, eachBucket, 2);
-//              if (split.size() > 1) {
-//                added.addAll(split);
-//                removed.add(eachBucket);
-//                if (added.size() + buckets.size() - removed.size() >= determinedTaskNum) {
-//                  break;
-//                }
-//              }
-//            }
-//          }
-//          if (added.size() == 0 && removed.size() == 0) {
-//            break;
-//          }
-//          buckets.addAll(added);
-//          buckets.removeAll(removed);
-//        } while (determinedTaskNum > buckets.size());
-//
-//        determinedTaskNum = buckets.size();
-//        LOG.info("Task number is adjusted to " + determinedTaskNum + " due to the number of buckets.");
-//        histogram = new MasterFreqHistogram(histogram.getSortSpecs(), buckets);
-//      }
-//
-//      LOG.info("================== 2 ==================");
-//      for (Bucket b : histogram.getSortedBuckets()) {
-//        LOG.info("bucket: " + b);
-//      }
+      
+      if (determinedTaskNum > buckets.size()) {
+        do {
+          List<Bucket> added = new ArrayList<>();
+          List<Bucket> removed = new ArrayList<>();
+          for (Bucket eachBucket : buckets) {
+            if (HistogramUtil.splittable(analyzedSpecs, eachBucket)) {
+              // TODO: improve the split number
+              List<Bucket> split = splitBucket(histogram, analyzedSpecs, eachBucket, 2);
+              if (split.size() > 1) {
+                added.addAll(split);
+                removed.add(eachBucket);
+                if (added.size() + buckets.size() - removed.size() >= determinedTaskNum) {
+                  break;
+                }
+              }
+            }
+          }
+          if (added.size() == 0 && removed.size() == 0) {
+            break;
+          }
+          buckets.addAll(added);
+          buckets.removeAll(removed);
+        } while (determinedTaskNum > buckets.size());
+
+        determinedTaskNum = buckets.size();
+        LOG.info("Task number is adjusted to " + determinedTaskNum + " due to the number of buckets.");
+        histogram = new MasterFreqHistogram(histogram.getSortSpecs(), buckets);
+      }
+
+      LOG.info("================== 2 ==================");
+      for (Bucket b : histogram.getSortedBuckets()) {
+        LOG.info("bucket: " + b);
+      }
 
       BigDecimal avgCard = totalCard.divide(BigDecimal.valueOf(histogram.size()), MathContext.DECIMAL128);
 
