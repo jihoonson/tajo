@@ -1402,7 +1402,10 @@ public class Stage implements EventHandler<StageEvent> {
         }
       }
     } else if (report.hasRangeShuffleReport()) {
+      long before = System.currentTimeMillis();
       updateHistogram(this, report.getRangeShuffleReport(), pullHost);
+      long after = System.currentTimeMillis();
+      LOG.info("master merge time: " + (after - before) + " ms");
     }
 
     if (completedShuffleTasks.get() >= succeededObjectCount) {
