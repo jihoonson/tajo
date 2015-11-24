@@ -767,7 +767,7 @@ public class Repartitioner {
 
       // The merged histogram can contain partitions of various lengths.
       // Thus, they need to be refined to be equal in length.
-      refineToEquiDepth(histogram, avgCard, analyzedSpecs);
+//      refineToEquiDepth(histogram, avgCard, analyzedSpecs);
       buckets = histogram.getSortedBuckets();
 
       // Adjust ranges to be last inclusive
