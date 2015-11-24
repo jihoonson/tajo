@@ -531,6 +531,7 @@ public class ExecutionBlockContext {
 //    private final int histogramMaxSize;
     private HistogramFuture histogramFuture;
     private AtomicBoolean isStopped = new AtomicBoolean(false);
+    private long mergeTime;
 
     public HistogramManager() {
 //      histogramMaxSize = queryContext.getInt(ConfVars.HISTOGRAM_MAX_SIZE);
@@ -547,11 +548,14 @@ public class ExecutionBlockContext {
             buffer.clear();
             Queues.drainUninterruptibly(resource.getBucketBuffer(), buffer, 10, MERGE_INTERVAL, TimeUnit.MILLISECONDS);
             for (FreqHistogram eachHist : buffer) {
+              long before = System.currentTimeMillis();
               merge(histogram, eachHist);
+              mergeTime += System.currentTimeMillis() - before;
             }
           }
         }
 
+        LOG.info("local merge time: " + mergeTime + " ms");
         histogramFuture.done(histogram);
       });
 
