@@ -831,6 +831,8 @@ public class Repartitioner {
       }
     }
 
+//    stage.getTask(null).getSucceededWorker().getHost()
+
     SortedMap<TupleRange, Collection<FetchImpl>> map = new TreeMap<>();
 
     Set<FetchImpl> fetchSet;
