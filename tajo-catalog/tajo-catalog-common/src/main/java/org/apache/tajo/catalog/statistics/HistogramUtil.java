@@ -606,12 +606,18 @@ public class HistogramUtil {
       return BigDecimal.ZERO;
     } else {
       char[] padded;
+      if (unicodeChars.length > length) {
+        padded = Arrays.copyOf(unicodeChars, length);
+      } else if (unicodeChars.length < length) {
 //      textPadFirst = false;
-      if (textPadFirst) {
+        if (textPadFirst) {
 //        padded = StringUtils.padHead(unicodeChars, length);
-        padded = unicodeChars;
+          padded = unicodeChars;
+        } else {
+          padded = StringUtils.padTail(unicodeChars, length);
+        }
       } else {
-        padded = StringUtils.padTail(unicodeChars, length);
+        padded = unicodeChars;
       }
       return unicodeCharsToBigDecimal(padded);
     }

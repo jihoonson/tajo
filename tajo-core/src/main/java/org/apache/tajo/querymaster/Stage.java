@@ -1255,37 +1255,62 @@ public class Stage implements EventHandler<StageEvent> {
         false);
     AnalyzedSortSpec[] analyzedSpecs = HistogramUtil.analyzeHistogram(histogram, sortKeyStats);
 
-//    List<Bucket> buckets = histogram.getSortedBuckets();
-    // 1) Update histograms of range partitions using the report
     int maxHistogramSize = stage.getContext().getConf().getIntVar(ConfVars.HISTOGRAM_MAX_SIZE);
-    stage.histogramForRangeShuffle.merge(analyzedSpecs, histogram, pullHost, maxHistogramSize);
 
-    if (maxHistogramSize < stage.histogramForRangeShuffle.size()) {
-      SortedSet<Bucket> buckets = stage.histogramForRangeShuffle.getSortedBuckets();
-      float quotient = (float) buckets.size() / (float) maxHistogramSize;
-      if (quotient > 1.f) {
-        int mergeNum = Math.round(quotient);
-        int remain = buckets.size() % mergeNum;
+    // merge reported histogram with workerMap.size()
 
-        int i = 1;
-        Iterator<Bucket> it = buckets.iterator();
-        Bucket mergeBucket = it.next();
-        List<Bucket> removed = new ArrayList<>(buckets.size() - buckets.size() / mergeNum);
-        while (i < buckets.size() - remain && it.hasNext()) {
-          if (i % mergeNum == 0) {
-            mergeBucket = it.next();
-          } else {
-            Bucket next = it.next();
-            mergeBucket.merge(next);
-            removed.add(next);
-          }
-          i++;
+    SortedSet<Bucket> buckets = histogram.getSortedBuckets();
+    float quotient = (float) buckets.size() / (float) stage.workerMap.size();
+    if (quotient > 1.f) {
+      int mergeNum = Math.round(quotient);
+      int remain = buckets.size() % mergeNum;
+
+      int i = 1;
+      Iterator<Bucket> it = buckets.iterator();
+      Bucket mergeBucket = it.next();
+      List<Bucket> removed = new ArrayList<>(buckets.size() - buckets.size() / mergeNum);
+      while (i < buckets.size() - remain && it.hasNext()) {
+        if (i % mergeNum == 0) {
+          mergeBucket = it.next();
+        } else {
+          Bucket next = it.next();
+          mergeBucket.merge(next);
+          removed.add(next);
         }
-
-        buckets.removeAll(removed);
+        i++;
       }
 
+      buckets.removeAll(removed);
     }
+
+    stage.histogramForRangeShuffle.merge(analyzedSpecs, histogram, pullHost, maxHistogramSize);
+
+//    if (maxHistogramSize < stage.histogramForRangeShuffle.size()) {
+//      SortedSet<Bucket> buckets = stage.histogramForRangeShuffle.getSortedBuckets();
+//      float quotient = (float) buckets.size() / (float) maxHistogramSize;
+//      if (quotient > 1.f) {
+//        int mergeNum = Math.round(quotient);
+//        int remain = buckets.size() % mergeNum;
+//
+//        int i = 1;
+//        Iterator<Bucket> it = buckets.iterator();
+//        Bucket mergeBucket = it.next();
+//        List<Bucket> removed = new ArrayList<>(buckets.size() - buckets.size() / mergeNum);
+//        while (i < buckets.size() - remain && it.hasNext()) {
+//          if (i % mergeNum == 0) {
+//            mergeBucket = it.next();
+//          } else {
+//            Bucket next = it.next();
+//            mergeBucket.merge(next);
+//            removed.add(next);
+//          }
+//          i++;
+//        }
+//
+//        buckets.removeAll(removed);
+//      }
+//    }
+
     LOG.info("Merged histogram size: " + stage.histogramForRangeShuffle.size());
   }
 

@@ -634,7 +634,6 @@ public class Repartitioner {
 
     TupleRange[] ranges;
     SortedSet<Bucket> buckets = null;
-//    boolean[] endKeyInclusive = null;
     int determinedTaskNum;
 
     // calculate the number of maximum query ranges
@@ -699,91 +698,68 @@ public class Repartitioner {
       LOG.info(stage.getId() + ", Try to divide " + totalCard + " values into " + determinedTaskNum +
           " sub ranges (total units: " + determinedTaskNum + ")");
 
-      if (determinedTaskNum < buckets.size()) {
-        
+//      if (determinedTaskNum < buckets.size()) {
+//
 //        float quotient = (float) buckets.size() / (float) determinedTaskNum;
 //        if (quotient > 1.f) {
 //          LOG.info("# of buckets is much larger than determined # of tasks");
 //          int mergeNum = Math.round(quotient);
-//          int loop = buckets.size() + 1 - mergeNum;
-//          for (int i = 0; i < loop; i += mergeNum) {
-//            Bucket mergeBucket = buckets.get(i);
-//            for (int j = i + 1; j < mergeNum; j++) {
-//              mergeBucket.merge(buckets.get(j));
-//            }
-//          }
-//          int start = buckets.size() - 1 - (buckets.size() % mergeNum);
+//          int remain = buckets.size() % mergeNum;
 //
-//          for (int i = start; i >= 0; i -= mergeNum) {
-//            for (int j = 0; j < mergeNum - 1; j++) {
-//              buckets.remove(i - j);
+//          int i = 1;
+//          Iterator<Bucket> it = buckets.iterator();
+//          Bucket mergeBucket = it.next();
+//          List<Bucket> removed = new ArrayList<>(buckets.size() - buckets.size() / mergeNum);
+//          while (i < buckets.size() - remain && it.hasNext()) {
+//            if (i % mergeNum == 0) {
+//              mergeBucket = it.next();
+//            } else {
+//              Bucket next = it.next();
+//              mergeBucket.merge(next);
+//              removed.add(next);
 //            }
+//            i++;
 //          }
+//
+//          buckets.removeAll(removed);
 //        }
-
-        // Merge ranges of the histogram until the number of ranges reaches determinedTaskNum.
-//        while (buckets.size() > determinedTaskNum) {
-//          LOG.info("# of buckets is little larger than determined # of tasks");
-//          int minBucketIdx = -1;
-//          Bucket minBucket = null;
 //
-//          for (int i = 0; i < buckets.size(); i++) {
-//            Bucket eachBucket = buckets.get(i);
-//            if (minBucket == null || minBucket.getCard() > eachBucket.getCard()) {
-//              minBucket = eachBucket;
-//              minBucketIdx = i;
+//        // The merged histogram contains the range partitions (buckets).
+//        histogram = new MasterFreqHistogram(histogram.getSortSpecs(), buckets);
+//
+//      } else if (determinedTaskNum > buckets.size()) {
+//        do {
+//          List<Bucket> added = new ArrayList<>();
+//          List<Bucket> removed = new ArrayList<>();
+//          for (Bucket eachBucket : buckets) {
+//            if (HistogramUtil.splittable(analyzedSpecs, eachBucket)) {
+//              // TODO: improve the split number
+//              List<Bucket> split = splitBucket(histogram, analyzedSpecs, eachBucket, 2);
+//              if (split.size() > 1) {
+//                added.addAll(split);
+//                removed.add(eachBucket);
+//                if (added.size() + buckets.size() - removed.size() >= determinedTaskNum) {
+//                  break;
+//                }
+//              }
 //            }
 //          }
-//
-//          if (minBucketIdx == buckets.size() - 1) {
-//            minBucket.merge(buckets.remove(minBucketIdx - 1));
-//          } else {
-//            minBucket.merge(buckets.remove(minBucketIdx + 1));
+//          if (added.size() == 0 && removed.size() == 0) {
+//            break;
 //          }
-//        }
-
-        while (buckets.size() > determinedTaskNum) {
-          Bucket bucket = buckets.last();
-          buckets.remove(bucket);
-          buckets.last().merge(bucket);
-        }
-
-        // The merged histogram contains the range partitions (buckets).
-        histogram = new MasterFreqHistogram(histogram.getSortSpecs(), buckets);
-
-      } else if (determinedTaskNum > buckets.size()) {
-        do {
-          List<Bucket> added = new ArrayList<>();
-          List<Bucket> removed = new ArrayList<>();
-          for (Bucket eachBucket : buckets) {
-            if (HistogramUtil.splittable(analyzedSpecs, eachBucket)) {
-              // TODO: improve the split number
-              List<Bucket> split = splitBucket(histogram, analyzedSpecs, eachBucket, 2);
-              if (split.size() > 1) {
-                added.addAll(split);
-                removed.add(eachBucket);
-                if (added.size() + buckets.size() - removed.size() >= determinedTaskNum) {
-                  break;
-                }
-              }
-            }
-          }
-          if (added.size() == 0 && removed.size() == 0) {
-            break;
-          }
-          buckets.addAll(added);
-          buckets.removeAll(removed);
-        } while (determinedTaskNum > buckets.size());
-
-        determinedTaskNum = buckets.size();
-        LOG.info("Task number is adjusted to " + determinedTaskNum + " due to the number of buckets.");
-        histogram = new MasterFreqHistogram(histogram.getSortSpecs(), buckets);
-      }
-
-      LOG.info("================== 2 ==================");
-      for (Bucket b : histogram.getSortedBuckets()) {
-        LOG.info("bucket: " + b);
-      }
+//          buckets.addAll(added);
+//          buckets.removeAll(removed);
+//        } while (determinedTaskNum > buckets.size());
+//
+//        determinedTaskNum = buckets.size();
+//        LOG.info("Task number is adjusted to " + determinedTaskNum + " due to the number of buckets.");
+//        histogram = new MasterFreqHistogram(histogram.getSortSpecs(), buckets);
+//      }
+//
+//      LOG.info("================== 2 ==================");
+//      for (Bucket b : histogram.getSortedBuckets()) {
+//        LOG.info("bucket: " + b);
+//      }
 
       BigDecimal avgCard = totalCard.divide(BigDecimal.valueOf(histogram.size()), MathContext.DECIMAL128);
 
@@ -794,21 +770,12 @@ public class Repartitioner {
 
       // Adjust ranges to be last inclusive
       ranges = new TupleRange[buckets.size()];
-//      endKeyInclusive = new boolean[buckets.size()];
       Iterator<Bucket> it = buckets.iterator();
       for (int i = 0; i < buckets.size(); i++) {
-//        ranges[i] = buckets.get(i).getKey();
         BucketWithLocation bucket = (BucketWithLocation) it.next();
         ranges[i] = bucket.getKey();
-//        endKeyInclusive[i] = buckets.get(i).isEndKeyInclusive();
       }
     }
-
-//    if (endKeyInclusive == null) {
-//      endKeyInclusive = new boolean[ranges.length];
-//      Arrays.fill(endKeyInclusive, false);
-//      endKeyInclusive[endKeyInclusive.length - 1] = true;
-//    }
 
 
 //      RangePartitionAlgorithm partitioner = new UniformRangePartition(mergedRange, sortSpecs);
@@ -850,6 +817,7 @@ public class Repartitioner {
         new String[]{UNKNOWN_HOST});
     Stage.scheduleFragment(stage, dummyFragment);
 
+    // TODO: optimize fetch creation
     List<FetchImpl> fetchCandidates = new ArrayList<>();
     List<ExecutionBlock> childBlocks = masterPlan.getChilds(stage.getId());
     for (ExecutionBlock childBlock : childBlocks) {
@@ -868,11 +836,9 @@ public class Repartitioner {
     Set<FetchImpl> fetchSet;
     try {
       RowStoreUtil.RowStoreEncoder encoder = RowStoreUtil.createEncoder(sortSchema);
-//      for (int i = 0; i < ranges.length; i++) {
       Iterator<Bucket> it = buckets.iterator();
       for (int i = 0; i < buckets.size(); i++) {
         fetchSet = new HashSet<>();
-//        BucketWithLocation bucket = (BucketWithLocation) buckets.get(i);
         BucketWithLocation bucket = (BucketWithLocation) it.next();
         LOG.info("bucket[" + i + "]: " + bucket);
         Set<PullHost> hosts = bucket.getHosts();
