@@ -1283,6 +1283,10 @@ public class Stage implements EventHandler<StageEvent> {
       buckets.removeAll(removed);
     }
 
+    for (Bucket b : buckets) {
+      LOG.info("reported bucket: " + b);
+    }
+
     stage.histogramForRangeShuffle.merge(analyzedSpecs, histogram, pullHost, maxHistogramSize);
 
 //    if (maxHistogramSize < stage.histogramForRangeShuffle.size()) {
