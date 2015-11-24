@@ -112,10 +112,13 @@ public class MasterFreqHistogram extends Histogram {
     }
   }
 
-  private Pair<Bucket, Bucket> mergeWithBucketMerge(Bucket thisBucket, Bucket otherBucket,
-                                                    Bucket smallStartBucket, Bucket largeStartBucket) {
+  private Pair<Bucket, Bucket> mergeWithBucketMerge(PullHost pullHost,
+                                                    Bucket thisBucket, Bucket otherBucket,
+                                                    BucketWithLocation smallStartBucket,
+                                                    BucketWithLocation largeStartBucket) {
     boolean isThisSmall = comparator.compare(thisBucket.getEndKey(), otherBucket.getEndKey()) < 0;
     smallStartBucket.merge(largeStartBucket);
+    smallStartBucket.hosts.add(pullHost);
 
     if (isThisSmall) {
       thisBucket = null;
@@ -137,7 +140,7 @@ public class MasterFreqHistogram extends Histogram {
     // If both buckets are splittable
     if (thisSplittable && otherSplittable) {
       // Split buckets into overlapped and non-overlapped portions
-      Bucket[] bucketOrder = new Bucket[3];
+      BucketWithLocation[] bucketOrder = new BucketWithLocation[3];
       bucketOrder[0] = smallStartBucket;
 
       Tuple[] tuples = new Tuple[4];
@@ -170,19 +173,23 @@ public class MasterFreqHistogram extends Histogram {
           unsplittable = keyAndCard.getFirst().equals(smallStartBucket.getKey());
           if (unsplittable) break;
 
-          BucketWithLocation smallSubBucket = new BucketWithLocation(keyAndCard.getFirst(), keyAndCard.getSecond(), pullHost);
+          BucketWithLocation smallSubBucket = new BucketWithLocation(keyAndCard.getFirst(), keyAndCard.getSecond(),
+              smallStartBucket.getHosts());
           keyAndCard = HistogramUtil.getSubBucket(this, analyzedSpecs, largeStartBucket,
               start, end);
           unsplittable = keyAndCard.getFirst().equals(largeStartBucket.getKey());
           if (unsplittable) break;
 
-          BucketWithLocation largeSubBucket = new BucketWithLocation(keyAndCard.getFirst(), keyAndCard.getSecond(), pullHost);
+          BucketWithLocation largeSubBucket = new BucketWithLocation(keyAndCard.getFirst(), keyAndCard.getSecond(),
+              largeStartBucket.getHosts());
 
           Preconditions.checkState(smallSubBucket.getKey().equals(largeSubBucket.getKey()),
               "smallStartBucket.key: " + smallStartBucket.getKey() + " smallSubBucket.key: " + smallSubBucket.getKey()
                   + " largeStartBucket.key: " + largeStartBucket.getKey() + " largeSubBucket.key: " + largeSubBucket.getKey());
 
-          smallSubBucket.incCount(largeSubBucket.getCard());
+//          smallSubBucket.incCount(largeSubBucket.getCard());
+          smallSubBucket.merge(largeSubBucket);
+          smallSubBucket.hosts.add(pullHost);
           splits.add(smallSubBucket);
           // Note: Don't need to consider end inclusive here
           // because this bucket is always a middle one among the split buckets
@@ -193,7 +200,8 @@ public class MasterFreqHistogram extends Histogram {
             unsplittable = keyAndCard.getFirst().equals(bucketOrder[i].getKey());
             if (unsplittable) break;
 
-            BucketWithLocation subBucket = new BucketWithLocation(keyAndCard.getFirst(), keyAndCard.getSecond(), pullHost);
+            BucketWithLocation subBucket = new BucketWithLocation(keyAndCard.getFirst(), keyAndCard.getSecond(),
+                bucketOrder[i].getHosts());
             if (i > 1 && bucketOrder[i].getKey().isEndInclusive()) {
               subBucket.setEndKeyInclusive();
             }
@@ -203,7 +211,7 @@ public class MasterFreqHistogram extends Histogram {
       }
 
       if (unsplittable) {
-        return mergeWithBucketMerge(thisBucket, otherBucket, smallStartBucket, largeStartBucket);
+        return mergeWithBucketMerge(pullHost, thisBucket, otherBucket, smallStartBucket, largeStartBucket);
 
       } else {
         BucketWithLocation lastBucket = splits.remove(splits.size() - 1);
@@ -222,7 +230,7 @@ public class MasterFreqHistogram extends Histogram {
       }
     } else {
       // Simply merge
-      return mergeWithBucketMerge(thisBucket, otherBucket, smallStartBucket, largeStartBucket);
+      return mergeWithBucketMerge(pullHost, thisBucket, otherBucket, smallStartBucket, largeStartBucket);
     }
   }
 
