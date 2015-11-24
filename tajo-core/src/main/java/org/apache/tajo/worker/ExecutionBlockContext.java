@@ -39,6 +39,7 @@ import org.apache.tajo.conf.TajoConf;
 import org.apache.tajo.conf.TajoConf.ConfVars;
 import org.apache.tajo.engine.query.QueryContext;
 import org.apache.tajo.ipc.QueryMasterProtocol;
+import org.apache.tajo.master.cluster.WorkerConnectionInfo;
 import org.apache.tajo.plan.serder.PlanProto;
 import org.apache.tajo.plan.serder.PlanProto.ShuffleType;
 import org.apache.tajo.pullserver.TajoPullServerService;
@@ -111,7 +112,6 @@ public class ExecutionBlockContext {
     this.connManager = RpcClientManager.getInstance();
     this.systemConf = workerContext.getConf();
     this.reporter = new Reporter();
-    this.histogramManager = new HistogramManager();
     this.defaultFS = TajoConf.getTajoRootDir(systemConf).getFileSystem(systemConf);
     this.localFS = FileSystem.getLocal(systemConf);
 
@@ -142,7 +142,6 @@ public class ExecutionBlockContext {
     this.taskOwner = taskOwner;
     this.stub = queryMasterClient.getStub();
     this.reporter.startReporter();
-    this.histogramManager.start();
     // resource intiailization
     try{
       this.resource.initialize(queryContext, plan, shuffleType.equals(ShuffleType.RANGE_SHUFFLE));
@@ -154,6 +153,8 @@ public class ExecutionBlockContext {
       }
       throw e;
     }
+    this.histogramManager = new HistogramManager();
+    this.histogramManager.start();
   }
 
   public ExecutionBlockSharedResource getSharedResource() {
@@ -297,10 +298,13 @@ public class ExecutionBlockContext {
   }
 
   private ExecutionBlockReport.Builder getEbReportBuilder(ExecutionBlockId ebId) {
+    WorkerConnectionInfo info = getWorkerContext().getConnectionInfo();
     return ExecutionBlockReport.newBuilder()
         .setEbId(ebId.getProto())
         .setReportSuccess(true)
-        .setSucceededTasks(succeededTasksNum.get());
+        .setSucceededTasks(succeededTasksNum.get())
+        .setHost(info.getHost())
+        .setPort(info.getPullServerPort());
   }
 
   private void sendEbReport(ExecutionBlockReport report) {
@@ -371,8 +375,8 @@ public class ExecutionBlockContext {
         intermediateBuilder.clear();
 
         intermediateBuilder.setEbId(ebId.getProto())
-            .setHost(getWorkerContext().getConnectionInfo().getHost() + ":" +
-                getWorkerContext().getConnectionInfo().getPullServerPort())
+//            .setHost(getWorkerContext().getConnectionInfo().getHost() + ":" +
+//                getWorkerContext().getConnectionInfo().getPullServerPort())
             .setTaskId(-1)
             .setAttemptId(-1)
             .setPartId(eachShuffle.getPartId())
@@ -474,10 +478,13 @@ public class ExecutionBlockContext {
   protected class HistogramManager {
     private Thread mergeThread;
     private static final int MERGE_INTERVAL = 100;
-    private final int histogramMaxSize;
+//    private final int histogramMaxSize;
 
     public HistogramManager() {
-      histogramMaxSize = queryContext.getInt(ConfVars.HISTOGRAM_MAX_SIZE);
+//      histogramMaxSize = queryContext.getInt(ConfVars.HISTOGRAM_MAX_SIZE);
+    }
+
+    public void start() {
       mergeThread = new Thread(() -> {
         List<FreqBucket> buffer = new ArrayList<>(1000);
         FreqHistogram histogram = resource.getHistogram();
@@ -487,15 +494,17 @@ public class ExecutionBlockContext {
           resource.getBucketBuffer().drainTo(buffer, 1000);
           merge(histogram, buffer);
 
-          try {
-            mergeThread.wait(MERGE_INTERVAL);
-          } catch (InterruptedException e) {
+          if (!isStopped()) {
+            synchronized (mergeThread) {
+              try {
+                mergeThread.wait(MERGE_INTERVAL);
+              } catch (InterruptedException e) {
+              }
+            }
           }
         }
       });
-    }
 
-    public void start() {
       this.mergeThread.start();
     }
 

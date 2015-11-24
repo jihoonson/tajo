@@ -24,7 +24,6 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.tajo.ExecutionBlockId;
 import org.apache.tajo.SessionVars;
 import org.apache.tajo.catalog.Schema;
-import org.apache.tajo.catalog.TupleRange;
 import org.apache.tajo.catalog.statistics.FreqHistogram;
 import org.apache.tajo.catalog.statistics.FreqHistogram.FreqBucket;
 import org.apache.tajo.engine.codegen.ExecutorPreCompiler;
@@ -42,9 +41,7 @@ import org.apache.tajo.plan.logical.SortNode;
 import org.apache.tajo.plan.util.PlannerUtil;
 import org.apache.tajo.util.Pair;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.LinkedBlockingDeque;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class ExecutionBlockSharedResource {
@@ -62,7 +59,7 @@ public class ExecutionBlockSharedResource {
   private LogicalNode plan;
   private boolean codeGenEnabled = false;
   private FreqHistogram histogram;
-  private LinkedBlockingDeque<FreqBucket> bucketBuffer;
+  private LinkedBlockingQueue<FreqBucket> bucketBuffer;
 
   public void initialize(final QueryContext context, final String planJson, final boolean prepareStatistics) {
 
@@ -70,10 +67,10 @@ public class ExecutionBlockSharedResource {
       try {
         this.context = context;
         initPlan(planJson);
-        initCodeGeneration();
         if (prepareStatistics) {
           prepareStatistics();
         }
+        initCodeGeneration();
         resourceInitSuccess = true;
       } catch (Throwable t) {
         LOG.error(t);
@@ -93,8 +90,7 @@ public class ExecutionBlockSharedResource {
   private void prepareStatistics() {
     SortNode sortNode = PlannerUtil.findTopNode(plan, NodeType.SORT);
     if (sortNode != null) {
-      histogram = new FreqHistogram(sortNode.getSortKeys());
-      bucketBuffer = new LinkedBlockingDeque<>();
+      bucketBuffer = new LinkedBlockingQueue<>();
     } else {
       throw new IllegalStateException("Cannot find any sort node");
     }
@@ -162,7 +158,7 @@ public class ExecutionBlockSharedResource {
     this.bucketBuffer.add(bucket);
   }
 
-  public LinkedBlockingDeque<FreqBucket> getBucketBuffer() {
+  public LinkedBlockingQueue<FreqBucket> getBucketBuffer() {
     return bucketBuffer;
   }
 
