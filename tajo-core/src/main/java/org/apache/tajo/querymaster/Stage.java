@@ -1283,6 +1283,7 @@ public class Stage implements EventHandler<StageEvent> {
       buckets.removeAll(removed);
     }
 
+    LOG.info("report from " + pullHost);
     for (Bucket b : buckets) {
       LOG.info("reported bucket: " + b);
     }
