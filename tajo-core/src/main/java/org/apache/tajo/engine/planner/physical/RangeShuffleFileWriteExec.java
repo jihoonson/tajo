@@ -73,6 +73,8 @@ public class RangeShuffleFileWriteExec extends UnaryPhysicalExec {
     } else {
       this.meta = CatalogUtil.newTableMeta(plan.getStorageType());
     }
+
+//    this.freqHistogram = context.getSharedResource().getHistogram();
   }
 
   public void init() throws IOException {
@@ -124,8 +126,6 @@ public class RangeShuffleFileWriteExec extends UnaryPhysicalExec {
         if (!prevKeyTuple.isBlank(0)) {
           // [prevKeyTuple, keyTuple)
           updateHistogram(prevKeyTuple, keyTuple, count);
-//          countPerTuples.add(new Pair<>(new VTuple(prevKeyTuple.getValues()), count));
-
         }
         indexWriter.write(keyTuple, offset);
         prevKeyTuple.put(keyTuple.getValues());
@@ -136,11 +136,19 @@ public class RangeShuffleFileWriteExec extends UnaryPhysicalExec {
 
     if (count > 0) {
       updateHistogram(prevKeyTuple, prevKeyTuple, count);
-//      countPerTuples.add(new Pair<>(prevKeyTuple, count));
     }
 
     return null;
   }
+
+//  private void updateHistogram(Tuple start, Tuple end, double card) {
+//    try {
+//      context.getSharedResource().collectStatistics(
+//          freqHistogram.createBucket(new TupleRange(start.clone(), end.clone(), start == end, comp), card));
+//    } catch (CloneNotSupportedException e) {
+//      throw new RuntimeException(e);
+//    }
+//  }
 
   private void updateHistogram(Tuple start, Tuple end, double change) {
     // Set only when start and end are the same instance
@@ -187,7 +195,8 @@ public class RangeShuffleFileWriteExec extends UnaryPhysicalExec {
       histogram.updateBucket(eachKeyAndCard.getFirst(), eachKeyAndCard.getSecond());
     }
     LOG.info("histogram size: " + histogram.size());
-    context.setFreqHistogram(histogram);
+    context.getSharedResource().collectStatistics(histogram);
+//    context.setFreqHistogram(histogram);
     appender = null;
     indexWriter = null;
   }

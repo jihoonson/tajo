@@ -155,7 +155,6 @@ public class TestRangeShuffleFileWriteExec {
 
     }
     exec.close();
-    FreqHistogram histogram = ctx.getFreqHistogram();
 
   }
 }

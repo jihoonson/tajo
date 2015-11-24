@@ -24,6 +24,8 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.tajo.ExecutionBlockId;
 import org.apache.tajo.SessionVars;
 import org.apache.tajo.catalog.Schema;
+import org.apache.tajo.catalog.statistics.FreqHistogram;
+import org.apache.tajo.catalog.statistics.FreqHistogram.FreqBucket;
 import org.apache.tajo.engine.codegen.ExecutorPreCompiler;
 import org.apache.tajo.engine.codegen.TajoClassLoader;
 import org.apache.tajo.engine.json.CoreGsonHelper;
@@ -34,8 +36,12 @@ import org.apache.tajo.engine.utils.TableCacheKey;
 import org.apache.tajo.exception.TajoException;
 import org.apache.tajo.plan.expr.EvalNode;
 import org.apache.tajo.plan.logical.LogicalNode;
+import org.apache.tajo.plan.logical.NodeType;
+import org.apache.tajo.plan.logical.SortNode;
+import org.apache.tajo.plan.util.PlannerUtil;
 import org.apache.tajo.util.Pair;
 
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class ExecutionBlockSharedResource {
@@ -52,13 +58,18 @@ public class ExecutionBlockSharedResource {
   private ExecutorPreCompiler.CompilationContext compilationContext;
   private LogicalNode plan;
   private boolean codeGenEnabled = false;
+  private FreqHistogram histogram;
+  private LinkedBlockingQueue<FreqHistogram> bucketBuffer;
 
-  public void initialize(final QueryContext context, final String planJson) {
+  public void initialize(final QueryContext context, final String planJson, final boolean prepareStatistics) {
 
     if (!initializing.getAndSet(true)) {
       try {
-        ExecutionBlockSharedResource.this.context = context;
+        this.context = context;
         initPlan(planJson);
+        if (prepareStatistics) {
+          prepareStatistics();
+        }
         initCodeGeneration();
         resourceInitSuccess = true;
       } catch (Throwable t) {
@@ -74,6 +85,16 @@ public class ExecutionBlockSharedResource {
 
   private void initPlan(String planJson) {
     plan = CoreGsonHelper.fromJson(planJson, LogicalNode.class);
+  }
+
+  private void prepareStatistics() {
+    SortNode sortNode = PlannerUtil.findTopNode(plan, NodeType.SORT);
+    if (sortNode != null) {
+      histogram = new FreqHistogram(sortNode.getSortKeys());
+      bucketBuffer = new LinkedBlockingQueue<>();
+    } else {
+      throw new IllegalStateException("Cannot find any sort node");
+    }
   }
 
   private void initCodeGeneration() throws TajoException {
@@ -134,6 +155,18 @@ public class ExecutionBlockSharedResource {
     TableCache.getInstance().releaseCache(id);
   }
 
+  public void collectStatistics(FreqHistogram bucket) {
+    this.bucketBuffer.add(bucket);
+  }
+
+  public LinkedBlockingQueue<FreqHistogram> getBucketBuffer() {
+    return bucketBuffer;
+  }
+
+  public FreqHistogram getHistogram() {
+    return histogram;
+  }
+
   public void release() {
     compilationContext = null;
 
@@ -144,6 +177,15 @@ public class ExecutionBlockSharedResource {
         throwable.printStackTrace();
       }
       classLoader = null;
+    }
+
+    if (histogram != null) {
+      histogram.clear();
+      histogram = null;
+    }
+    if (bucketBuffer != null) {
+      bucketBuffer.clear();
+      bucketBuffer = null;
     }
   }
 }

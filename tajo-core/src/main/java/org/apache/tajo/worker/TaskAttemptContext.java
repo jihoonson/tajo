@@ -61,7 +61,7 @@ public class TaskAttemptContext {
 
   private volatile TaskAttemptState state;
   private TableStats resultStats;
-  private FreqHistogram freqHistogram;
+//  private FreqHistogram freqHistogram;
   private TaskAttemptId taskId;
   private final Path workDir;
   private boolean needFetch = false;
@@ -192,17 +192,17 @@ public class TaskAttemptContext {
     return this.resultStats;
   }
 
-  public boolean hasFreqHistogram() {
-    return freqHistogram != null;
-  }
-
-  public void setFreqHistogram(FreqHistogram freqHistogram) {
-    this.freqHistogram = freqHistogram;
-  }
-
-  public FreqHistogram getFreqHistogram() {
-    return freqHistogram;
-  }
+//  public boolean hasFreqHistogram() {
+//    return freqHistogram != null;
+//  }
+//
+//  public void setFreqHistogram(FreqHistogram freqHistogram) {
+//    this.freqHistogram = freqHistogram;
+//  }
+//
+//  public FreqHistogram getFreqHistogram() {
+//    return freqHistogram;
+//  }
 
   public boolean isStopped() {
     return this.stopped;
