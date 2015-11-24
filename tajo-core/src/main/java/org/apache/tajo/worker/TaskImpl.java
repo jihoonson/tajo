@@ -352,12 +352,11 @@ public class TaskImpl implements Task {
       } while (it.hasNext());
     }
 
-    if (context.hasFreqHistogram()) {
-      // TODO: range sampling
-      builder.setFreqHistogram(context.getFreqHistogram().getProto());
-      context.getFreqHistogram().clear();
-      context.setFreqHistogram(null);
-    }
+//    if (context.hasFreqHistogram()) {
+//      builder.setFreqHistogram(context.getFreqHistogram().getProto());
+//      context.getFreqHistogram().clear();
+//      context.setFreqHistogram(null);
+//    }
 
     return builder.build();
   }

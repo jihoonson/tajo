@@ -46,9 +46,6 @@ public class FreqHistogram extends Histogram implements ProtoObject<FreqHistogra
 
   public FreqHistogram(SortSpec[] sortSpec, List<FreqBucket> buckets) {
     this(sortSpec);
-//    for (FreqBucket bucket : buckets) {
-//      this.buckets.put(bucket.key, bucket);
-//    }
     this.buckets.addAll(buckets);
   }
 
@@ -60,51 +57,20 @@ public class FreqHistogram extends Histogram implements ProtoObject<FreqHistogra
     Schema keySchema = HistogramUtil.sortSpecsToSchema(sortSpecs);
     this.sortSpecs = sortSpecs;
     this.comparator = new BaseTupleComparator(keySchema, sortSpecs);
-//    buckets = new TreeMap<>();
-//    for (FreqBucketProto eachBucketProto : proto.getBucketsList()) {
-//      FreqBucket bucket = new FreqBucket(eachBucketProto);
-//      buckets.put(bucket.key, bucket);
-//    }
     buckets = new TreeSet<>();
     for (FreqBucketProto eachProto : proto.getBucketsList()) {
       buckets.add(new FreqBucket(eachProto));
     }
   }
 
-//  public void updateBucket(Tuple startKey, Tuple endKey, double change) {
-//    updateBucket(startKey, endKey, change, false);
-//  }
-//
-//  public void updateBucket(Tuple startKey, Tuple endKey, double change, boolean endKeyInclusive) {
-//    // TODO: normalize length
-//    TupleRange key = new TupleRange(startKey, endKey, comparator);
-//    updateBucket(key, change, endKeyInclusive);
-//  }
-//
   /**
    *
    * @param key
    * @param change
    */
   public void updateBucket(TupleRange key, double change) {
-//    if (buckets.containsKey(key)) {
-//      getBucket(key).incCount(change);
-//    } else {
-//      buckets.put(key, new FreqBucket(key, change));
-//    }
     buckets.add(new FreqBucket(key, change));
   }
-//
-//  public void updateBucket(TupleRange key, double change, boolean endKeyInclusive) {
-//    updateBucket(key, change);
-//    if (endKeyInclusive) {
-//      buckets.get(key).setEndKeyInclusive();
-//    }
-//  }
-
-//  public Bucket getBucket(Tuple startKey, Tuple endKey, boolean endInclusive) {
-//    return getBucket(new TupleRange(startKey, endKey, endInclusive, comparator));
-//  }
 
   @Override
   public FreqHistogramProto getProto() {
@@ -116,6 +82,10 @@ public class FreqHistogram extends Histogram implements ProtoObject<FreqHistogra
       builder.addBuckets(((FreqBucket)bucket).getProto());
     }
     return builder.build();
+  }
+
+  public FreqBucket createBucket(TupleRange key, double card) {
+    return new FreqBucket(key, card);
   }
 
   public class FreqBucket extends Bucket

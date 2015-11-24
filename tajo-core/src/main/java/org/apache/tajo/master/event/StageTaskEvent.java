@@ -29,19 +29,21 @@ import org.apache.tajo.master.TaskState;
 public class StageTaskEvent extends StageEvent {
   private TaskId taskId;
   private TaskState state;
-  @Nullable
-  private FreqHistogram histogram;
+//  @Nullable
+//  private FreqHistogram histogram;
 
   public StageTaskEvent(TaskId taskId, TaskState state) {
-    this(taskId, state, null);
-  }
-
-  public StageTaskEvent(TaskId taskId, TaskState state, @Nullable FreqHistogram histogram) {
     super(taskId.getExecutionBlockId(), StageEventType.SQ_TASK_COMPLETED);
     this.taskId = taskId;
     this.state = state;
-    this.histogram = histogram;
   }
+
+//  public StageTaskEvent(TaskId taskId, TaskState state, @Nullable FreqHistogram histogram) {
+//    super(taskId.getExecutionBlockId(), StageEventType.SQ_TASK_COMPLETED);
+//    this.taskId = taskId;
+//    this.state = state;
+//    this.histogram = histogram;
+//  }
 
   public TaskId getTaskId() {
     return this.taskId;
@@ -51,7 +53,7 @@ public class StageTaskEvent extends StageEvent {
     return state;
   }
 
-  public FreqHistogram getHistogram() {
-    return histogram;
-  }
+//  public FreqHistogram getHistogram() {
+//    return histogram;
+//  }
 }
