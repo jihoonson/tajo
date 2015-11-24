@@ -47,7 +47,7 @@ public class MasterFreqHistogram extends Histogram {
   }
 
   public void merge(AnalyzedSortSpec[] analyzedSpecs, FreqHistogram other, PullHost pullHost, int maxSize) {
-    final boolean mergeWithBucketMerge = this.size() + other.size() <= maxSize;
+//    final boolean mergeWithBucketMerge = this.size() + other.size() <= maxSize;
 
     List<Bucket> thisBuckets = new ArrayList<>(this.getSortedBuckets());
     List<Bucket> otherBuckets = new ArrayList<>(other.getSortedBuckets());
@@ -83,11 +83,11 @@ public class MasterFreqHistogram extends Histogram {
         }
       } else {
         Pair<Bucket, Bucket> result;
-        if (mergeWithBucketMerge) {
-          result = mergeWithBucketMerge(thisBucket, otherBucket, smallStartBucket, largeStartBucket);
-        } else {
-          result = mergeWithBucketSplit(analyzedSpecs, pullHost, thisBucket, otherBucket, smallStartBucket, largeStartBucket);
-        }
+//        if (mergeWithBucketMerge) {
+//          result = mergeWithBucketMerge(thisBucket, otherBucket, smallStartBucket, largeStartBucket);
+//        } else {
+//        }
+        result = mergeWithBucketSplit(analyzedSpecs, pullHost, thisBucket, otherBucket, smallStartBucket, largeStartBucket);
         thisBucket = (BucketWithLocation) result.getFirst();
         otherBucket = (BucketWithLocation) result.getSecond();
       }
