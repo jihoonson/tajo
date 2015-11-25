@@ -392,10 +392,7 @@ public class TajoPullServerService extends AbstractService {
 
     public void decrementRemainFiles(FileRegion filePart, long fileStartTime) {
       long fileSendTime = System.currentTimeMillis() - fileStartTime;
-      if (fileSendTime > 20 * 1000) {
-        LOG.info("PullServer send too long time: filePos=" + filePart.position() + ", fileLen=" + filePart.count());
-         SLOW_FILE_UPDATER.compareAndSet(this, numSlowFile, numSlowFile+ 1);
-      }
+
       if (fileSendTime > maxTime) {
         maxTime = fileSendTime;
       }
@@ -403,12 +400,20 @@ public class TajoPullServerService extends AbstractService {
         minTime = fileSendTime;
       }
 
+      if (fileSendTime > 20 * 1000) {
+        LOG.warn("PullServer send too long time: filePos:" + filePart.position()
+            + ", fileLen:" + filePart.count() + ", URI:" + requestUri);
+        SLOW_FILE_UPDATER.compareAndSet(this, numSlowFile, numSlowFile + 1);
+      }
+
       REMAIN_FILE_UPDATER.compareAndSet(this, remainFiles, remainFiles - 1);
       if (REMAIN_FILE_UPDATER.get(this) <= 0) {
         processingStatusMap.remove(requestUri);
-        LOG.info("PullServer processing status: totalTime=" + (System.currentTimeMillis() - startTime) + " ms, "
-            + "makeFileListTime=" + makeFileListTime + " ms, minTime=" + minTime + " ms, maxTime=" + maxTime + " ms, "
-            + "numFiles=" + numFiles + ", numSlowFile=" + numSlowFile);
+        if(LOG.isDebugEnabled()) {
+          LOG.debug("PullServer processing status: totalTime=" + (System.currentTimeMillis() - startTime) + " ms, "
+              + "makeFileListTime=" + makeFileListTime + " ms, minTime=" + minTime + " ms, maxTime=" + maxTime + " ms, "
+              + "numFiles=" + numFiles + ", numSlowFile=" + numSlowFile);
+        }
       }
     }
   }
@@ -431,7 +436,10 @@ public class TajoPullServerService extends AbstractService {
     @Override
     public void channelRegistered(ChannelHandlerContext ctx) throws Exception {
       accepted.add(ctx.channel());
-      LOG.info(String.format("Current number of shuffle connections (%d)", accepted.size()));
+
+      if(LOG.isDebugEnabled()) {
+        LOG.debug(String.format("Current number of shuffle connections (%d)", accepted.size()));
+      }
       super.channelRegistered(ctx);
     }
 
@@ -483,27 +491,31 @@ public class TajoPullServerService extends AbstractService {
 
       // if a stage requires a range shuffle
       if (shuffleType.equals("r")) {
-        Path outputPath = StorageUtil.concatPath(queryBaseDir, taskIds.get(0), "output");
-        if (!lDirAlloc.ifExists(outputPath.toString(), conf)) {
-          LOG.warn(outputPath + "does not exist.");
-          sendError(ctx, HttpResponseStatus.NO_CONTENT);
-          return;
-        }
-        Path path = localFS.makeQualified(lDirAlloc.getLocalPathToRead(outputPath.toString(), conf));
-        String startKey = params.get("start").get(0);
-        String endKey = params.get("end").get(0);
-        boolean last = params.get("final") != null;
+        // TODO: iterating task ids
+        for (String eachTaskId : taskIds) {
+          Path outputPath = StorageUtil.concatPath(queryBaseDir, eachTaskId, "output");
+          if (!lDirAlloc.ifExists(outputPath.toString(), conf)) {
+            LOG.warn(outputPath + "does not exist.");
+            sendError(ctx, HttpResponseStatus.NO_CONTENT);
+//            return;
+            continue;
+          }
+          Path path = localFS.makeQualified(lDirAlloc.getLocalPathToRead(outputPath.toString(), conf));
+          String startKey = params.get("start").get(0);
+          String endKey = params.get("end").get(0);
+          boolean last = params.get("final") != null;
 
-        FileChunk chunk;
-        try {
-          chunk = getFileChunks(path, startKey, endKey, last);
-        } catch (Throwable t) {
-          LOG.error("ERROR Request: " + request.getUri(), t);
-          sendError(ctx, "Cannot get file chunks to be sent", HttpResponseStatus.BAD_REQUEST);
-          return;
-        }
-        if (chunk != null) {
-          chunks.add(chunk);
+          FileChunk chunk;
+          try {
+            chunk = getFileChunks(path, startKey, endKey, last);
+          } catch (Throwable t) {
+            LOG.error("ERROR Request: " + request.getUri(), t);
+            sendError(ctx, "Cannot get file chunks to be sent", HttpResponseStatus.BAD_REQUEST);
+            return;
+          }
+          if (chunk != null) {
+            chunks.add(chunk);
+          }
         }
 
         // if a stage requires a hash shuffle or a scattered hash shuffle
@@ -556,6 +568,7 @@ public class TajoPullServerService extends AbstractService {
         long totalSize = 0;
         for (FileChunk chunk : file) {
           totalSize += chunk.length();
+          HttpHeaders.addHeader(response, "offset", chunk.length());
         }
         HttpHeaders.setContentLength(response, totalSize);
 
@@ -572,6 +585,7 @@ public class TajoPullServerService extends AbstractService {
             return;
           }
         }
+
         if (ctx.pipeline().get(SslHandler.class) == null) {
           writeFuture = ctx.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT);
         } else {

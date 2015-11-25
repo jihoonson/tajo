@@ -26,6 +26,7 @@ import io.netty.handler.codec.http.*;
 import io.netty.handler.timeout.ReadTimeoutException;
 import io.netty.handler.timeout.ReadTimeoutHandler;
 import io.netty.util.ReferenceCountUtil;
+import org.apache.commons.io.FileUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.io.IOUtils;
@@ -33,6 +34,7 @@ import org.apache.tajo.TajoProtos;
 import org.apache.tajo.conf.TajoConf;
 import org.apache.tajo.pullserver.retriever.FileChunk;
 import org.apache.tajo.rpc.NettyUtils;
+import org.apache.tajo.util.StringUtils;
 
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -41,6 +43,8 @@ import java.io.RandomAccessFile;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.channels.FileChannel;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -66,6 +70,7 @@ public class Fetcher {
   private TajoProtos.FetcherState state;
 
   private Bootstrap bootstrap;
+  List<Long> lengths = new ArrayList<>();
 
   public Fetcher(TajoConf conf, URI uri, FileChunk chunk) {
     this.uri = uri;
@@ -122,12 +127,15 @@ public class Fetcher {
     return messageReceiveCount;
   }
 
-  public FileChunk get() throws IOException {
+//  public FileChunk get() throws IOException {
+  public List<FileChunk> get() throws IOException {
+    List<FileChunk> fileChunks = new ArrayList<>();
     if (useLocalFile) {
       startTime = System.currentTimeMillis();
       finishTime = System.currentTimeMillis();
       state = TajoProtos.FetcherState.FETCH_FINISHED;
-      return fileChunk;
+      fileChunks.add(fileChunk);
+      return fileChunks;
     }
 
     this.startTime = System.currentTimeMillis();
@@ -152,7 +160,9 @@ public class Fetcher {
       request.headers().set(HttpHeaders.Names.CONNECTION, HttpHeaders.Values.CLOSE);
       request.headers().set(HttpHeaders.Names.ACCEPT_ENCODING, HttpHeaders.Values.GZIP);
 
-      LOG.info("Status: " + getState() + ", URI:" + uri);
+      if(LOG.isDebugEnabled()) {
+        LOG.info("Status: " + getState() + ", URI:" + uri);
+      }
       // Send the HTTP request.
       channel.writeAndFlush(request);
 
@@ -160,7 +170,18 @@ public class Fetcher {
       channel.closeFuture().syncUninterruptibly();
 
       fileChunk.setLength(fileChunk.getFile().length());
-      return fileChunk;
+//      return fileChunk;
+
+      long start = 0;
+      for (int i = 0; i < lengths.size(); i++) {
+        FileChunk chunk = new FileChunk(fileChunk.getFile(), start, lengths.get(i));
+        chunk.setEbId(fileChunk.getEbId());
+        chunk.setFromRemote(fileChunk.fromRemote());
+        fileChunks.add(chunk);
+        start += lengths.get(i);
+      }
+      return fileChunks;
+
     } finally {
       if(future != null && future.channel().isOpen()){
         // Close the channel to exit.
@@ -168,7 +189,17 @@ public class Fetcher {
       }
 
       this.finishTime = System.currentTimeMillis();
-      LOG.info("Fetcher finished:" + (finishTime - startTime) + " ms, " + getState() + ", URI:" + uri);
+      long elapsedMills = finishTime - startTime;
+      String transferSpeed;
+      if(elapsedMills > 1000) {
+        long bytePerSec = ((fileChunk.length() * 1000) / elapsedMills) / 1000;
+        transferSpeed = FileUtils.byteCountToDisplaySize(bytePerSec);
+      } else {
+        transferSpeed = FileUtils.byteCountToDisplaySize(Math.max(fileChunk.length(), 0));
+      }
+
+      LOG.info(String.format("Fetcher :%d ms elapsed. %s/sec, len:%d, state:%s, URL:%s",
+          elapsedMills, transferSpeed, fileChunk.length(), getState(), uri));
     }
   }
 
@@ -213,6 +244,10 @@ public class Fetcher {
                 }
               }
             }
+            for (String stringOffset : response.headers().getAll("offset")) {
+              lengths.add(Long.parseLong(stringOffset));
+            }
+            LOG.info("lengths: " + StringUtils.join(lengths));
           }
           if (LOG.isDebugEnabled()) {
             LOG.debug(sb.toString());

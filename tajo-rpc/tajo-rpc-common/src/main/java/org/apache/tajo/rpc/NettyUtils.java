@@ -54,7 +54,8 @@ public final class NettyUtils {
   static {
     if (RpcConstants.IS_TEST_MODE) {
       /* Disable pooling buffers for memory usage  */
-      ALLOCATOR = UnpooledByteBufAllocator.DEFAULT;
+//      ALLOCATOR = UnpooledByteBufAllocator.DEFAULT;
+      ALLOCATOR = PooledByteBufAllocator.DEFAULT;
 
       /* if you are finding memory leak, please enable this line */
       ResourceLeakDetector.setLevel(ResourceLeakDetector.Level.ADVANCED);
