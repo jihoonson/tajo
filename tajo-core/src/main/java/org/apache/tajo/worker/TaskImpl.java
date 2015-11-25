@@ -114,7 +114,9 @@ public class TaskImpl implements Task {
     this.descs = Maps.newHashMap();
 
     Path baseDirPath = executionBlockContext.createBaseDir();
-    LOG.info("Task basedir is created (" + baseDirPath +")");
+
+    if(LOG.isDebugEnabled()) LOG.debug("Task basedir is created (" + baseDirPath +")");
+
     TaskAttemptId taskAttemptId = request.getId();
 
     this.taskDir = StorageUtil.concatPath(baseDirPath,
@@ -151,24 +153,21 @@ public class TaskImpl implements Task {
 
     this.localChunks = Collections.synchronizedList(new ArrayList<>());
     this.remoteChunks = Collections.synchronizedList(new ArrayList<>());
-    LOG.info("==================================");
-    LOG.info("* Stage " + request.getId() + " is initialized");
-    LOG.info("* InterQuery: " + interQuery
-        + (interQuery ? ", Use " + this.shuffleType + " shuffle" : "") +
-        ", Fragments (num: " + request.getFragments().size() + ")" +
-        ", Fetches (total:" + request.getFetches().size() + ") :");
+
+    LOG.info(String.format("* Task %s is initialized. InterQuery: %b, Shuffle: %s, Fragments: %d, Fetches:%d, " +
+        "Local dir: %s", request.getId(), interQuery, shuffleType, request.getFragments().size(),
+        request.getFetches().size(), taskDir));
 
     if(LOG.isDebugEnabled()) {
       for (FetchImpl f : request.getFetches()) {
         LOG.debug("Table Id: " + f.getName() + ", Simple URIs: " + f.getSimpleURIs());
       }
     }
-    LOG.info("* Local task dir: " + taskDir);
+
     if(LOG.isDebugEnabled()) {
       LOG.debug("* plan:\n");
       LOG.debug(plan.toString());
     }
-    LOG.info("==================================");
   }
 
   private void updateDescsForScanNodes(NodeType nodeType) {
@@ -196,7 +195,6 @@ public class TaskImpl implements Task {
 
   @Override
   public void init() throws IOException {
-    LOG.info("Initializing: " + getId());
 
     initPlan();
     startScriptExecutors();
@@ -215,8 +213,10 @@ public class TaskImpl implements Task {
         for (String inputTable : context.getInputTables()) {
           tableDir = new Path(inputTableBaseDir, inputTable);
           if (!localFS.exists(tableDir)) {
-            LOG.info("the directory is created  " + tableDir.toUri());
             localFS.mkdirs(tableDir);
+            if(LOG.isDebugEnabled()) {
+              LOG.debug("the directory is created  " + tableDir.toUri());
+            }
           }
         }
       }
@@ -461,11 +461,8 @@ public class TaskImpl implements Task {
         queryMasterStub.done(null, report, NullCallback.get());
       }
       endTime = System.currentTimeMillis();
-      LOG.info(context.getTaskId() + " completed. " +
-          "Worker's task counter - total:" + executionBlockContext.completedTasksNum.intValue() +
-          ", succeeded: " + executionBlockContext.succeededTasksNum.intValue()
-          + ", killed: " + executionBlockContext.killedTasksNum.intValue()
-          + ", failed: " + executionBlockContext.failedTasksNum.intValue());
+      LOG.info(String.format("%s is complete. %d ms elapsed, final state:%s",
+          context.getTaskId(), endTime - startTime, context.getState()));
     }
   }
 
