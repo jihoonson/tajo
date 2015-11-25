@@ -567,13 +567,11 @@ public class TaskImpl implements Task {
 //      tablet = new FileFragment(name, fs.makeQualified(f.getPath()), 0l, f.getLen());
 //      listTablets.add(tablet);
 //    }
-
-    synchronized (remoteChunks) {
-      for (FileChunk chunk : remoteChunks) {
-        if (name.equals(chunk.getEbId())) {
-          tablet = new FileFragment(name, fs.makeQualified(new Path(chunk.getFile().getPath())), chunk.startOffset(), chunk.length());
-          listTablets.add(tablet);
-        }
+    
+    for (FileChunk chunk : remoteChunks) {
+      if (name.equals(chunk.getEbId())) {
+        tablet = new FileFragment(name, fs.makeQualified(new Path(chunk.getFile().getPath())), chunk.startOffset(), chunk.length());
+        listTablets.add(tablet);
       }
     }
 
