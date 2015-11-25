@@ -49,6 +49,7 @@ import org.apache.tajo.plan.serder.PlanProto.DistinctGroupbyEnforcer.MultipleAgg
 import org.apache.tajo.plan.serder.PlanProto.EnforceProperty;
 import org.apache.tajo.plan.util.PlannerUtil;
 import org.apache.tajo.querymaster.Task.IntermediateEntry;
+import org.apache.tajo.querymaster.Task.PullHost;
 import org.apache.tajo.storage.*;
 import org.apache.tajo.storage.fragment.FileFragment;
 import org.apache.tajo.storage.fragment.Fragment;
@@ -699,15 +700,20 @@ public class Repartitioner {
         new String[]{UNKNOWN_HOST});
     Stage.scheduleFragment(stage, dummyFragment);
 
-    List<FetchImpl> fetches = new ArrayList<>();
+//    List<FetchImpl> fetches = new ArrayList<>();
+    Map<PullHost, FetchImpl> fetches = new HashMap<>();
     List<ExecutionBlock> childBlocks = masterPlan.getChilds(stage.getId());
     for (ExecutionBlock childBlock : childBlocks) {
       Stage childExecSM = stage.getContext().getStage(childBlock.getId());
       for (Task qu : childExecSM.getTasks()) {
         for (IntermediateEntry p : qu.getIntermediateData()) {
-          FetchImpl fetch = new FetchImpl(p.getPullHost(), RANGE_SHUFFLE, childBlock.getId(), 0);
-          fetch.addPart(p.getTaskId(), p.getAttemptId());
-          fetches.add(fetch);
+          if (fetches.containsKey(p.getPullHost())) {
+            fetches.get(p.getPullHost()).addPart(p.getTaskId(), p.getAttemptId());
+          } else {
+            FetchImpl fetch = new FetchImpl(p.getPullHost(), RANGE_SHUFFLE, childBlock.getId(), 0);
+            fetch.addPart(p.getTaskId(), p.getAttemptId());
+            fetches.put(p.getPullHost(), fetch);
+          }
         }
       }
     }
@@ -720,9 +726,9 @@ public class Repartitioner {
       RowStoreUtil.RowStoreEncoder encoder = RowStoreUtil.createEncoder(sortSchema);
       for (int i = 0; i < ranges.length; i++) {
         fetchSet = new HashSet<>();
-        for (FetchImpl fetch: fetches) {
-          String rangeParam =
-              TupleUtil.rangeToQuery(ranges[i], i == (ranges.length - 1) , encoder);
+        String rangeParam =
+            TupleUtil.rangeToQuery(ranges[i], i == (ranges.length - 1) , encoder);
+        for (FetchImpl fetch: fetches.values()) {
           FetchImpl copy = null;
           try {
             copy = fetch.clone();
