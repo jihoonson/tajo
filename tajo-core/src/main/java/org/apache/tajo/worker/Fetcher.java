@@ -169,7 +169,7 @@ public class Fetcher {
       // Wait for the server to close the connection. throw exception if failed
       channel.closeFuture().syncUninterruptibly();
 
-//      fileChunk.setLength(fileChunk.getFile().length());
+      fileChunk.setLength(fileChunk.getFile().length());
 //      return fileChunk;
 
       long start = 0;
