@@ -701,7 +701,6 @@ public class Repartitioner {
     Stage.scheduleFragment(stage, dummyFragment);
 
 //    List<FetchImpl> fetches = new ArrayList<>();
-    int maxFetchNumPerHost = schedulerContext.getMasterContext().getConf().getIntVar(ConfVars.WORKER_RESOURCE_AVAILABLE_CPU_CORES);
     Map<PullHost, List<FetchImpl>> fetches = new HashMap<>();
     List<ExecutionBlock> childBlocks = masterPlan.getChilds(stage.getId());
     for (ExecutionBlock childBlock : childBlocks) {
@@ -709,15 +708,7 @@ public class Repartitioner {
       for (Task qu : childExecSM.getTasks()) {
         for (IntermediateEntry p : qu.getIntermediateData()) {
           if (fetches.containsKey(p.getPullHost())) {
-            List<FetchImpl> fetchList = fetches.get(p.getPullHost());
-            FetchImpl last = fetchList.get(fetchList.size() - 1);
-            if (last.getTaskIds().size() < maxFetchNumPerHost) {
-              last.addPart(p.getTaskId(), p.getAttemptId());
-            } else {
-              FetchImpl fetch = new FetchImpl(p.getPullHost(), RANGE_SHUFFLE, childBlock.getId(), 0);
-              fetch.addPart(p.getTaskId(), p.getAttemptId());
-              fetchList.add(fetch);
-            }
+            fetches.get(p.getPullHost()).get(0).addPart(p.getTaskId(), p.getAttemptId());
           } else {
             FetchImpl fetch = new FetchImpl(p.getPullHost(), RANGE_SHUFFLE, childBlock.getId(), 0);
             fetch.addPart(p.getTaskId(), p.getAttemptId());
@@ -726,6 +717,22 @@ public class Repartitioner {
             fetches.put(p.getPullHost(), list);
           }
         }
+      }
+    }
+
+    int maxFetchNumPerHost = schedulerContext.getMasterContext().getConf().getIntVar(ConfVars.WORKER_RESOURCE_AVAILABLE_CPU_CORES);
+    for (List<FetchImpl> fetchList : fetches.values()) {
+      FetchImpl first = fetchList.get(0);
+      List<Integer> taskIds = new ArrayList<>(first.getTaskIds());
+      List<Integer> attemptIds = new ArrayList<>(first.getAttemptIds());
+      first.getTaskIds().clear();
+      first.getAttemptIds().clear();
+      int listLen = Math.min(maxFetchNumPerHost, taskIds.size());
+      for (int i = 1; i < listLen; i++) {
+        fetchList.add(new FetchImpl(first.getPullHost(), RANGE_SHUFFLE, first.getExecutionBlockId(), 0));
+      }
+      for (int i = 0; i < taskIds.size(); i++) {
+        fetchList.get(i % listLen).addPart(taskIds.get(i), attemptIds.get(i));
       }
     }
 
