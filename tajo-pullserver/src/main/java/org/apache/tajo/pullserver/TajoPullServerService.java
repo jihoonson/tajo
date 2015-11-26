@@ -359,16 +359,16 @@ public class TajoPullServerService extends AbstractService {
   }
 
 
-//  Map<String, ProcessingStatus> processingStatusMap = new ConcurrentHashMap<>();
+  Map<String, ProcessingStatus> processingStatusMap = new ConcurrentHashMap<>();
 
-//  public void completeFileChunk(FileRegion filePart,
-//                                   String requestUri,
-//                                   long startTime) {
-//    ProcessingStatus status = processingStatusMap.get(requestUri);
-//    if (status != null) {
-//      status.decrementRemainFiles(filePart, startTime);
-//    }
-//  }
+  public void completeFileChunk(FileRegion filePart,
+                                   String requestUri,
+                                   long startTime) {
+    ProcessingStatus status = processingStatusMap.get(requestUri);
+    if (status != null) {
+      status.decrementRemainFiles(filePart, startTime);
+    }
+  }
 
   class ProcessingStatus {
     String requestUri;
@@ -408,7 +408,7 @@ public class TajoPullServerService extends AbstractService {
 
       REMAIN_FILE_UPDATER.compareAndSet(this, remainFiles, remainFiles - 1);
       if (REMAIN_FILE_UPDATER.get(this) <= 0) {
-//        processingStatusMap.remove(requestUri);
+        processingStatusMap.remove(requestUri);
         if(LOG.isDebugEnabled()) {
           LOG.debug("PullServer processing status: totalTime=" + (System.currentTimeMillis() - startTime) + " ms, "
               + "makeFileListTime=" + makeFileListTime + " ms, minTime=" + minTime + " ms, maxTime=" + maxTime + " ms, "
@@ -452,8 +452,8 @@ public class TajoPullServerService extends AbstractService {
         return;
       }
 
-//      ProcessingStatus processingStatus = new ProcessingStatus(request.getUri().toString());
-//      processingStatusMap.put(request.getUri().toString(), processingStatus);
+      ProcessingStatus processingStatus = new ProcessingStatus(request.getUri().toString());
+      processingStatusMap.put(request.getUri().toString(), processingStatus);
 
       // Parsing the URL into key-values
       Map<String, List<String>> params = null;
@@ -487,7 +487,7 @@ public class TajoPullServerService extends AbstractService {
         LOG.debug("PullServer baseDir: " + conf.get(ConfVars.WORKER_TEMPORAL_DIR.varname) + "/" + queryBaseDir);
       }
 
-//      final List<FileChunk> chunks = Lists.newArrayList();
+      final List<FileChunk> chunks = Lists.newArrayList();
 
       // if a stage requires a range shuffle
       long before = System.currentTimeMillis();
