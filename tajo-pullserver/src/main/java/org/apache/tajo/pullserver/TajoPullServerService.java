@@ -490,6 +490,7 @@ public class TajoPullServerService extends AbstractService {
       final List<FileChunk> chunks = Lists.newArrayList();
 
       // if a stage requires a range shuffle
+      long before = System.currentTimeMillis();
       if (shuffleType.equals("r")) {
         // TODO: iterating task ids
         for (String eachTaskId : taskIds) {
@@ -517,6 +518,8 @@ public class TajoPullServerService extends AbstractService {
             chunks.add(chunk);
           }
         }
+        long after = System.currentTimeMillis();
+        System.out.println("Index lookup time: " + (after - before) + " ms");
 
         // if a stage requires a hash shuffle or a scattered hash shuffle
       } else if (shuffleType.equals("h") || shuffleType.equals("s")) {
@@ -698,7 +701,7 @@ public class TajoPullServerService extends AbstractService {
           + ", decoded byte size: " + endBytes.length, t);
     }
 
-    LOG.info("GET Request for " + data.getAbsolutePath() + " (start="+start+", end="+ end +
+    LOG.debug("GET Request for " + data.getAbsolutePath() + " (start="+start+", end="+ end +
         (last ? ", last=true" : "") + ")");
 
     if (idxReader.getFirstKey() == null && idxReader.getLastKey() == null) { // if # of rows is zero
