@@ -727,7 +727,7 @@ public class Repartitioner {
       List<Integer> attemptIds = new ArrayList<>(first.getAttemptIds());
       first.getTaskIds().clear();
       first.getAttemptIds().clear();
-      int listLen = Math.min(maxFetchNumPerHost, (int) Math.ceil(taskIds.size() / ranges.length));
+      int listLen = Math.min(maxFetchNumPerHost, taskIds.size());
       for (int i = 1; i < listLen; i++) {
         fetchList.add(new FetchImpl(first.getPullHost(), RANGE_SHUFFLE, first.getExecutionBlockId(), 0));
       }
