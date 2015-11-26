@@ -720,7 +720,8 @@ public class Repartitioner {
       }
     }
 
-    int maxFetchNumPerHost = schedulerContext.getMasterContext().getConf().getIntVar(ConfVars.WORKER_RESOURCE_AVAILABLE_CPU_CORES);
+//    int maxFetchNumPerHost = schedulerContext.getMasterContext().getConf().getIntVar(ConfVars.WORKER_RESOURCE_AVAILABLE_CPU_CORES);
+    int maxFetchNumPerHost = 1;
     for (List<FetchImpl> fetchList : fetches.values()) {
       FetchImpl first = fetchList.get(0);
       List<Integer> taskIds = new ArrayList<>(first.getTaskIds());
