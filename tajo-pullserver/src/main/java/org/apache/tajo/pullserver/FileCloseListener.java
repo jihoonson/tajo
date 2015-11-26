@@ -20,6 +20,7 @@ package org.apache.tajo.pullserver;
 
 import io.netty.channel.ChannelFuture;
 import io.netty.util.concurrent.GenericFutureListener;
+import org.apache.commons.io.FileUtils;
 
 public class FileCloseListener implements GenericFutureListener<ChannelFuture> {
 
@@ -49,5 +50,9 @@ public class FileCloseListener implements GenericFutureListener<ChannelFuture> {
     if (pullServerService != null) {
       pullServerService.completeFileChunk(filePart, requestUri, startTime);
     }
+    long endTime = System.currentTimeMillis();
+    long length = (filePart.count() - filePart.position());
+    long time = endTime - startTime;
+    System.err.println("Fetch completed: " + requestUri + ", " + (FileUtils.byteCountToDisplaySize((length * 1000) / time)));
   }
 }
