@@ -701,6 +701,7 @@ public class Repartitioner {
     Stage.scheduleFragment(stage, dummyFragment);
 
 //    List<FetchImpl> fetches = new ArrayList<>();
+    int maxFetchNumPerHost = schedulerContext.getMasterContext().getConf().getIntVar(ConfVars.WORKER_RESOURCE_AVAILABLE_CPU_CORES);
     Map<PullHost, List<FetchImpl>> fetches = new HashMap<>();
     List<ExecutionBlock> childBlocks = masterPlan.getChilds(stage.getId());
     for (ExecutionBlock childBlock : childBlocks) {
@@ -708,7 +709,15 @@ public class Repartitioner {
       for (Task qu : childExecSM.getTasks()) {
         for (IntermediateEntry p : qu.getIntermediateData()) {
           if (fetches.containsKey(p.getPullHost())) {
-            fetches.get(p.getPullHost()).get(0).addPart(p.getTaskId(), p.getAttemptId());
+            List<FetchImpl> fetchList = fetches.get(p.getPullHost());
+            FetchImpl last = fetchList.get(fetchList.size() - 1);
+            if (last.getTaskIds().size() < maxFetchNumPerHost) {
+              last.addPart(p.getTaskId(), p.getAttemptId());
+            } else {
+              FetchImpl fetch = new FetchImpl(p.getPullHost(), RANGE_SHUFFLE, childBlock.getId(), 0);
+              fetch.addPart(p.getTaskId(), p.getAttemptId());
+              fetchList.add(fetch);
+            }
           } else {
             FetchImpl fetch = new FetchImpl(p.getPullHost(), RANGE_SHUFFLE, childBlock.getId(), 0);
             fetch.addPart(p.getTaskId(), p.getAttemptId());
@@ -718,18 +727,6 @@ public class Repartitioner {
           }
         }
       }
-    }
-
-    for (Entry<PullHost, List<FetchImpl>> entry : fetches.entrySet()) {
-      FetchImpl origin = entry.getValue().get(0);
-      List<Integer> taskIds = entry.getValue().get(0).getTaskIds();
-      List<Integer> attemptIds = entry.getValue().get(0).getAttemptIds();
-      int n = taskIds.size() / 2;
-      FetchImpl fetch = new FetchImpl(origin.getPullHost(), RANGE_SHUFFLE, origin.getExecutionBlockId(), 0);
-      while (taskIds.size() > n) {
-        fetch.addPart(taskIds.remove(0), attemptIds.remove(0));
-      }
-      fetches.get(entry.getKey()).add(fetch);
     }
 
     SortedMap<TupleRange, Collection<FetchImpl>> map;
