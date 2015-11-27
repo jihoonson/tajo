@@ -543,7 +543,9 @@ public class TajoPullServerService extends AbstractService {
           sendError(ctx, errorMessage, HttpResponseStatus.BAD_REQUEST);
           return;
         }
-        LOG.info("RequestURL: " + request.getUri() + ", fileLen=" + file.length());
+        if (LOG.isDebugEnabled()) {
+          LOG.debug("RequestURL: " + request.getUri() + ", fileLen=" + file.length());
+        }
         FileChunk chunk = new FileChunk(file, startPos, readLen);
         chunks.add(chunk);
       } else {
@@ -626,7 +628,7 @@ public class TajoPullServerService extends AbstractService {
           writeFuture = ctx.write(new HttpChunkedInput(chunk));
         }
       } catch (FileNotFoundException e) {
-        LOG.info(file.getFile() + " not found");
+        LOG.fatal(file.getFile() + " not found");
         return null;
       } catch (Throwable e) {
         if (spill != null) {
@@ -701,18 +703,24 @@ public class TajoPullServerService extends AbstractService {
           + ", decoded byte size: " + endBytes.length, t);
     }
 
-    LOG.debug("GET Request for " + data.getAbsolutePath() + " (start="+start+", end="+ end +
-        (last ? ", last=true" : "") + ")");
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("GET Request for " + data.getAbsolutePath() + " (start=" + start + ", end=" + end +
+          (last ? ", last=true" : "") + ")");
+    }
 
     if (idxReader.getFirstKey() == null && idxReader.getLastKey() == null) { // if # of rows is zero
-      LOG.info("There is no contents");
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("There is no contents");
+      }
       return null;
     }
 
     if (comparator.compare(end, idxReader.getFirstKey()) < 0 ||
         comparator.compare(idxReader.getLastKey(), start) < 0) {
-      LOG.warn("Out of Scope (indexed data [" + idxReader.getFirstKey() + ", " + idxReader.getLastKey() +
-          "], but request start:" + start + ", end: " + end);
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("Out of Scope (indexed data [" + idxReader.getFirstKey() + ", " + idxReader.getLastKey() +
+            "], but request start:" + start + ", end: " + end);
+      }
       return null;
     }
 
