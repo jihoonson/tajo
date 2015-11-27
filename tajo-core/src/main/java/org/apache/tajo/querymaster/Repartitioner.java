@@ -21,6 +21,7 @@ package org.apache.tajo.querymaster;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import org.apache.commons.codec.binary.*;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.fs.Path;
@@ -60,12 +61,15 @@ import org.apache.tajo.util.Pair;
 import org.apache.tajo.util.TUtil;
 import org.apache.tajo.util.TajoIdUtils;
 import org.apache.tajo.worker.FetchImpl;
+import org.apache.tajo.worker.FetchImpl.RangeParam;
 
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.math.BigInteger;
 import java.net.URI;
+import java.net.URLEncoder;
 import java.util.*;
+import java.util.Base64;
 import java.util.Map.Entry;
 import java.util.stream.Collectors;
 
@@ -729,28 +733,22 @@ public class Repartitioner {
     map = new TreeMap<>();
 
     Set<FetchProto> fetchSet;
-    try {
-      RowStoreUtil.RowStoreEncoder encoder = RowStoreUtil.createEncoder(sortSchema);
-      for (int i = 0; i < ranges.length; i++) {
-        fetchSet = new HashSet<>();
-        String rangeParam =
-            TupleUtil.rangeToQuery(ranges[i], i == (ranges.length - 1) , encoder);
-        for (FetchImpl fetch : fetches.values()) {
-          FetchImpl copy = null;
-          try {
-            copy = fetch.clone();
-          } catch (CloneNotSupportedException e) {
-            throw new RuntimeException(e);
-          }
-          copy.setRangeParams(rangeParam);
-          fetchSet.add(copy.getProto());
+    RowStoreUtil.RowStoreEncoder encoder = RowStoreUtil.createEncoder(sortSchema);
+    for (int i = 0; i < ranges.length; i++) {
+      fetchSet = new HashSet<>();
+      RangeParam rangeParam = new RangeParam(ranges[i], i == (ranges.length - 1), encoder);
+      for (FetchImpl fetch : fetches.values()) {
+        FetchImpl copy = null;
+        try {
+          copy = fetch.clone();
+        } catch (CloneNotSupportedException e) {
+          throw new RuntimeException(e);
         }
-
-        map.put(ranges[i], fetchSet);
+        copy.setRangeParams(rangeParam);
+        fetchSet.add(copy.getProto());
       }
 
-    } catch (UnsupportedEncodingException e) {
-      LOG.error(e);
+      map.put(ranges[i], fetchSet);
     }
 
     scheduleFetchesByRoundRobin(stage, map, scan.getTableName(), determinedTaskNum);
@@ -1107,6 +1105,28 @@ public class Repartitioner {
     return createFetchURL(fetch, false);
   }
 
+  private static String getRangeParam(FetchProto proto) {
+    StringBuilder sb = new StringBuilder();
+    String firstKeyBase64 = new String(org.apache.commons.codec.binary.Base64.encodeBase64(proto.getRangeStart().toByteArray()));
+    String lastKeyBase64 = new String(org.apache.commons.codec.binary.Base64.encodeBase64(proto.getRangeEnd().toByteArray()));
+
+    try {
+      sb.append("start=")
+          .append(URLEncoder.encode(firstKeyBase64, "utf-8"))
+          .append("&")
+          .append("end=")
+          .append(URLEncoder.encode(lastKeyBase64, "utf-8"));
+    } catch (UnsupportedEncodingException e) {
+      throw new RuntimeException(e);
+    }
+
+    if (proto.getRangeLastInclusive()) {
+      sb.append("&final=true");
+    }
+
+    return sb.toString();
+  }
+
   public static List<URI> createFetchURL(FetchProto fetch, boolean includeParts) {
     String scheme = "http://";
 
@@ -1120,7 +1140,7 @@ public class Repartitioner {
     if (fetch.getType() == HASH_SHUFFLE) {
       urlPrefix.append("h");
     } else if (fetch.getType() == RANGE_SHUFFLE) {
-      urlPrefix.append("r").append("&").append(fetch.getRangeParams());
+      urlPrefix.append("r").append("&").append(getRangeParam(fetch));
     } else if (fetch.getType() == SCATTERED_HASH_SHUFFLE) {
       urlPrefix.append("s");
     }
