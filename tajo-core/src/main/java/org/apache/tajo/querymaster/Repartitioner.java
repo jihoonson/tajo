@@ -734,6 +734,7 @@ public class Repartitioner {
 
     Set<FetchProto> fetchSet;
     RowStoreUtil.RowStoreEncoder encoder = RowStoreUtil.createEncoder(sortSchema);
+    long size = 0;
     for (int i = 0; i < ranges.length; i++) {
       fetchSet = new HashSet<>();
       RangeParam rangeParam = new RangeParam(ranges[i], i == (ranges.length - 1), encoder);
@@ -745,11 +746,15 @@ public class Repartitioner {
           throw new RuntimeException(e);
         }
         copy.setRangeParams(rangeParam);
-        fetchSet.add(copy.getProto());
+        FetchProto proto = copy.getProto();
+        fetchSet.add(proto);
+        size += proto.getSerializedSize();
       }
 
       map.put(ranges[i], fetchSet);
     }
+
+    LOG.info("ranges.length: " + ranges.length + " size: " + size);
 
     scheduleFetchesByRoundRobin(stage, map, scan.getTableName(), determinedTaskNum);
 
