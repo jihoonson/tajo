@@ -25,8 +25,10 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.fs.Path;
 import org.apache.tajo.ExecutionBlockId;
+import org.apache.tajo.ResourceProtos.FetchProto;
 import org.apache.tajo.SessionVars;
 import org.apache.tajo.algebra.JoinType;
+import org.apache.tajo.annotation.NotNull;
 import org.apache.tajo.catalog.*;
 import org.apache.tajo.catalog.statistics.StatisticsUtil;
 import org.apache.tajo.catalog.statistics.TableStats;
@@ -65,6 +67,7 @@ import java.math.BigInteger;
 import java.net.URI;
 import java.util.*;
 import java.util.Map.Entry;
+import java.util.stream.Collectors;
 
 import static org.apache.tajo.plan.serder.PlanProto.ShuffleType;
 import static org.apache.tajo.plan.serder.PlanProto.ShuffleType.*;
@@ -547,12 +550,13 @@ public class Repartitioner {
 
   private static void addJoinShuffle(Stage stage, int partitionId,
                                      Map<ExecutionBlockId, List<IntermediateEntry>> grouppedPartitions) {
-    Map<String, List<FetchImpl>> fetches = new HashMap<>();
+    Map<String, List<FetchProto>> fetches = new HashMap<>();
     for (ExecutionBlock execBlock : stage.getMasterPlan().getChilds(stage.getId())) {
       if (grouppedPartitions.containsKey(execBlock.getId())) {
-        Collection<FetchImpl> requests = mergeShuffleRequest(partitionId, HASH_SHUFFLE,
+        String name = execBlock.getId().toString();
+        List<FetchProto> requests = mergeShuffleRequest(name, partitionId, HASH_SHUFFLE,
             grouppedPartitions.get(execBlock.getId()));
-        fetches.put(execBlock.getId().toString(), Lists.newArrayList(requests));
+        fetches.put(name, requests);
       }
     }
 
@@ -569,9 +573,10 @@ public class Repartitioner {
    *
    * @return key: pullserver's address, value: a list of requests
    */
-  private static Collection<FetchImpl> mergeShuffleRequest(int partitionId,
-                                                          ShuffleType type,
-                                                          List<IntermediateEntry> partitions) {
+  private static List<FetchProto> mergeShuffleRequest(final String fetchName,
+                                                      final int partitionId,
+                                                      final ShuffleType type,
+                                                      final List<IntermediateEntry> partitions) {
     // ebId + pullhost -> FetchImmpl
     Map<String, FetchImpl> mergedPartitions = new HashMap<>();
 
@@ -583,12 +588,15 @@ public class Repartitioner {
         fetch.addPart(partition.getTaskId(), partition.getAttemptId());
       } else {
         // In some cases like union each IntermediateEntry has different EBID.
-        FetchImpl fetch = new FetchImpl(partition.getPullHost(), type, partition.getEbId(), partitionId);
+        FetchImpl fetch = new FetchImpl(partition.getPullHost(), type, partition.getEbId(), partitionId, fetchName);
         fetch.addPart(partition.getTaskId(), partition.getAttemptId());
         mergedPartitions.put(mergedKey, fetch);
       }
     }
-    return mergedPartitions.values();
+
+    return mergedPartitions.values().stream()
+        .map(fetch -> fetch.getProto())
+        .collect(Collectors.toList());
   }
 
   public static void scheduleFragmentsForNonLeafTasks(TaskSchedulerContext schedulerContext,
@@ -700,65 +708,44 @@ public class Repartitioner {
         new String[]{UNKNOWN_HOST});
     Stage.scheduleFragment(stage, dummyFragment);
 
-//    List<FetchImpl> fetches = new ArrayList<>();
-    Map<PullHost, List<FetchImpl>> fetches = new HashMap<>();
+    Map<PullHost, FetchImpl> fetches = new HashMap<>();
     List<ExecutionBlock> childBlocks = masterPlan.getChilds(stage.getId());
     for (ExecutionBlock childBlock : childBlocks) {
       Stage childExecSM = stage.getContext().getStage(childBlock.getId());
       for (Task qu : childExecSM.getTasks()) {
         for (IntermediateEntry p : qu.getIntermediateData()) {
           if (fetches.containsKey(p.getPullHost())) {
-            fetches.get(p.getPullHost()).get(0).addPart(p.getTaskId(), p.getAttemptId());
+            fetches.get(p.getPullHost()).addPart(p.getTaskId(), p.getAttemptId());
           } else {
-            FetchImpl fetch = new FetchImpl(p.getPullHost(), RANGE_SHUFFLE, childBlock.getId(), 0);
+            FetchImpl fetch = new FetchImpl(p.getPullHost(), RANGE_SHUFFLE, childBlock.getId(), 0, scan.getTableName());
             fetch.addPart(p.getTaskId(), p.getAttemptId());
-            List<FetchImpl> list = new ArrayList<>();
-            list.add(fetch);
-            fetches.put(p.getPullHost(), list);
+            fetches.put(p.getPullHost(), fetch);
           }
         }
       }
     }
 
-//    int maxFetchNumPerHost = schedulerContext.getMasterContext().getConf().getIntVar(ConfVars.WORKER_RESOURCE_AVAILABLE_CPU_CORES);
-    int maxFetchNumPerHost = 1;
-    for (List<FetchImpl> fetchList : fetches.values()) {
-      FetchImpl first = fetchList.get(0);
-      List<Integer> taskIds = new ArrayList<>(first.getTaskIds());
-      List<Integer> attemptIds = new ArrayList<>(first.getAttemptIds());
-      first.getTaskIds().clear();
-      first.getAttemptIds().clear();
-      int listLen = Math.min(maxFetchNumPerHost, taskIds.size());
-      for (int i = 1; i < listLen; i++) {
-        fetchList.add(new FetchImpl(first.getPullHost(), RANGE_SHUFFLE, first.getExecutionBlockId(), 0));
-      }
-      for (int i = 0; i < taskIds.size(); i++) {
-        fetchList.get(i % listLen).addPart(taskIds.get(i), attemptIds.get(i));
-      }
-    }
-
-    SortedMap<TupleRange, Collection<FetchImpl>> map;
+    SortedMap<TupleRange, Collection<FetchProto>> map;
     map = new TreeMap<>();
 
-    Set<FetchImpl> fetchSet;
+    Set<FetchProto> fetchSet;
     try {
       RowStoreUtil.RowStoreEncoder encoder = RowStoreUtil.createEncoder(sortSchema);
       for (int i = 0; i < ranges.length; i++) {
         fetchSet = new HashSet<>();
         String rangeParam =
             TupleUtil.rangeToQuery(ranges[i], i == (ranges.length - 1) , encoder);
-        for (List<FetchImpl> fetchList: fetches.values()) {
-          for (FetchImpl fetch : fetchList) {
-            FetchImpl copy = null;
-            try {
-              copy = fetch.clone();
-            } catch (CloneNotSupportedException e) {
-              throw new RuntimeException(e);
-            }
-            copy.setRangeParams(rangeParam);
-            fetchSet.add(copy);
+        for (FetchImpl fetch : fetches.values()) {
+          FetchImpl copy = null;
+          try {
+            copy = fetch.clone();
+          } catch (CloneNotSupportedException e) {
+            throw new RuntimeException(e);
           }
+          copy.setRangeParams(rangeParam);
+          fetchSet.add(copy.getProto());
         }
+
         map.put(ranges[i], fetchSet);
       }
 
@@ -771,20 +758,20 @@ public class Repartitioner {
     schedulerContext.setEstimatedTaskNum(determinedTaskNum);
   }
 
-  public static void scheduleFetchesByRoundRobin(Stage stage, Map<?, Collection<FetchImpl>> partitions,
-                                                   String tableName, int num) {
+  public static void scheduleFetchesByRoundRobin(Stage stage, Map<?, Collection<FetchProto>> partitions,
+                                                 String tableName, int num) {
     int i;
-    Map<String, List<FetchImpl>>[] fetchesArray = new Map[num];
+    Map<String, List<FetchProto>>[] fetchesArray = new Map[num];
     for (i = 0; i < num; i++) {
       fetchesArray[i] = new HashMap<>();
     }
     i = 0;
-    for (Entry<?, Collection<FetchImpl>> entry : partitions.entrySet()) {
-      Collection<FetchImpl> value = entry.getValue();
+    for (Entry<?, Collection<FetchProto>> entry : partitions.entrySet()) {
+      Collection<FetchProto> value = entry.getValue();
       TUtil.putCollectionToNestedList(fetchesArray[i++], tableName, value);
       if (i == num) i = 0;
     }
-    for (Map<String, List<FetchImpl>> eachFetches : fetchesArray) {
+    for (Map<String, List<FetchProto>> eachFetches : fetchesArray) {
       Stage.scheduleFetches(stage, eachFetches);
     }
   }
@@ -810,6 +797,10 @@ public class Repartitioner {
 
     public long getVolume() {
       return totalVolume;
+    }
+
+    public List<FetchProto> getFetchProtos() {
+      return fetchUrls.stream().map(fetch -> fetch.getProto()).collect(Collectors.toList());
     }
 
   }
@@ -849,7 +840,7 @@ public class Repartitioner {
         for (Entry<Task.PullHost, List<IntermediateEntry>> e : hashedByHost.entrySet()) {
 
           FetchImpl fetch = new FetchImpl(e.getKey(), channel.getShuffleType(),
-              block.getId(), interm.getKey(), e.getValue());
+              block.getId(), interm.getKey(), scan.getTableName(), e.getValue());
 
           long volumeSum = 0;
           for (IntermediateEntry ie : e.getValue()) {
@@ -918,20 +909,16 @@ public class Repartitioner {
     }
   }
 
-  public static Pair<Long [], Map<String, List<FetchImpl>>[]> makeEvenDistributedFetchImpl(
+  public static Pair<Long [], Map<String, List<FetchProto>>[]> makeEvenDistributedFetchImpl(
       Map<Integer, FetchGroupMeta> partitions, String tableName, int num) {
 
     // Sort fetchGroupMeta in a descending order of data volumes.
     List<FetchGroupMeta> fetchGroupMetaList = Lists.newArrayList(partitions.values());
-    Collections.sort(fetchGroupMetaList, new Comparator<FetchGroupMeta>() {
-      @Override
-      public int compare(FetchGroupMeta o1, FetchGroupMeta o2) {
-        return o1.getVolume() < o2.getVolume() ? 1 : (o1.getVolume() > o2.getVolume() ? -1 : 0);
-      }
-    });
+    Collections.sort(fetchGroupMetaList, (o1, o2) ->
+        o1.getVolume() < o2.getVolume() ? 1 : (o1.getVolume() > o2.getVolume() ? -1 : 0));
 
     // Initialize containers
-    Map<String, List<FetchImpl>>[] fetchesArray = new Map[num];
+    Map<String, List<FetchProto>>[] fetchesArray = new Map[num];
     Long [] assignedVolumes = new Long[num];
     // initialization
     for (int i = 0; i < num; i++) {
@@ -952,7 +939,7 @@ public class Repartitioner {
         FetchGroupMeta fetchGroupMeta = iterator.next();
         assignedVolumes[p] += fetchGroupMeta.getVolume();
 
-        TUtil.putCollectionToNestedList(fetchesArray[p], tableName, fetchGroupMeta.fetchUrls);
+        TUtil.putCollectionToNestedList(fetchesArray[p], tableName, fetchGroupMeta.getFetchProtos());
         p++;
       }
 
@@ -960,13 +947,13 @@ public class Repartitioner {
       while (p >= 0 && iterator.hasNext()) {
         FetchGroupMeta fetchGroupMeta = iterator.next();
         assignedVolumes[p] += fetchGroupMeta.getVolume();
-        TUtil.putCollectionToNestedList(fetchesArray[p], tableName, fetchGroupMeta.fetchUrls);
+        TUtil.putCollectionToNestedList(fetchesArray[p], tableName, fetchGroupMeta.getFetchProtos());
 
         // While the current one is smaller than next one, it adds additional fetches to current one.
         while(iterator.hasNext() && (p > 0 && assignedVolumes[p - 1] > assignedVolumes[p])) {
           FetchGroupMeta additionalFetchGroup = iterator.next();
           assignedVolumes[p] += additionalFetchGroup.getVolume();
-          TUtil.putCollectionToNestedList(fetchesArray[p], tableName, additionalFetchGroup.fetchUrls);
+          TUtil.putCollectionToNestedList(fetchesArray[p], tableName, additionalFetchGroup.getFetchProtos());
         }
 
         p--;
@@ -978,9 +965,9 @@ public class Repartitioner {
 
   public static void scheduleFetchesByEvenDistributedVolumes(Stage stage, Map<Integer, FetchGroupMeta> partitions,
                                                              String tableName, int num) {
-    Map<String, List<FetchImpl>>[] fetchsArray = makeEvenDistributedFetchImpl(partitions, tableName, num).getSecond();
+    Map<String, List<FetchProto>>[] fetchsArray = makeEvenDistributedFetchImpl(partitions, tableName, num).getSecond();
     // Schedule FetchImpls
-    for (Map<String, List<FetchImpl>> eachFetches : fetchsArray) {
+    for (Map<String, List<FetchProto>> eachFetches : fetchsArray) {
       Stage.scheduleFetches(stage, eachFetches);
     }
   }
@@ -1003,7 +990,7 @@ public class Repartitioner {
       throw new RuntimeException("tajo.dist-query.table-partition.task-volume-mb should be great than " +
           "tajo.shuffle.hash.appender.page.volumn-mb");
     }
-    List<List<FetchImpl>> fetches = new ArrayList<>();
+    List<List<FetchProto>> fetches = new ArrayList<>();
 
     long totalIntermediateSize = 0L;
     for (Entry<ExecutionBlockId, List<IntermediateEntry>> listEntry : intermediates.entrySet()) {
@@ -1023,7 +1010,7 @@ public class Repartitioner {
 
       // Grouping or splitting to fit $DIST_QUERY_TABLE_PARTITION_VOLUME size
       for (List<IntermediateEntry> partitionEntries : partitionIntermMap.values()) {
-        List<List<FetchImpl>> eachFetches = splitOrMergeIntermediates(listEntry.getKey(), partitionEntries,
+        List<List<FetchProto>> eachFetches = splitOrMergeIntermediates(tableName, listEntry.getKey(), partitionEntries,
             splitVolume, pageSize);
         if (eachFetches != null && !eachFetches.isEmpty()) {
           fetches.addAll(eachFetches);
@@ -1034,8 +1021,8 @@ public class Repartitioner {
     schedulerContext.setEstimatedTaskNum(fetches.size());
 
     int i = 0;
-    Map<String, List<FetchImpl>>[] fetchesArray = new Map[fetches.size()];
-    for(List<FetchImpl> entry : fetches) {
+    Map<String, List<FetchProto>>[] fetchesArray = new Map[fetches.size()];
+    for(List<FetchProto> entry : fetches) {
       fetchesArray[i] = new HashMap<>();
       fetchesArray[i].put(tableName, entry);
 
@@ -1057,16 +1044,16 @@ public class Repartitioner {
    * @param splitVolume
    * @return
    */
-  public static List<List<FetchImpl>> splitOrMergeIntermediates(
+  public static List<List<FetchProto>> splitOrMergeIntermediates(@NotNull  String fetchName,
       ExecutionBlockId ebId, List<IntermediateEntry> entries, long splitVolume, long pageSize) {
     // Each List<FetchImpl> has splitVolume size.
-    List<List<FetchImpl>> fetches = new ArrayList<>();
+    List<List<FetchProto>> fetches = new ArrayList<>();
 
     Iterator<IntermediateEntry> iter = entries.iterator();
     if (!iter.hasNext()) {
       return null;
     }
-    List<FetchImpl> fetchListForSingleTask = new ArrayList<>();
+    List<FetchProto> fetchListForSingleTask = new ArrayList<>();
     long fetchListVolume = 0;
 
     while (iter.hasNext()) {
@@ -1093,10 +1080,10 @@ public class Repartitioner {
           fetchListVolume = 0;
         }
         FetchImpl fetch = new FetchImpl(currentInterm.getPullHost(), SCATTERED_HASH_SHUFFLE,
-            ebId, currentInterm.getPartId(), TUtil.newList(currentInterm));
+            ebId, currentInterm.getPartId(), fetchName, TUtil.newList(currentInterm));
         fetch.setOffset(eachSplit.getFirst());
         fetch.setLength(eachSplit.getSecond());
-        fetchListForSingleTask.add(fetch);
+        fetchListForSingleTask.add(fetch.getProto());
         fetchListVolume += eachSplit.getSecond();
       }
     }
@@ -1106,13 +1093,28 @@ public class Repartitioner {
     return fetches;
   }
 
-  public static List<URI> createFetchURL(FetchImpl fetch, boolean includeParts) {
+  /**
+   * Get the pull server URIs.
+   */
+  public static List<URI> createFullURIs(FetchProto fetch) {
+    return createFetchURL(fetch, true);
+  }
+
+  /**
+   * Get the pull server URIs without repeated parameters.
+   */
+  public static List<URI> createSimpleURIs(FetchProto fetch) {
+    return createFetchURL(fetch, false);
+  }
+
+  public static List<URI> createFetchURL(FetchProto fetch, boolean includeParts) {
     String scheme = "http://";
 
     StringBuilder urlPrefix = new StringBuilder(scheme);
-    urlPrefix.append(fetch.getPullHost().getHost()).append(":").append(fetch.getPullHost().getPort()).append("/?")
-        .append("qid=").append(fetch.getExecutionBlockId().getQueryId().toString())
-        .append("&sid=").append(fetch.getExecutionBlockId().getId())
+    ExecutionBlockId ebId = new ExecutionBlockId(fetch.getExecutionBlockId());
+    urlPrefix.append(fetch.getHost()).append(":").append(fetch.getPort()).append("/?")
+        .append("qid=").append(ebId.getQueryId().toString())
+        .append("&sid=").append(ebId.getId())
         .append("&p=").append(fetch.getPartitionId())
         .append("&type=");
     if (fetch.getType() == HASH_SHUFFLE) {
@@ -1138,8 +1140,8 @@ public class Repartitioner {
         // The below code transforms a long request to multiple requests.
         List<String> taskIdsParams = new ArrayList<>();
         StringBuilder taskIdListBuilder = new StringBuilder();
-        List<Integer> taskIds = fetch.getTaskIds();
-        List<Integer> attemptIds = fetch.getAttemptIds();
+        List<Integer> taskIds = fetch.getTaskIdList();
+        List<Integer> attemptIds = fetch.getAttemptIdList();
         boolean first = true;
 
         for (int i = 0; i < taskIds.size(); i++) {

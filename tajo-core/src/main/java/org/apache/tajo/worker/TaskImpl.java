@@ -53,6 +53,7 @@ import org.apache.tajo.plan.serder.PlanProto.ShuffleType;
 import org.apache.tajo.plan.util.PlannerUtil;
 import org.apache.tajo.pullserver.TajoPullServerService;
 import org.apache.tajo.pullserver.retriever.FileChunk;
+import org.apache.tajo.querymaster.Repartitioner;
 import org.apache.tajo.rpc.NullCallback;
 import org.apache.tajo.storage.*;
 import org.apache.tajo.storage.fragment.FileFragment;
@@ -159,8 +160,8 @@ public class TaskImpl implements Task {
         request.getFetches().size(), taskDir));
 
     if(LOG.isDebugEnabled()) {
-      for (FetchImpl f : request.getFetches()) {
-        LOG.debug("Table Id: " + f.getName() + ", Simple URIs: " + f.getSimpleURIs());
+      for (FetchProto f : request.getFetches()) {
+        LOG.debug("Table Id: " + f.getName() + ", Simple URIs: " + Repartitioner.createSimpleURIs(f));
       }
     }
 
@@ -676,7 +677,7 @@ public class TaskImpl implements Task {
   }
 
   private List<Fetcher> getFetchRunners(TaskAttemptContext ctx,
-                                        List<FetchImpl> fetches) throws IOException {
+                                        List<FetchProto> fetches) throws IOException {
 
     if (fetches.size() > 0) {
       Path inputDir = executionBlockContext.getLocalDirAllocator().
@@ -690,14 +691,14 @@ public class TaskImpl implements Task {
       List<FileChunk> storeChunkList = new ArrayList<>();
       List<Fetcher> runnerList = Lists.newArrayList();
 
-      for (FetchImpl f : fetches) {
+      for (FetchProto f : fetches) {
         storeChunkList.clear();
         storeDir = new File(inputDir.toString(), f.getName());
         if (!storeDir.exists()) {
           if (!storeDir.mkdirs()) throw new IOException("Failed to create " + storeDir);
         }
 
-        for (URI uri : f.getURIs()) {
+        for (URI uri : Repartitioner.createFullURIs(f)) {
           defaultStoreFile = new File(storeDir, "in_" + i);
           InetAddress address = InetAddress.getByName(uri.getHost());
 
