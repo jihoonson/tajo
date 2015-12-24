@@ -224,7 +224,7 @@ public class TaskRequestImpl implements TaskRequest {
       return;
     }
     TaskRequestProtoOrBuilder p = viaProto ? proto : builder;
-    this.fetches = new ArrayList<FetchImpl>();
+    this.fetches = new ArrayList<>();
     for(FetchProto fetch : p.getFetchesList()) {
       fetches.add(fetch);
     }

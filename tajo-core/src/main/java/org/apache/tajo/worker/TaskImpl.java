@@ -258,15 +258,18 @@ public class TaskImpl implements Task {
   @Override
   public void fetch(ExecutorService fetcherExecutor) {
     // Sort the execution order of fetch runners to increase the cache hit in pull server
-    fetcherRunners.sort((f1, f2) -> {
-      String strUri = f1.getURI().toString();
-      int index = strUri.lastIndexOf("&ta");
-      String taskIdStr1 = strUri.substring(index + "&ta".length());
+    fetcherRunners.sort(new Comparator<Fetcher>() {
+      @Override
+      public int compare(Fetcher f1, Fetcher f2) {
+        String strUri = f1.getURI().toString();
+        int index = strUri.lastIndexOf("&ta");
+        String taskIdStr1 = strUri.substring(index + "&ta".length());
 
-      strUri = f2.getURI().toString();
-      index = strUri.lastIndexOf("&ta");
-      String taskIdStr2 = strUri.substring(index + "&ta".length());
-      return taskIdStr1.compareTo(taskIdStr2);
+        strUri = f2.getURI().toString();
+        index = strUri.lastIndexOf("&ta");
+        String taskIdStr2 = strUri.substring(index + "&ta".length());
+        return taskIdStr1.compareTo(taskIdStr2);
+      }
     });
 
     for (Fetcher f : fetcherRunners) {

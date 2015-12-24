@@ -50,7 +50,6 @@ import org.apache.tajo.plan.logical.SortNode.SortPurpose;
 import org.apache.tajo.plan.serder.PlanProto.DistinctGroupbyEnforcer.MultipleAggregationStage;
 import org.apache.tajo.plan.serder.PlanProto.EnforceProperty;
 import org.apache.tajo.plan.util.PlannerUtil;
-import org.apache.tajo.pullserver.TajoPullServerService;
 import org.apache.tajo.querymaster.Task.IntermediateEntry;
 import org.apache.tajo.querymaster.Task.PullHost;
 import org.apache.tajo.storage.*;
@@ -70,8 +69,6 @@ import java.net.URI;
 import java.net.URLEncoder;
 import java.util.*;
 import java.util.Map.Entry;
-import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 
 import static org.apache.tajo.plan.serder.PlanProto.ShuffleType;
 import static org.apache.tajo.plan.serder.PlanProto.ShuffleType.*;
@@ -597,9 +594,12 @@ public class Repartitioner {
       }
     }
 
-    return mergedPartitions.values().stream()
-        .map(fetch -> fetch.getProto())
-        .collect(Collectors.toList());
+    List<FetchProto> fetchProtos = new ArrayList<>(mergedPartitions.size());
+    for (FetchImpl eachFetch : mergedPartitions.values()) {
+      fetchProtos.add(eachFetch.getProto());
+    }
+
+    return fetchProtos;
   }
 
   public static void scheduleFragmentsForNonLeafTasks(TaskSchedulerContext schedulerContext,
@@ -757,7 +757,7 @@ public class Repartitioner {
     schedulerContext.setEstimatedTaskNum(determinedTaskNum);
   }
 
-  public static void scheduleFetchesByRoundRobin(Stage stage, Map<?, Collection<FetchImpl>> partitions,
+  public static void scheduleFetchesByRoundRobin(Stage stage, Map<?, Collection<FetchProto>> partitions,
                                                    String tableName, int num) {
     int i;
     Map<String, List<FetchProto>>[] fetchesArray = new Map[num];
@@ -799,7 +799,12 @@ public class Repartitioner {
     }
 
     public List<FetchProto> getFetchProtos() {
-      return fetchUrls.stream().map(fetch -> fetch.getProto()).collect(Collectors.toList());
+      List<FetchProto> fetchProtos = new ArrayList<>(fetchUrls.size());
+      for (FetchImpl eachFetch : fetchUrls) {
+        fetchProtos.add(eachFetch.getProto());
+      }
+
+      return fetchProtos;
     }
 
   }
@@ -914,15 +919,19 @@ public class Repartitioner {
 
     // Sort fetchGroupMeta in a descending order of data volumes.
     List<FetchGroupMeta> fetchGroupMetaList = Lists.newArrayList(partitions.values());
-    Collections.sort(fetchGroupMetaList, (o1, o2) ->
-        o1.getVolume() < o2.getVolume() ? 1 : (o1.getVolume() > o2.getVolume() ? -1 : 0));
+    Collections.sort(fetchGroupMetaList, new Comparator<FetchGroupMeta>() {
+      @Override
+      public int compare(FetchGroupMeta o1, FetchGroupMeta o2) {
+        return o1.getVolume() < o2.getVolume() ? 1 : (o1.getVolume() > o2.getVolume() ? -1 : 0);
+      }
+    });
 
     // Initialize containers
     Map<String, List<FetchProto>>[] fetchesArray = new Map[num];
     Long [] assignedVolumes = new Long[num];
     // initialization
     for (int i = 0; i < num; i++) {
-      fetchesArray[i] = new HashMap<String, List<FetchImpl>>();
+      fetchesArray[i] = new HashMap<>();
       assignedVolumes[i] = 0l;
     }
 
@@ -960,7 +969,7 @@ public class Repartitioner {
       }
     }
 
-    return new Pair<Long[], Map<String, List<FetchImpl>>[]>(assignedVolumes, fetchesArray);
+    return new Pair<>(assignedVolumes, fetchesArray);
   }
 
   public static void scheduleFetchesByEvenDistributedVolumes(Stage stage, Map<Integer, FetchGroupMeta> partitions,
@@ -1076,7 +1085,7 @@ public class Repartitioner {
           if (!fetchListForSingleTask.isEmpty()) {
             fetches.add(fetchListForSingleTask);
           }
-          fetchListForSingleTask = new ArrayList<FetchImpl>();
+          fetchListForSingleTask = new ArrayList<>();
           fetchListVolume = 0;
         }
         FetchImpl fetch = new FetchImpl(fetchName, currentInterm.getPullHost(), SCATTERED_HASH_SHUFFLE,
@@ -1168,10 +1177,16 @@ public class Repartitioner {
         final List<Integer> attemptIds = fetch.getAttemptIdList();
 
         // Sort task ids to increase cache hit in pull server
-        final List<Pair<Integer, Integer>> taskAndAttemptIds = IntStream.range(0, taskIds.size())
-            .mapToObj(i -> new Pair<>(taskIds.get(i), attemptIds.get(i)))
-            .sorted((p1, p2) -> p1.getFirst() - p2.getFirst())
-            .collect(Collectors.toList());
+        final List<Pair<Integer, Integer>> taskAndAttemptIds = new ArrayList<>(taskIds.size());
+        for (int i = 0; i < taskIds.size(); i++) {
+          taskAndAttemptIds.add(new Pair<>(taskIds.get(i), attemptIds.get(i)));
+        }
+        taskAndAttemptIds.sort(new Comparator<Pair<Integer, Integer>>() {
+          @Override
+          public int compare(Pair<Integer, Integer> p1, Pair<Integer, Integer> p2) {
+            return p1.getFirst() - p2.getFirst();
+          }
+        });
 
         boolean first = true;
 

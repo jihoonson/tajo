@@ -117,7 +117,7 @@ public class FetchImpl implements ProtoObject<FetchProto>, Cloneable {
 
   public FetchImpl(String name, Task.PullHost host, ShuffleType type, ExecutionBlockId executionBlockId,
                    int partitionId) {
-    this(name, host, type, executionBlockId, partitionId, null, false, new ArrayList<>(), new ArrayList<>());
+    this(name, host, type, executionBlockId, partitionId, null, false, new ArrayList<Integer>(), new ArrayList<Integer>());
   }
 
   public FetchImpl(String name, Task.PullHost host, ShuffleType type, ExecutionBlockId executionBlockId,

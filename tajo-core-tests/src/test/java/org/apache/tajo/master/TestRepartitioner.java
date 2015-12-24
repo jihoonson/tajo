@@ -37,7 +37,6 @@ import org.junit.Test;
 
 import java.net.URI;
 import java.util.*;
-import java.util.stream.Collectors;
 
 import static junit.framework.Assert.assertEquals;
 import static org.apache.tajo.plan.serder.PlanProto.ShuffleType;
@@ -129,8 +128,10 @@ public class TestRepartitioner {
     }
 
     FetchProto[] expectedProtos = new FetchProto[fetches.length];
-    expectedProtos = Arrays.stream(fetches).map(fetch -> fetch.getProto()).collect(Collectors.toList())
-        .toArray(expectedProtos);
+    for (int i = 0; i < fetches.length; i++) {
+      expectedProtos[i] = fetches[i].getProto();
+    }
+
     Pair<Long [], Map<String, List<FetchProto>>[]> results;
 
     results = Repartitioner.makeEvenDistributedFetchImpl(fetchGroups, tableName, 1);
