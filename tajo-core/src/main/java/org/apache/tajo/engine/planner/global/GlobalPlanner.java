@@ -909,7 +909,7 @@ public class GlobalPlanner {
    */
   private ExecutionBlock buildShuffleAndStorePlanToPartitionedTable(GlobalPlanContext context,
                                                                     StoreTableNode currentNode,
-                                                                    ExecutionBlock lastBlock) {
+                                                                    ExecutionBlock lastBlock) throws TajoException {
     MasterPlan masterPlan = context.plan;
 
     ExecutionBlock nextBlock = masterPlan.newExecutionBlock();
