@@ -29,8 +29,10 @@ import org.apache.hadoop.hive.common.io.DiskRangeList;
 import org.apache.hadoop.hive.ql.io.orc.RecordReaderUtils;
 import org.apache.hadoop.hive.ql.io.orc.SchemaEvolution;
 import org.apache.hadoop.hive.ql.io.orc.TreeReaderFactory;
-import org.apache.hadoop.hive.ql.io.sarg.SearchArgument;
-import org.apache.orc.*;
+import org.apache.orc.CompressionCodec;
+import org.apache.orc.DataReader;
+import org.apache.orc.OrcProto;
+import org.apache.orc.StripeInformation;
 import org.apache.orc.impl.*;
 import org.apache.tajo.catalog.Schema;
 import org.apache.tajo.storage.fragment.FileFragment;
@@ -111,7 +113,7 @@ public class OrcRecordReader implements Closeable {
     // Now that we are creating a record reader for a file, validate that the schema to read
     // is compatible with the file schema.
     //
-    List<OrcProto.Type> schemaTypes = org.apache.orc.OrcUtils.getOrcTypes(target);
+    List<OrcProto.Type> schemaTypes = OrcUtils.getOrcTypes(target);
     treeReaderSchema = SchemaEvolution.validateAndCreate(types, schemaTypes);
 
     this.path = fragment.getPath();
@@ -121,7 +123,7 @@ public class OrcRecordReader implements Closeable {
     this.included = included;
     this.conf = conf;
     this.rowIndexStride = strideRate;
-    this.metadata = new MetadataReaderImpl(fileSystem, path, codec, bufferSize, types.size());
+    this.metadata = new MetadataReader(fileSystem, path, codec, bufferSize, types.size());
 
     long rows = 0;
     long skippedRows = 0;
@@ -415,7 +417,7 @@ public class OrcRecordReader implements Closeable {
     return stripe;
   }
 
-  private void readAllDataStreams(StripeInformation stripe) throws IOException {
+  private void readAllDataStreams(OrcProto.StripeInformation stripe) throws IOException {
     long start = stripe.getIndexLength();
     long end = start + stripe.getDataLength();
     // explicitly trigger 1 big read
