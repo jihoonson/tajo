@@ -18,7 +18,6 @@
 
 package org.apache.tajo.storage.orc2;
 
-import com.facebook.hive.orc.PositionProviderImpl;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -26,14 +25,11 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.common.io.DiskRange;
 import org.apache.hadoop.hive.common.io.DiskRangeList;
-import org.apache.hadoop.hive.ql.io.orc.RecordReaderUtils;
-import org.apache.hadoop.hive.ql.io.orc.SchemaEvolution;
-import org.apache.hadoop.hive.ql.io.orc.TreeReaderFactory;
 import org.apache.orc.CompressionCodec;
 import org.apache.orc.DataReader;
 import org.apache.orc.OrcProto;
-import org.apache.orc.StripeInformation;
 import org.apache.orc.impl.*;
+import org.apache.tajo.catalog.Column;
 import org.apache.tajo.catalog.Schema;
 import org.apache.tajo.storage.fragment.FileFragment;
 
@@ -50,8 +46,7 @@ public class OrcRecordReader implements Closeable {
 
   private final Path path;
   private final long firstRow;
-  private final List<OrcProto.StripeInformation> stripes =
-      new ArrayList<>();
+  private final List<OrcProto.StripeInformation> stripes = new ArrayList<>();
   private OrcProto.StripeFooter stripeFooter;
   private final long totalRowCount;
   private final CompressionCodec codec;
@@ -63,8 +58,7 @@ public class OrcRecordReader implements Closeable {
   private int currentStripe = -1;
   private long rowBaseInStripe = 0;
   private long rowCountInStripe = 0;
-  private final Map<StreamName, InStream> streams =
-      new HashMap<StreamName, InStream>();
+  private final Map<StreamName, InStream> streams = new HashMap<>();
   DiskRangeList bufferChunks = null;
   private final TreeReaderFactory.TreeReader reader;
   private final OrcProto.RowIndex[] indexes;
@@ -97,7 +91,7 @@ public class OrcRecordReader implements Closeable {
   protected OrcRecordReader(List<OrcProto.StripeInformation> stripes,
                             FileSystem fileSystem,
                             Schema schema,
-                            Schema target,
+                            Column[] target,
                             FileFragment fragment,
                             boolean[] included,
                             boolean skipCorruptRecords,
@@ -228,7 +222,7 @@ public class OrcRecordReader implements Closeable {
     }
   }
 
-  private void readPartialDataStreams(StripeInformation stripe) throws IOException {
+  private void readPartialDataStreams(OrcProto.StripeInformation stripe) throws IOException {
     List<OrcProto.Stream> streamList = stripeFooter.getStreamsList();
     DiskRangeList toRead = planReadPartialDataStreams(streamList,
         indexes, included, includedRowGroups, codec != null,
@@ -507,5 +501,24 @@ public class OrcRecordReader implements Closeable {
   public void close() throws IOException {
     clearStreams();
     dataReader.close();
+  }
+
+  public static final class PositionProviderImpl implements PositionProvider {
+    private final OrcProto.RowIndexEntry entry;
+    private int index;
+
+    public PositionProviderImpl(OrcProto.RowIndexEntry entry) {
+      this(entry, 0);
+    }
+
+    public PositionProviderImpl(OrcProto.RowIndexEntry entry, int startPos) {
+      this.entry = entry;
+      this.index = startPos;
+    }
+
+    @Override
+    public long getNext() {
+      return entry.getPositions(index++);
+    }
   }
 }

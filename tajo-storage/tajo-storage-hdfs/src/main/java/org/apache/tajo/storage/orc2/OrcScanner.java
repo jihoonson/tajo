@@ -260,7 +260,7 @@ public class OrcScanner extends FileScanner {
 
     boolean skipCorruptRecords = conf.getBoolean("orc.skip.corrupt-records", false);
 
-    return new OrcRecordReader(this.stripes, fileSystem, fragment,
+    return new OrcRecordReader(this.stripes, fileSystem, schema, targets, fragment,
         include, skipCorruptRecords, types, codec, bufferSize, rowIndexStride, conf);
   }
 

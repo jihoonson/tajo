@@ -34,16 +34,16 @@ import java.util.List;
 
 public class OrcUtils {
 
-  public static List<OrcProto.Type> getOrcTypes(Schema schema) {
+  public static List<OrcProto.Type> getOrcTypes(Column[] columns) {
     List<OrcProto.Type> result = Lists.newArrayList();
-    appendOrcTypes(result, schema);
+    appendOrcTypes(result, columns);
     return result;
   }
 
-  private static void appendOrcTypes(List<OrcProto.Type> result, Schema schema) {
+  private static void appendOrcTypes(List<OrcProto.Type> result, Column[] columns) {
     OrcProto.Type.Builder type = OrcProto.Type.newBuilder();
 
-    for (Column col : schema.getRootColumns()) {
+    for (Column col : columns) {
       switch (col.getTypeDesc().getDataType().getType()) {
         case BOOLEAN:
           type.setKind(OrcProto.Type.Kind.BOOLEAN);

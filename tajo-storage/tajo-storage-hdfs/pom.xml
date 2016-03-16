@@ -362,6 +362,11 @@
       <artifactId>hive-exec</artifactId>
       <version>${hive.version}</version>
     </dependency>
+    <dependency>
+      <groupId>org.apache.hive</groupId>
+      <artifactId>hive-shims</artifactId>
+      <version>${hive.version}</version>
+    </dependency>
 
   </dependencies>
 
