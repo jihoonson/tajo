@@ -33,7 +33,6 @@ import org.apache.orc.FileMetaInfo;
 import org.apache.orc.OrcProto;
 import org.apache.orc.impl.BufferChunk;
 import org.apache.orc.impl.InStream;
-import org.apache.tajo.catalog.Column;
 import org.apache.tajo.catalog.Schema;
 import org.apache.tajo.catalog.TableMeta;
 import org.apache.tajo.plan.expr.EvalNode;
@@ -43,7 +42,6 @@ import org.apache.tajo.storage.fragment.Fragment;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.Arrays;
 import java.util.List;
 
 public class OrcScanner extends FileScanner {
@@ -76,6 +74,8 @@ public class OrcScanner extends FileScanner {
   // Same for metastore cache - maintains the same background buffer, but includes postscript.
   // This will only be set if the file footer/metadata was read from disk.
   private final ByteBuffer footerMetaAndPsBuffer;
+
+  private OrcRecordReader recordReader;
 
   /**
    * Ensure this is an ORC file to prevent users from trying to read text
@@ -156,7 +156,8 @@ public class OrcScanner extends FileScanner {
 
     this.path = this.fragment.getPath();
     this.fileSystem = this.path.getFileSystem(conf);
-    this.maxLength = Integer.parseInt(meta.getOption("max.length"));
+    this.maxLength = meta.containsOption("max.length") ?
+        Integer.parseInt(meta.getOption("max.length")) : Long.MAX_VALUE;
 
     FileMetaInfo footerMetaData = extractMetaInfoFromFooter(fileSystem, path, maxLength);
     this.footerMetaAndPsBuffer = footerMetaData.footerMetaAndPsBuffer;
@@ -253,30 +254,32 @@ public class OrcScanner extends FileScanner {
   }
 
   public OrcRecordReader getRecordReader() throws IOException {
-    boolean[] include = new boolean[schema.size()];
-    for (Column eachTarget : targets) {
-      include[schema.getColumnId(eachTarget.getQualifiedName())] = true;
-    }
-
     boolean skipCorruptRecords = conf.getBoolean("orc.skip.corrupt-records", false);
 
     return new OrcRecordReader(this.stripes, fileSystem, schema, targets, fragment,
-        include, skipCorruptRecords, types, codec, bufferSize, rowIndexStride, conf);
+        skipCorruptRecords, types, codec, bufferSize, rowIndexStride, conf);
+  }
+
+  @Override
+  public void init() throws IOException {
+    recordReader = getRecordReader();
   }
 
   @Override
   public Tuple next() throws IOException {
-    return null;
+    return recordReader.next();
   }
 
   @Override
   public void reset() throws IOException {
-
+    // TODO
   }
 
   @Override
   public void close() throws IOException {
-
+    if (recordReader != null) {
+      recordReader.close();
+    }
   }
 
   @Override
@@ -292,6 +295,11 @@ public class OrcScanner extends FileScanner {
   @Override
   public void setFilter(EvalNode filter) {
     // TODO
+  }
+
+  @Override
+  public float getProgress() {
+    return recordReader == null ? 0.f : recordReader.getProgress();
   }
 
   @Override

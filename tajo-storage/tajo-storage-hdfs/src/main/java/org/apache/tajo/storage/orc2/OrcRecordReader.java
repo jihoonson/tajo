@@ -31,7 +31,10 @@ import org.apache.orc.OrcProto;
 import org.apache.orc.impl.*;
 import org.apache.tajo.catalog.Column;
 import org.apache.tajo.catalog.Schema;
+import org.apache.tajo.storage.Tuple;
+import org.apache.tajo.storage.VTuple;
 import org.apache.tajo.storage.fragment.FileFragment;
+import org.apache.tajo.storage.orc2.TreeReaderFactory.TreeReader;
 
 import java.io.Closeable;
 import java.io.IOException;
@@ -60,14 +63,13 @@ public class OrcRecordReader implements Closeable {
   private long rowCountInStripe = 0;
   private final Map<StreamName, InStream> streams = new HashMap<>();
   DiskRangeList bufferChunks = null;
-  private final TreeReaderFactory.TreeReader reader;
+  private final TreeReaderFactory.TreeReader[] reader;
   private final OrcProto.RowIndex[] indexes;
   private final OrcProto.BloomFilterIndex[] bloomFilterIndices;
-  // an array about which row groups aren't skipped
-  private boolean[] includedRowGroups = null;
   private final Configuration conf;
   private final MetadataReader metadata;
   private final DataReader dataReader;
+  private final Tuple result;
 
   /**
    * Given a list of column names, find the given column and return the index.
@@ -93,7 +95,6 @@ public class OrcRecordReader implements Closeable {
                             Schema schema,
                             Column[] target,
                             FileFragment fragment,
-                            boolean[] included,
                             boolean skipCorruptRecords,
                             List<OrcProto.Type> types,
                             CompressionCodec codec,
@@ -102,20 +103,26 @@ public class OrcRecordReader implements Closeable {
                             Configuration conf
   ) throws IOException {
 
-    TreeReaderFactory.TreeReaderSchema treeReaderSchema;
+    result = new VTuple(target.length);
 
     // Now that we are creating a record reader for a file, validate that the schema to read
     // is compatible with the file schema.
     //
-    List<OrcProto.Type> schemaTypes = OrcUtils.getOrcTypes(target);
-    treeReaderSchema = SchemaEvolution.validateAndCreate(types, schemaTypes);
+//    TreeReaderFactory.TreeReaderSchema treeReaderSchema;
+//    List<OrcProto.Type> schemaTypes = OrcUtils.getOrcTypes(target);
+//    treeReaderSchema = SchemaEvolution.validateAndCreate(types, schemaTypes);
 
+    this.conf = conf;
     this.path = fragment.getPath();
     this.codec = codec;
     this.types = types;
     this.bufferSize = bufferSize;
-    this.included = included;
-    this.conf = conf;
+    this.included = new boolean[schema.size() + 1];
+    included[0] = target.length > 0; // always include root column except when target schema size is 0
+    Schema targetSchema = new Schema(target);
+    for (int i = 1; i < included.length; i++) {
+      included[i] = targetSchema.contains(schema.getColumn(i - 1));
+    }
     this.rowIndexStride = strideRate;
     this.metadata = new MetadataReader(fileSystem, path, codec, bufferSize, types.size());
 
@@ -141,7 +148,11 @@ public class OrcRecordReader implements Closeable {
     totalRowCount = rows;
     Boolean skipCorrupt = skipCorruptRecords;
 
-    reader = TreeReaderFactory.createTreeReader(0, treeReaderSchema, included, skipCorrupt);
+    reader = new TreeReader[target.length];
+    for (int i = 0; i < reader.length; i++) {
+      reader[i] = TreeReaderFactory.createTreeReader(schema.getColumnId(target[i].getQualifiedName()), target[i], skipCorrupt);
+    }
+
     indexes = new OrcProto.RowIndex[types.size()];
     bloomFilterIndices = new OrcProto.BloomFilterIndex[types.size()];
     advanceToNextRow(reader, 0L, true);
@@ -154,18 +165,17 @@ public class OrcRecordReader implements Closeable {
    * @param streamList        the list of streams available
    * @param indexes           the indexes that have been loaded
    * @param includedColumns   which columns are needed
-   * @param includedRowGroups which row groups are needed
    * @param isCompressed      does the file have generic compression
    * @param encodings         the encodings for each column
    * @param types             the types of the columns
    * @param compressionSize   the compression block size
    * @return the list of disk ranges that will be loaded
    */
+  // TODO: verify
   static DiskRangeList planReadPartialDataStreams
   (List<OrcProto.Stream> streamList,
    OrcProto.RowIndex[] indexes,
    boolean[] includedColumns,
-   boolean[] includedRowGroups,
    boolean isCompressed,
    List<OrcProto.ColumnEncoding> encodings,
    List<OrcProto.Type> types,
@@ -184,14 +194,13 @@ public class OrcRecordReader implements Closeable {
           (StreamName.getArea(streamKind) == StreamName.Area.DATA) &&
           includedColumns[column]) {
         // if we aren't filtering or it is a dictionary, load it.
-        if (includedRowGroups == null
-            || RecordReaderUtils.isDictionary(streamKind, encodings.get(column))) {
+//        if (RecordReaderUtils.isDictionary(streamKind, encodings.get(column))) {
           RecordReaderUtils.addEntireStreamToRanges(offset, length, list, doMergeBuffers);
-        } else {
-          RecordReaderUtils.addRgFilteredStreamToRanges(stream, includedRowGroups,
-              isCompressed, indexes[column], encodings.get(column), types.get(column),
-              compressionSize, hasNull[column], offset, length, list, doMergeBuffers);
-        }
+//        } else {
+//          RecordReaderUtils.addRgFilteredStreamToRanges(stream, null,
+//              isCompressed, indexes[column], encodings.get(column), types.get(column),
+//              compressionSize, hasNull[column], offset, length, list, doMergeBuffers);
+//        }
       }
       offset += length;
     }
@@ -225,7 +234,7 @@ public class OrcRecordReader implements Closeable {
   private void readPartialDataStreams(OrcProto.StripeInformation stripe) throws IOException {
     List<OrcProto.Stream> streamList = stripeFooter.getStreamsList();
     DiskRangeList toRead = planReadPartialDataStreams(streamList,
-        indexes, included, includedRowGroups, codec != null,
+        indexes, included, codec != null,
         stripeFooter.getColumnsList(), types, bufferSize, true);
     if (LOG.isDebugEnabled()) {
       LOG.debug("chunks = " + RecordReaderUtils.stringifyDiskRanges(toRead));
@@ -246,27 +255,10 @@ public class OrcRecordReader implements Closeable {
    * @throws IOException
    */
   private boolean advanceToNextRow(
-      TreeReaderFactory.TreeReader reader, long nextRow, boolean canAdvanceStripe)
+      TreeReaderFactory.TreeReader[] reader, long nextRow, boolean canAdvanceStripe)
       throws IOException {
     long nextRowInStripe = nextRow - rowBaseInStripe;
-    // check for row skipping
-    if (rowIndexStride != 0 &&
-        includedRowGroups != null &&
-        nextRowInStripe < rowCountInStripe) {
-      int rowGroup = (int) (nextRowInStripe / rowIndexStride);
-      if (!includedRowGroups[rowGroup]) {
-        while (rowGroup < includedRowGroups.length && !includedRowGroups[rowGroup]) {
-          rowGroup += 1;
-        }
-        if (rowGroup >= includedRowGroups.length) {
-          if (canAdvanceStripe) {
-            advanceStripe();
-          }
-          return canAdvanceStripe;
-        }
-        nextRowInStripe = Math.min(rowCountInStripe, rowGroup * rowIndexStride);
-      }
-    }
+
     if (nextRowInStripe >= rowCountInStripe) {
       if (canAdvanceStripe) {
         advanceStripe();
@@ -277,9 +269,13 @@ public class OrcRecordReader implements Closeable {
       if (rowIndexStride != 0) {
         int rowGroup = (int) (nextRowInStripe / rowIndexStride);
         seekToRowEntry(reader, rowGroup);
-        reader.skipRows(nextRowInStripe - rowGroup * rowIndexStride);
+        for (TreeReaderFactory.TreeReader eachReader : reader) {
+          eachReader.skipRows(nextRowInStripe - rowGroup * rowIndexStride);
+        }
       } else {
-        reader.skipRows(nextRowInStripe - rowInStripe);
+        for (TreeReaderFactory.TreeReader eachReader : reader) {
+          eachReader.skipRows(nextRowInStripe - rowInStripe);
+        }
       }
       rowInStripe = nextRowInStripe;
     }
@@ -290,16 +286,22 @@ public class OrcRecordReader implements Closeable {
     return rowInStripe < rowCountInStripe;
   }
 
-  public Object next(Object previous) throws IOException {
-    try {
-      final Object result = reader.next(previous);
-      // find the next row
-      rowInStripe += 1;
-      advanceToNextRow(reader, rowInStripe + rowBaseInStripe, true);
-      return result;
-    } catch (IOException e) {
-      // Rethrow exception with file name in log message
-      throw new IOException("Error reading file: " + path, e);
+  public Tuple next() throws IOException {
+    if (hasNext()) {
+      try {
+        for (int i = 0; i < reader.length; i++) {
+          result.put(i, reader[i].next());
+        }
+        // find the next row
+        rowInStripe += 1;
+        advanceToNextRow(reader, rowInStripe + rowBaseInStripe, true);
+        return result;
+      } catch (IOException e) {
+        // Rethrow exception with file name in log message
+        throw new IOException("Error reading file: " + path, e);
+      }
+    } else {
+      return null;
     }
   }
 
@@ -310,18 +312,9 @@ public class OrcRecordReader implements Closeable {
     // within strip). Batch size computed out of marker position makes sure that batch size is
     // aware of row group boundary and will not cause overflow when reading rows
     // illustration of this case is here https://issues.apache.org/jira/browse/HIVE-6287
-    if (rowIndexStride != 0 && includedRowGroups != null && rowInStripe < rowCountInStripe) {
+    if (rowIndexStride != 0 && rowInStripe < rowCountInStripe) {
       int startRowGroup = (int) (rowInStripe / rowIndexStride);
-      if (!includedRowGroups[startRowGroup]) {
-        while (startRowGroup < includedRowGroups.length && !includedRowGroups[startRowGroup]) {
-          startRowGroup += 1;
-        }
-      }
-
       int endRowGroup = startRowGroup;
-      while (endRowGroup < includedRowGroups.length && includedRowGroups[endRowGroup]) {
-        endRowGroup += 1;
-      }
 
       final long markerPosition =
           (endRowGroup * rowIndexStride) < rowCountInStripe ? (endRowGroup * rowIndexStride)
@@ -361,8 +354,17 @@ public class OrcRecordReader implements Closeable {
 
     // if we haven't skipped the whole stripe, read the data
     if (rowInStripe < rowCountInStripe) {
+      // if we aren't projecting columns or filtering rows, just read it all
+//      if (included == null) {
+//        readAllDataStreams(stripe);
+//      } else {
+//        readPartialDataStreams(stripe);
+//      }
       readAllDataStreams(stripe);
-      reader.startStripe(streams, stripeFooter);
+
+      for (TreeReaderFactory.TreeReader eachReader : reader) {
+        eachReader.startStripe(streams, stripeFooter);
+      }
       // if we skipped the first row group, move the pointers forward
       if (rowInStripe != 0) {
         seekToRowEntry(reader, (int) (rowInStripe / rowIndexStride));
@@ -418,7 +420,7 @@ public class OrcRecordReader implements Closeable {
     DiskRangeList toRead = new DiskRangeList(start, end);
     bufferChunks = dataReader.readFileData(toRead, stripe.getOffset(), false);
     List<OrcProto.Stream> streamDescriptions = stripeFooter.getStreamsList();
-    createStreams(streamDescriptions, bufferChunks, null, codec, bufferSize, streams);
+    createStreams(streamDescriptions, bufferChunks, included, codec, bufferSize, streams);
   }
 
   public long getRowNumber() {
@@ -463,7 +465,7 @@ public class OrcRecordReader implements Closeable {
         bloomFilterIndex);
   }
 
-  private void seekToRowEntry(TreeReaderFactory.TreeReader reader, int rowEntry)
+  private void seekToRowEntry(TreeReaderFactory.TreeReader []reader, int rowEntry)
       throws IOException {
     PositionProvider[] index = new PositionProvider[indexes.length];
     for (int i = 0; i < indexes.length; ++i) {
@@ -471,31 +473,33 @@ public class OrcRecordReader implements Closeable {
         index[i] = new PositionProviderImpl(indexes[i].getEntry(rowEntry));
       }
     }
-    reader.seek(index);
+    for (TreeReaderFactory.TreeReader eachReader : reader) {
+      eachReader.seek(index);
+    }
   }
 
-  public void seekToRow(long rowNumber) throws IOException {
-    if (rowNumber < 0) {
-      throw new IllegalArgumentException("Seek to a negative row number " +
-          rowNumber);
-    } else if (rowNumber < firstRow) {
-      throw new IllegalArgumentException("Seek before reader range " +
-          rowNumber);
-    }
-    // convert to our internal form (rows from the beginning of slice)
-    rowNumber -= firstRow;
-
-    // move to the right stripe
-    int rightStripe = findStripe(rowNumber);
-    if (rightStripe != currentStripe) {
-      currentStripe = rightStripe;
-      readStripe();
-    }
-    readRowIndex(currentStripe, included);
-
-    // if we aren't to the right row yet, advance in the stripe.
-    advanceToNextRow(reader, rowNumber, true);
-  }
+//  public void seekToRow(long rowNumber) throws IOException {
+//    if (rowNumber < 0) {
+//      throw new IllegalArgumentException("Seek to a negative row number " +
+//          rowNumber);
+//    } else if (rowNumber < firstRow) {
+//      throw new IllegalArgumentException("Seek before reader range " +
+//          rowNumber);
+//    }
+//    // convert to our internal form (rows from the beginning of slice)
+//    rowNumber -= firstRow;
+//
+//    // move to the right stripe
+//    int rightStripe = findStripe(rowNumber);
+//    if (rightStripe != currentStripe) {
+//      currentStripe = rightStripe;
+//      readStripe();
+//    }
+//    readRowIndex(currentStripe, included);
+//
+//    // if we aren't to the right row yet, advance in the stripe.
+//    advanceToNextRow(reader, rowNumber, true);
+//  }
 
   @Override
   public void close() throws IOException {

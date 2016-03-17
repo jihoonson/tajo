@@ -20,15 +20,30 @@ package org.apache.tajo.storage.orc2;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.hive.ql.exec.vector.BytesColumnVector;
+import org.apache.hadoop.hive.ql.exec.vector.LongColumnVector;
+import org.apache.hadoop.io.Text;
 import org.apache.orc.OrcProto;
 import org.apache.orc.impl.*;
+import org.apache.tajo.catalog.Column;
+import org.apache.tajo.catalog.TypeDesc;
+import org.apache.tajo.datum.Datum;
+import org.apache.tajo.datum.DatumFactory;
+import org.apache.tajo.datum.NullDatum;
+import org.apache.tajo.datum.TextDatum;
+import org.apache.tajo.exception.TajoRuntimeException;
+import org.apache.tajo.exception.UnsupportedException;
+import org.apache.tajo.util.datetime.DateTimeUtil;
 
 import java.io.EOFException;
 import java.io.IOException;
-import java.sql.Timestamp;
+import java.io.InputStream;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
-import java.util.*;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.TimeZone;
 
 public class TreeReaderFactory {
 
@@ -89,7 +104,6 @@ public class TreeReaderFactory {
     protected final int columnId;
     protected BitFieldReader present = null;
     protected boolean valuePresent = false;
-    protected int vectorColumnCount;
 
     TreeReader(int columnId) throws IOException {
       this(columnId, null);
@@ -103,11 +117,6 @@ public class TreeReaderFactory {
       } else {
         present = new BitFieldReader(in, 1);
       }
-      vectorColumnCount = -1;
-    }
-
-    void setVectorColumnCount(int vectorColumnCount) {
-      this.vectorColumnCount = vectorColumnCount;
     }
 
     void checkEncoding(OrcProto.ColumnEncoding encoding) throws IOException {
@@ -178,45 +187,45 @@ public class TreeReaderFactory {
 
     abstract void skipRows(long rows) throws IOException;
 
-    Object next(Object previous) throws IOException {
+    Datum next() throws IOException {
       if (present != null) {
         valuePresent = present.next() == 1;
       }
-      return previous;
+      return NullDatum.get();
     }
 
-    /**
-     * Populates the isNull vector array in the previousVector object based on
-     * the present stream values. This function is called from all the child
-     * readers, and they all set the values based on isNull field value.
-     *
-     * @param previousVector The columnVector object whose isNull value is populated
-     * @param batchSize      Size of the column vector
-     * @return next column vector
-     * @throws IOException
-     */
-    public Object nextVector(Object previousVector, long batchSize) throws IOException {
-      ColumnVector result = (ColumnVector) previousVector;
-      if (present != null) {
-        // Set noNulls and isNull vector of the ColumnVector based on
-        // present stream
-        result.noNulls = true;
-        for (int i = 0; i < batchSize; i++) {
-          result.isNull[i] = (present.next() != 1);
-          if (result.noNulls && result.isNull[i]) {
-            result.noNulls = false;
-          }
-        }
-      } else {
-        // There is not present stream, this means that all the values are
-        // present.
-        result.noNulls = true;
-        for (int i = 0; i < batchSize; i++) {
-          result.isNull[i] = false;
-        }
-      }
-      return previousVector;
-    }
+//    /**
+//     * Populates the isNull vector array in the previousVector object based on
+//     * the present stream values. This function is called from all the child
+//     * readers, and they all set the values based on isNull field value.
+//     *
+//     * @param previousVector The columnVector object whose isNull value is populated
+//     * @param batchSize      Size of the column vector
+//     * @return next column vector
+//     * @throws IOException
+//     */
+//    public Object nextVector(Object previousVector, long batchSize) throws IOException {
+//      ColumnVector result = (ColumnVector) previousVector;
+//      if (present != null) {
+//        // Set noNulls and isNull vector of the ColumnVector based on
+//        // present stream
+//        result.noNulls = true;
+//        for (int i = 0; i < batchSize; i++) {
+//          result.isNull[i] = (present.next() != 1);
+//          if (result.noNulls && result.isNull[i]) {
+//            result.noNulls = false;
+//          }
+//        }
+//      } else {
+//        // There is not present stream, this means that all the values are
+//        // present.
+//        result.noNulls = true;
+//        for (int i = 0; i < batchSize; i++) {
+//          result.isNull[i] = false;
+//        }
+//      }
+//      return previousVector;
+//    }
 
     public BitFieldReader getPresent() {
       return present;
@@ -263,36 +272,27 @@ public class TreeReaderFactory {
     }
 
     @Override
-    Object next(Object previous) throws IOException {
-      super.next(previous);
-      BooleanWritable result = null;
-      if (valuePresent) {
-        if (previous == null) {
-          result = new BooleanWritable();
-        } else {
-          result = (BooleanWritable) previous;
-        }
-        result.set(reader.next() == 1);
-      }
-      return result;
+    Datum next() throws IOException {
+      super.next();
+      return valuePresent ? DatumFactory.createBool(reader.next() == 1) : NullDatum.get();
     }
 
-    @Override
-    public Object nextVector(Object previousVector, long batchSize) throws IOException {
-      final LongColumnVector result;
-      if (previousVector == null) {
-        result = new LongColumnVector();
-      } else {
-        result = (LongColumnVector) previousVector;
-      }
-
-      // Read present/isNull stream
-      super.nextVector(result, batchSize);
-
-      // Read value entries based on isNull entries
-      reader.nextVector(result, batchSize);
-      return result;
-    }
+//    @Override
+//    public Object nextVector(Object previousVector, long batchSize) throws IOException {
+//      final LongColumnVector result;
+//      if (previousVector == null) {
+//        result = new LongColumnVector();
+//      } else {
+//        result = (LongColumnVector) previousVector;
+//      }
+//
+//      // Read present/isNull stream
+//      super.nextVector(result, batchSize);
+//
+//      // Read value entries based on isNull entries
+//      reader.nextVector(result, batchSize);
+//      return result;
+//    }
   }
 
   public static class ByteTreeReader extends TreeReader {
@@ -328,36 +328,27 @@ public class TreeReaderFactory {
     }
 
     @Override
-    Object next(Object previous) throws IOException {
-      super.next(previous);
-      ByteWritable result = null;
-      if (valuePresent) {
-        if (previous == null) {
-          result = new ByteWritable();
-        } else {
-          result = (ByteWritable) previous;
-        }
-        result.set(reader.next());
-      }
-      return result;
+    Datum next() throws IOException {
+      super.next();
+      return valuePresent ? DatumFactory.createBit(reader.next()) : NullDatum.get();
     }
 
-    @Override
-    public Object nextVector(Object previousVector, long batchSize) throws IOException {
-      final LongColumnVector result;
-      if (previousVector == null) {
-        result = new LongColumnVector();
-      } else {
-        result = (LongColumnVector) previousVector;
-      }
-
-      // Read present/isNull stream
-      super.nextVector(result, batchSize);
-
-      // Read value entries based on isNull entries
-      reader.nextVector(result, batchSize);
-      return result;
-    }
+//    @Override
+//    public Object nextVector(Object previousVector, long batchSize) throws IOException {
+//      final LongColumnVector result;
+//      if (previousVector == null) {
+//        result = new LongColumnVector();
+//      } else {
+//        result = (LongColumnVector) previousVector;
+//      }
+//
+//      // Read present/isNull stream
+//      super.nextVector(result, batchSize);
+//
+//      // Read value entries based on isNull entries
+//      reader.nextVector(result, batchSize);
+//      return result;
+//    }
 
     @Override
     void skipRows(long items) throws IOException {
@@ -414,36 +405,27 @@ public class TreeReaderFactory {
     }
 
     @Override
-    Object next(Object previous) throws IOException {
-      super.next(previous);
-      ShortWritable result = null;
-      if (valuePresent) {
-        if (previous == null) {
-          result = new ShortWritable();
-        } else {
-          result = (ShortWritable) previous;
-        }
-        result.set((short) reader.next());
-      }
-      return result;
+    Datum next() throws IOException {
+      super.next();
+      return valuePresent ? DatumFactory.createInt2((short) reader.next()) : NullDatum.get();
     }
 
-    @Override
-    public Object nextVector(Object previousVector, long batchSize) throws IOException {
-      final LongColumnVector result;
-      if (previousVector == null) {
-        result = new LongColumnVector();
-      } else {
-        result = (LongColumnVector) previousVector;
-      }
-
-      // Read present/isNull stream
-      super.nextVector(result, batchSize);
-
-      // Read value entries based on isNull entries
-      reader.nextVector(result, batchSize);
-      return result;
-    }
+//    @Override
+//    public Object nextVector(Object previousVector, long batchSize) throws IOException {
+//      final LongColumnVector result;
+//      if (previousVector == null) {
+//        result = new LongColumnVector();
+//      } else {
+//        result = (LongColumnVector) previousVector;
+//      }
+//
+//      // Read present/isNull stream
+//      super.nextVector(result, batchSize);
+//
+//      // Read value entries based on isNull entries
+//      reader.nextVector(result, batchSize);
+//      return result;
+//    }
 
     @Override
     void skipRows(long items) throws IOException {
@@ -500,36 +482,27 @@ public class TreeReaderFactory {
     }
 
     @Override
-    Object next(Object previous) throws IOException {
-      super.next(previous);
-      IntWritable result = null;
-      if (valuePresent) {
-        if (previous == null) {
-          result = new IntWritable();
-        } else {
-          result = (IntWritable) previous;
-        }
-        result.set((int) reader.next());
-      }
-      return result;
+    Datum next() throws IOException {
+      super.next();
+      return valuePresent ? DatumFactory.createInt4((int) reader.next()) : NullDatum.get();
     }
 
-    @Override
-    public Object nextVector(Object previousVector, long batchSize) throws IOException {
-      final LongColumnVector result;
-      if (previousVector == null) {
-        result = new LongColumnVector();
-      } else {
-        result = (LongColumnVector) previousVector;
-      }
-
-      // Read present/isNull stream
-      super.nextVector(result, batchSize);
-
-      // Read value entries based on isNull entries
-      reader.nextVector(result, batchSize);
-      return result;
-    }
+//    @Override
+//    public Object nextVector(Object previousVector, long batchSize) throws IOException {
+//      final LongColumnVector result;
+//      if (previousVector == null) {
+//        result = new LongColumnVector();
+//      } else {
+//        result = (LongColumnVector) previousVector;
+//      }
+//
+//      // Read present/isNull stream
+//      super.nextVector(result, batchSize);
+//
+//      // Read value entries based on isNull entries
+//      reader.nextVector(result, batchSize);
+//      return result;
+//    }
 
     @Override
     void skipRows(long items) throws IOException {
@@ -587,36 +560,27 @@ public class TreeReaderFactory {
     }
 
     @Override
-    Object next(Object previous) throws IOException {
-      super.next(previous);
-      LongWritable result = null;
-      if (valuePresent) {
-        if (previous == null) {
-          result = new LongWritable();
-        } else {
-          result = (LongWritable) previous;
-        }
-        result.set(reader.next());
-      }
-      return result;
+    Datum next() throws IOException {
+      super.next();
+      return valuePresent ? DatumFactory.createInt8(reader.next()) : NullDatum.get();
     }
 
-    @Override
-    public Object nextVector(Object previousVector, long batchSize) throws IOException {
-      final LongColumnVector result;
-      if (previousVector == null) {
-        result = new LongColumnVector();
-      } else {
-        result = (LongColumnVector) previousVector;
-      }
-
-      // Read present/isNull stream
-      super.nextVector(result, batchSize);
-
-      // Read value entries based on isNull entries
-      reader.nextVector(result, batchSize);
-      return result;
-    }
+//    @Override
+//    public Object nextVector(Object previousVector, long batchSize) throws IOException {
+//      final LongColumnVector result;
+//      if (previousVector == null) {
+//        result = new LongColumnVector();
+//      } else {
+//        result = (LongColumnVector) previousVector;
+//      }
+//
+//      // Read present/isNull stream
+//      super.nextVector(result, batchSize);
+//
+//      // Read value entries based on isNull entries
+//      reader.nextVector(result, batchSize);
+//      return result;
+//    }
 
     @Override
     void skipRows(long items) throws IOException {
@@ -660,72 +624,63 @@ public class TreeReaderFactory {
     }
 
     @Override
-    Object next(Object previous) throws IOException {
-      super.next(previous);
-      FloatWritable result = null;
-      if (valuePresent) {
-        if (previous == null) {
-          result = new FloatWritable();
-        } else {
-          result = (FloatWritable) previous;
-        }
-        result.set(utils.readFloat(stream));
-      }
-      return result;
+    Datum next() throws IOException {
+      super.next();
+      return valuePresent ? DatumFactory.createFloat4(utils.readFloat(stream)) : NullDatum.get();
     }
 
-    @Override
-    public Object nextVector(Object previousVector, final long batchSize) throws IOException {
-      final DoubleColumnVector result;
-      if (previousVector == null) {
-        result = new DoubleColumnVector();
-      } else {
-        result = (DoubleColumnVector) previousVector;
-      }
-
-      // Read present/isNull stream
-      super.nextVector(result, batchSize);
-
-      final boolean hasNulls = !result.noNulls;
-      boolean allNulls = hasNulls;
-
-      if (hasNulls) {
-        // conditions to ensure bounds checks skips
-        for (int i = 0; batchSize <= result.isNull.length && i < batchSize; i++) {
-          allNulls = allNulls & result.isNull[i];
-        }
-        if (allNulls) {
-          result.vector[0] = Double.NaN;
-          result.isRepeating = true;
-        } else {
-          // some nulls
-          result.isRepeating = false;
-          // conditions to ensure bounds checks skips
-          for (int i = 0; batchSize <= result.isNull.length
-              && batchSize <= result.vector.length && i < batchSize; i++) {
-            if (!result.isNull[i]) {
-              result.vector[i] = utils.readFloat(stream);
-            } else {
-              // If the value is not present then set NaN
-              result.vector[i] = Double.NaN;
-            }
-          }
-        }
-      } else {
-        // no nulls & > 1 row (check repeating)
-        boolean repeating = (batchSize > 1);
-        final float f1 = utils.readFloat(stream);
-        result.vector[0] = f1;
-        // conditions to ensure bounds checks skips
-        for (int i = 1; i < batchSize && batchSize <= result.vector.length; i++) {
-          final float f2 = utils.readFloat(stream);
-          repeating = repeating && (f1 == f2);
-          result.vector[i] = f2;
-        }
-        result.isRepeating = repeating;
-      }
-      return result;
-    }
+//    @Override
+//    public Object nextVector(Object previousVector, final long batchSize) throws IOException {
+//      final DoubleColumnVector result;
+//      if (previousVector == null) {
+//        result = new DoubleColumnVector();
+//      } else {
+//        result = (DoubleColumnVector) previousVector;
+//      }
+//
+//      // Read present/isNull stream
+//      super.nextVector(result, batchSize);
+//
+//      final boolean hasNulls = !result.noNulls;
+//      boolean allNulls = hasNulls;
+//
+//      if (hasNulls) {
+//        // conditions to ensure bounds checks skips
+//        for (int i = 0; batchSize <= result.isNull.length && i < batchSize; i++) {
+//          allNulls = allNulls & result.isNull[i];
+//        }
+//        if (allNulls) {
+//          result.vector[0] = Double.NaN;
+//          result.isRepeating = true;
+//        } else {
+//          // some nulls
+//          result.isRepeating = false;
+//          // conditions to ensure bounds checks skips
+//          for (int i = 0; batchSize <= result.isNull.length
+//              && batchSize <= result.vector.length && i < batchSize; i++) {
+//            if (!result.isNull[i]) {
+//              result.vector[i] = utils.readFloat(stream);
+//            } else {
+//              // If the value is not present then set NaN
+//              result.vector[i] = Double.NaN;
+//            }
+//          }
+//        }
+//      } else {
+//        // no nulls & > 1 row (check repeating)
+//        boolean repeating = (batchSize > 1);
+//        final float f1 = utils.readFloat(stream);
+//        result.vector[0] = f1;
+//        // conditions to ensure bounds checks skips
+//        for (int i = 1; i < batchSize && batchSize <= result.vector.length; i++) {
+//          final float f2 = utils.readFloat(stream);
+//          repeating = repeating && (f1 == f2);
+//          result.vector[i] = f2;
+//        }
+//        result.isRepeating = repeating;
+//      }
+//      return result;
+//    }
 
     @Override
     protected void skipRows(long items) throws IOException {
@@ -773,73 +728,64 @@ public class TreeReaderFactory {
     }
 
     @Override
-    Object next(Object previous) throws IOException {
-      super.next(previous);
-      DoubleWritable result = null;
-      if (valuePresent) {
-        if (previous == null) {
-          result = new DoubleWritable();
-        } else {
-          result = (DoubleWritable) previous;
-        }
-        result.set(utils.readDouble(stream));
-      }
-      return result;
+    Datum next() throws IOException {
+      super.next();
+      return valuePresent ? DatumFactory.createFloat8(utils.readDouble(stream)) : NullDatum.get();
     }
 
-    @Override
-    public Object nextVector(Object previousVector, final long batchSize) throws IOException {
-      final DoubleColumnVector result;
-      if (previousVector == null) {
-        result = new DoubleColumnVector();
-      } else {
-        result = (DoubleColumnVector) previousVector;
-      }
-
-      // Read present/isNull stream
-      super.nextVector(result, batchSize);
-
-      final boolean hasNulls = !result.noNulls;
-      boolean allNulls = hasNulls;
-
-      if (hasNulls) {
-        // conditions to ensure bounds checks skips
-        for (int i = 0; i < batchSize && batchSize <= result.isNull.length; i++) {
-          allNulls = allNulls & result.isNull[i];
-        }
-        if (allNulls) {
-          result.vector[0] = Double.NaN;
-          result.isRepeating = true;
-        } else {
-          // some nulls
-          result.isRepeating = false;
-          // conditions to ensure bounds checks skips
-          for (int i = 0; batchSize <= result.isNull.length
-              && batchSize <= result.vector.length && i < batchSize; i++) {
-            if (!result.isNull[i]) {
-              result.vector[i] = utils.readDouble(stream);
-            } else {
-              // If the value is not present then set NaN
-              result.vector[i] = Double.NaN;
-            }
-          }
-        }
-      } else {
-        // no nulls
-        boolean repeating = (batchSize > 1);
-        final double d1 = utils.readDouble(stream);
-        result.vector[0] = d1;
-        // conditions to ensure bounds checks skips
-        for (int i = 1; i < batchSize && batchSize <= result.vector.length; i++) {
-          final double d2 = utils.readDouble(stream);
-          repeating = repeating && (d1 == d2);
-          result.vector[i] = d2;
-        }
-        result.isRepeating = repeating;
-      }
-
-      return result;
-    }
+//    @Override
+//    public Object nextVector(Object previousVector, final long batchSize) throws IOException {
+//      final DoubleColumnVector result;
+//      if (previousVector == null) {
+//        result = new DoubleColumnVector();
+//      } else {
+//        result = (DoubleColumnVector) previousVector;
+//      }
+//
+//      // Read present/isNull stream
+//      super.nextVector(result, batchSize);
+//
+//      final boolean hasNulls = !result.noNulls;
+//      boolean allNulls = hasNulls;
+//
+//      if (hasNulls) {
+//        // conditions to ensure bounds checks skips
+//        for (int i = 0; i < batchSize && batchSize <= result.isNull.length; i++) {
+//          allNulls = allNulls & result.isNull[i];
+//        }
+//        if (allNulls) {
+//          result.vector[0] = Double.NaN;
+//          result.isRepeating = true;
+//        } else {
+//          // some nulls
+//          result.isRepeating = false;
+//          // conditions to ensure bounds checks skips
+//          for (int i = 0; batchSize <= result.isNull.length
+//              && batchSize <= result.vector.length && i < batchSize; i++) {
+//            if (!result.isNull[i]) {
+//              result.vector[i] = utils.readDouble(stream);
+//            } else {
+//              // If the value is not present then set NaN
+//              result.vector[i] = Double.NaN;
+//            }
+//          }
+//        }
+//      } else {
+//        // no nulls
+//        boolean repeating = (batchSize > 1);
+//        final double d1 = utils.readDouble(stream);
+//        result.vector[0] = d1;
+//        // conditions to ensure bounds checks skips
+//        for (int i = 1; i < batchSize && batchSize <= result.vector.length; i++) {
+//          final double d2 = utils.readDouble(stream);
+//          repeating = repeating && (d1 == d2);
+//          result.vector[i] = d2;
+//        }
+//        result.isRepeating = repeating;
+//      }
+//
+//      return result;
+//    }
 
     @Override
     void skipRows(long items) throws IOException {
@@ -905,45 +851,42 @@ public class TreeReaderFactory {
     }
 
     @Override
-    Object next(Object previous) throws IOException {
-      super.next(previous);
-      BytesWritable result = null;
+    Datum next() throws IOException {
+      super.next();
+
       if (valuePresent) {
-        if (previous == null) {
-          result = new BytesWritable();
-        } else {
-          result = (BytesWritable) previous;
-        }
         int len = (int) lengths.next();
-        result.setSize(len);
+        byte[] buf = new byte[len];
         int offset = 0;
         while (len > 0) {
-          int written = stream.read(result.getBytes(), offset, len);
+          int written = stream.read(buf, offset, len);
           if (written < 0) {
             throw new EOFException("Can't finish byte read from " + stream);
           }
           len -= written;
           offset += written;
         }
-      }
-      return result;
-    }
-
-    @Override
-    public Object nextVector(Object previousVector, long batchSize) throws IOException {
-      final BytesColumnVector result;
-      if (previousVector == null) {
-        result = new BytesColumnVector();
+        return DatumFactory.createBlob(buf);
       } else {
-        result = (BytesColumnVector) previousVector;
+        return NullDatum.get();
       }
-
-      // Read present/isNull stream
-      super.nextVector(result, batchSize);
-
-      BytesColumnVectorUtil.readOrcByteArrays(stream, lengths, scratchlcv, result, batchSize);
-      return result;
     }
+
+//    @Override
+//    public Object nextVector(Object previousVector, long batchSize) throws IOException {
+//      final BytesColumnVector result;
+//      if (previousVector == null) {
+//        result = new BytesColumnVector();
+//      } else {
+//        result = (BytesColumnVector) previousVector;
+//      }
+//
+//      // Read present/isNull stream
+//      super.nextVector(result, batchSize);
+//
+//      BytesColumnVectorUtil.readOrcByteArrays(stream, lengths, scratchlcv, result, batchSize);
+//      return result;
+//    }
 
     @Override
     void skipRows(long items) throws IOException {
@@ -1057,15 +1000,10 @@ public class TreeReaderFactory {
     }
 
     @Override
-    Object next(Object previous) throws IOException {
-      super.next(previous);
-      TimestampWritable result = null;
+    Datum next() throws IOException {
+      super.next();
+
       if (valuePresent) {
-        if (previous == null) {
-          result = new TimestampWritable();
-        } else {
-          result = (TimestampWritable) previous;
-        }
         long millis = (data.next() + base_timestamp) * WriterImpl.MILLIS_PER_SECOND;
         int newNanos = parseNanos(nanos.next());
         // fix the rounding when we divided by 1000.
@@ -1081,7 +1019,8 @@ public class TreeReaderFactory {
           offset = writerTimeZone.getOffset(millis) - readerTimeZone.getOffset(millis);
         }
         long adjustedMillis = millis + offset;
-        Timestamp ts = new Timestamp(adjustedMillis);
+//        Timestamp ts = new Timestamp(adjustedMillis);
+
         // Sometimes the reader timezone might have changed after adding the adjustedMillis.
         // To account for that change, check for any difference in reader timezone after
         // adding adjustedMillis. If so use the new offset (offset at adjustedMillis point of time).
@@ -1090,39 +1029,41 @@ public class TreeReaderFactory {
           long newOffset =
               writerTimeZone.getOffset(millis) - readerTimeZone.getOffset(adjustedMillis);
           adjustedMillis = millis + newOffset;
-          ts.setTime(adjustedMillis);
+//          ts.setTime(adjustedMillis);
         }
-        ts.setNanos(newNanos);
-        result.set(ts);
-      }
-      return result;
-    }
-
-    @Override
-    public Object nextVector(Object previousVector, long batchSize) throws IOException {
-      final LongColumnVector result;
-      if (previousVector == null) {
-        result = new LongColumnVector();
+//        ts.setNanos(newNanos);
+        // TODO: check the below is valid
+        return DatumFactory.createTimestamp(DateTimeUtil.javaTimeToJulianTime(adjustedMillis));
       } else {
-        result = (LongColumnVector) previousVector;
+        return NullDatum.get();
       }
-
-      result.reset();
-      Object obj = null;
-      for (int i = 0; i < batchSize; i++) {
-        obj = next(obj);
-        if (obj == null) {
-          result.noNulls = false;
-          result.isNull[i] = true;
-        } else {
-          TimestampWritable writable = (TimestampWritable) obj;
-          Timestamp timestamp = writable.getTimestamp();
-          result.vector[i] = TimestampUtils.getTimeNanoSec(timestamp);
-        }
-      }
-
-      return result;
     }
+
+//    @Override
+//    public Object nextVector(Object previousVector, long batchSize) throws IOException {
+//      final LongColumnVector result;
+//      if (previousVector == null) {
+//        result = new LongColumnVector();
+//      } else {
+//        result = (LongColumnVector) previousVector;
+//      }
+//
+//      result.reset();
+//      Datum obj = null;
+//      for (int i = 0; i < batchSize; i++) {
+//        obj = next();
+//        if (obj == null) {
+//          result.noNulls = false;
+//          result.isNull[i] = true;
+//        } else {
+//          // TODO: check the below is valid
+//          TimestampDatum datum = (TimestampDatum) obj;
+//          result.vector[i] = datum.asInt8();
+//        }
+//      }
+//
+//      return result;
+//    }
 
     private static int parseNanos(long serialized) {
       int zeros = 7 & (int) serialized;
@@ -1191,36 +1132,27 @@ public class TreeReaderFactory {
     }
 
     @Override
-    Object next(Object previous) throws IOException {
-      super.next(previous);
-      DateWritable result = null;
-      if (valuePresent) {
-        if (previous == null) {
-          result = new DateWritable();
-        } else {
-          result = (DateWritable) previous;
-        }
-        result.set((int) reader.next());
-      }
-      return result;
+    Datum next() throws IOException {
+      super.next();
+      return valuePresent ? DatumFactory.createDate((int) reader.next()) : NullDatum.get();
     }
 
-    @Override
-    public Object nextVector(Object previousVector, long batchSize) throws IOException {
-      final LongColumnVector result;
-      if (previousVector == null) {
-        result = new LongColumnVector();
-      } else {
-        result = (LongColumnVector) previousVector;
-      }
-
-      // Read present/isNull stream
-      super.nextVector(result, batchSize);
-
-      // Read value entries based on isNull entries
-      reader.nextVector(result, batchSize);
-      return result;
-    }
+//    @Override
+//    public Object nextVector(Object previousVector, long batchSize) throws IOException {
+//      final LongColumnVector result;
+//      if (previousVector == null) {
+//        result = new LongColumnVector();
+//      } else {
+//        result = (LongColumnVector) previousVector;
+//      }
+//
+//      // Read present/isNull stream
+//      super.nextVector(result, batchSize);
+//
+//      // Read value entries based on isNull entries
+//      reader.nextVector(result, batchSize);
+//      return result;
+//    }
 
     @Override
     void skipRows(long items) throws IOException {
@@ -1429,14 +1361,14 @@ public class TreeReaderFactory {
     }
 
     @Override
-    Object next(Object previous) throws IOException {
-      return reader.next(previous);
+    Datum next() throws IOException {
+      return reader.next();
     }
 
-    @Override
-    public Object nextVector(Object previousVector, long batchSize) throws IOException {
-      return reader.nextVector(previousVector, batchSize);
-    }
+//    @Override
+//    public Object nextVector(Object previousVector, long batchSize) throws IOException {
+//      return reader.nextVector(previousVector, batchSize);
+//    }
 
     @Override
     void skipRows(long items) throws IOException {
@@ -1516,13 +1448,36 @@ public class TreeReaderFactory {
     }
   }
 
+  private final static class BasicTextReaderShim {
+    private final InputStream in;
+
+    public BasicTextReaderShim(InputStream in) {
+      this.in = in;
+    }
+
+    public byte[] read(int len) throws IOException {
+      int offset = 0;
+      byte[] bytes = new byte[len];
+      while (len > 0) {
+        int written = in.read(bytes, offset, len);
+        if (written < 0) {
+          throw new EOFException("Can't finish read from " + in + " read "
+              + (offset) + " bytes out of " + bytes.length);
+        }
+        len -= written;
+        offset += written;
+      }
+      return bytes;
+    }
+  }
+
   /**
    * A reader for string columns that are direct encoded in the current
    * stripe.
    */
   public static class StringDirectTreeReader extends TreeReader {
     protected InStream stream;
-    protected TextReaderShim data;
+    protected BasicTextReaderShim data;
     protected IntegerReader lengths;
     private final LongColumnVector scratchlcv;
 
@@ -1537,7 +1492,6 @@ public class TreeReaderFactory {
       this.stream = data;
       if (length != null && encoding != null) {
         this.lengths = createIntegerReader(encoding, length, false, false);
-        this.data = ShimLoader.getHadoopShims().getTextReaderShim(this.stream);
       }
     }
 
@@ -1558,7 +1512,8 @@ public class TreeReaderFactory {
       StreamName name = new StreamName(columnId,
           OrcProto.Stream.Kind.DATA);
       stream = streams.get(name);
-      data = ShimLoader.getHadoopShims().getTextReaderShim(this.stream);
+      data = new BasicTextReaderShim(stream);
+
       lengths = createIntegerReader(stripeFooter.getColumnsList().get(columnId).getKind(),
           streams.get(new StreamName(columnId, OrcProto.Stream.Kind.LENGTH)),
           false, false);
@@ -1578,36 +1533,27 @@ public class TreeReaderFactory {
     }
 
     @Override
-    Object next(Object previous) throws IOException {
-      super.next(previous);
-      Text result = null;
-      if (valuePresent) {
-        if (previous == null) {
-          result = new Text();
-        } else {
-          result = (Text) previous;
-        }
-        int len = (int) lengths.next();
-        data.read(result, len);
-      }
-      return result;
+    Datum next() throws IOException {
+      super.next();
+      int len = (int) lengths.next();
+      return valuePresent ? DatumFactory.createText(data.read(len)) : NullDatum.get();
     }
 
-    @Override
-    public Object nextVector(Object previousVector, long batchSize) throws IOException {
-      final BytesColumnVector result;
-      if (previousVector == null) {
-        result = new BytesColumnVector();
-      } else {
-        result = (BytesColumnVector) previousVector;
-      }
-
-      // Read present/isNull stream
-      super.nextVector(result, batchSize);
-
-      BytesColumnVectorUtil.readOrcByteArrays(stream, lengths, scratchlcv, result, batchSize);
-      return result;
-    }
+//    @Override
+//    public Object nextVector(Object previousVector, long batchSize) throws IOException {
+//      final BytesColumnVector result;
+//      if (previousVector == null) {
+//        result = new BytesColumnVector();
+//      } else {
+//        result = (BytesColumnVector) previousVector;
+//      }
+//
+//      // Read present/isNull stream
+//      super.nextVector(result, batchSize);
+//
+//      BytesColumnVectorUtil.readOrcByteArrays(stream, lengths, scratchlcv, result, batchSize);
+//      return result;
+//    }
 
     @Override
     void skipRows(long items) throws IOException {
@@ -1642,6 +1588,7 @@ public class TreeReaderFactory {
 
     private byte[] dictionaryBufferInBytesCache = null;
     private final LongColumnVector scratchlcv;
+    private final Text result = new Text();
 
     StringDictionaryTreeReader(int columnId) throws IOException {
       this(columnId, null, null, null, null, null);
@@ -1743,16 +1690,10 @@ public class TreeReaderFactory {
     }
 
     @Override
-    Object next(Object previous) throws IOException {
-      super.next(previous);
-      Text result = null;
+    Datum next() throws IOException {
+      super.next();
       if (valuePresent) {
         int entry = (int) reader.next();
-        if (previous == null) {
-          result = new Text();
-        } else {
-          result = (Text) previous;
-        }
         int offset = dictionaryOffsets[entry];
         int length = getDictionaryEntryLength(entry, offset);
         // If the column is just empty strings, the size will be zero,
@@ -1763,66 +1704,68 @@ public class TreeReaderFactory {
         } else {
           result.clear();
         }
+        return DatumFactory.createText(result.getBytes());
+      } else {
+        return NullDatum.get();
       }
-      return result;
     }
 
-    @Override
-    public Object nextVector(Object previousVector, long batchSize) throws IOException {
-      final BytesColumnVector result;
-      int offset;
-      int length;
-      if (previousVector == null) {
-        result = new BytesColumnVector();
-      } else {
-        result = (BytesColumnVector) previousVector;
-      }
-
-      // Read present/isNull stream
-      super.nextVector(result, batchSize);
-
-      if (dictionaryBuffer != null) {
-
-        // Load dictionaryBuffer into cache.
-        if (dictionaryBufferInBytesCache == null) {
-          dictionaryBufferInBytesCache = dictionaryBuffer.get();
-        }
-
-        // Read string offsets
-        scratchlcv.isNull = result.isNull;
-        reader.nextVector(scratchlcv, batchSize);
-        if (!scratchlcv.isRepeating) {
-
-          // The vector has non-repeating strings. Iterate thru the batch
-          // and set strings one by one
-          for (int i = 0; i < batchSize; i++) {
-            if (!scratchlcv.isNull[i]) {
-              offset = dictionaryOffsets[(int) scratchlcv.vector[i]];
-              length = getDictionaryEntryLength((int) scratchlcv.vector[i], offset);
-              result.setRef(i, dictionaryBufferInBytesCache, offset, length);
-            } else {
-              // If the value is null then set offset and length to zero (null string)
-              result.setRef(i, dictionaryBufferInBytesCache, 0, 0);
-            }
-          }
-        } else {
-          // If the value is repeating then just set the first value in the
-          // vector and set the isRepeating flag to true. No need to iterate thru and
-          // set all the elements to the same value
-          offset = dictionaryOffsets[(int) scratchlcv.vector[0]];
-          length = getDictionaryEntryLength((int) scratchlcv.vector[0], offset);
-          result.setRef(0, dictionaryBufferInBytesCache, offset, length);
-        }
-        result.isRepeating = scratchlcv.isRepeating;
-      } else {
-        // Entire stripe contains null strings.
-        result.isRepeating = true;
-        result.noNulls = false;
-        result.isNull[0] = true;
-        result.setRef(0, "".getBytes(), 0, 0);
-      }
-      return result;
-    }
+//    @Override
+//    public Object nextVector(Object previousVector, long batchSize) throws IOException {
+//      final BytesColumnVector result;
+//      int offset;
+//      int length;
+//      if (previousVector == null) {
+//        result = new BytesColumnVector();
+//      } else {
+//        result = (BytesColumnVector) previousVector;
+//      }
+//
+//      // Read present/isNull stream
+//      super.nextVector(result, batchSize);
+//
+//      if (dictionaryBuffer != null) {
+//
+//        // Load dictionaryBuffer into cache.
+//        if (dictionaryBufferInBytesCache == null) {
+//          dictionaryBufferInBytesCache = dictionaryBuffer.get();
+//        }
+//
+//        // Read string offsets
+//        scratchlcv.isNull = result.isNull;
+//        reader.nextVector(scratchlcv, batchSize);
+//        if (!scratchlcv.isRepeating) {
+//
+//          // The vector has non-repeating strings. Iterate thru the batch
+//          // and set strings one by one
+//          for (int i = 0; i < batchSize; i++) {
+//            if (!scratchlcv.isNull[i]) {
+//              offset = dictionaryOffsets[(int) scratchlcv.vector[i]];
+//              length = getDictionaryEntryLength((int) scratchlcv.vector[i], offset);
+//              result.setRef(i, dictionaryBufferInBytesCache, offset, length);
+//            } else {
+//              // If the value is null then set offset and length to zero (null string)
+//              result.setRef(i, dictionaryBufferInBytesCache, 0, 0);
+//            }
+//          }
+//        } else {
+//          // If the value is repeating then just set the first value in the
+//          // vector and set the isRepeating flag to true. No need to iterate thru and
+//          // set all the elements to the same value
+//          offset = dictionaryOffsets[(int) scratchlcv.vector[0]];
+//          length = getDictionaryEntryLength((int) scratchlcv.vector[0], offset);
+//          result.setRef(0, dictionaryBufferInBytesCache, offset, length);
+//        }
+//        result.isRepeating = scratchlcv.isRepeating;
+//      } else {
+//        // Entire stripe contains null strings.
+//        result.isRepeating = true;
+//        result.noNulls = false;
+//        result.isNull[0] = true;
+//        result.setRef(0, "".getBytes(), 0, 0);
+//      }
+//      return result;
+//    }
 
     int getDictionaryEntryLength(int entry, int offset) {
       final int length;
@@ -1860,614 +1803,612 @@ public class TreeReaderFactory {
     }
 
     @Override
-    Object next(Object previous) throws IOException {
-      final HiveCharWritable result;
-      if (previous == null) {
-        result = new HiveCharWritable();
-      } else {
-        result = (HiveCharWritable) previous;
-      }
+    Datum next() throws IOException {
       // Use the string reader implementation to populate the internal Text value
-      Object textVal = super.next(result.getTextValue());
+      Datum textVal = super.next();
       if (textVal == null) {
-        return null;
+        return NullDatum.get();
       }
       // result should now hold the value that was read in.
       // enforce char length
-      result.enforceMaxLength(maxLength);
-      return result;
-    }
-
-    @Override
-    public Object nextVector(Object previousVector, long batchSize) throws IOException {
-      // Get the vector of strings from StringTreeReader, then make a 2nd pass to
-      // adjust down the length (right trim and truncate) if necessary.
-      BytesColumnVector result = (BytesColumnVector) super.nextVector(previousVector, batchSize);
-
-      int adjustedDownLen;
-      if (result.isRepeating) {
-        if (result.noNulls || !result.isNull[0]) {
-          adjustedDownLen = StringExpr
-              .rightTrimAndTruncate(result.vector[0], result.start[0], result.length[0], maxLength);
-          if (adjustedDownLen < result.length[0]) {
-            result.setRef(0, result.vector[0], result.start[0], adjustedDownLen);
-          }
-        }
+      // TODO: improve this
+      if (textVal.isNotNull()) {
+        TextDatum datum = (TextDatum) textVal;
+        return DatumFactory.createChar(datum.asTextBytes());
       } else {
-        if (result.noNulls) {
-          for (int i = 0; i < batchSize; i++) {
-            adjustedDownLen = StringExpr
-                .rightTrimAndTruncate(result.vector[i], result.start[i], result.length[i],
-                    maxLength);
-            if (adjustedDownLen < result.length[i]) {
-              result.setRef(i, result.vector[i], result.start[i], adjustedDownLen);
-            }
-          }
-        } else {
-          for (int i = 0; i < batchSize; i++) {
-            if (!result.isNull[i]) {
-              adjustedDownLen = StringExpr
-                  .rightTrimAndTruncate(result.vector[i], result.start[i], result.length[i],
-                      maxLength);
-              if (adjustedDownLen < result.length[i]) {
-                result.setRef(i, result.vector[i], result.start[i], adjustedDownLen);
-              }
-            }
-          }
-        }
+        return NullDatum.get();
       }
-      return result;
     }
+
+//    @Override
+//    public Object nextVector(Object previousVector, long batchSize) throws IOException {
+//      // Get the vector of strings from StringTreeReader, then make a 2nd pass to
+//      // adjust down the length (right trim and truncate) if necessary.
+//      BytesColumnVector result = (BytesColumnVector) super.nextVector(previousVector, batchSize);
+//
+//      int adjustedDownLen;
+//      if (result.isRepeating) {
+//        if (result.noNulls || !result.isNull[0]) {
+//          adjustedDownLen = StringExpr
+//              .rightTrimAndTruncate(result.vector[0], result.start[0], result.length[0], maxLength);
+//          if (adjustedDownLen < result.length[0]) {
+//            result.setRef(0, result.vector[0], result.start[0], adjustedDownLen);
+//          }
+//        }
+//      } else {
+//        if (result.noNulls) {
+//          for (int i = 0; i < batchSize; i++) {
+//            adjustedDownLen = StringExpr
+//                .rightTrimAndTruncate(result.vector[i], result.start[i], result.length[i],
+//                    maxLength);
+//            if (adjustedDownLen < result.length[i]) {
+//              result.setRef(i, result.vector[i], result.start[i], adjustedDownLen);
+//            }
+//          }
+//        } else {
+//          for (int i = 0; i < batchSize; i++) {
+//            if (!result.isNull[i]) {
+//              adjustedDownLen = StringExpr
+//                  .rightTrimAndTruncate(result.vector[i], result.start[i], result.length[i],
+//                      maxLength);
+//              if (adjustedDownLen < result.length[i]) {
+//                result.setRef(i, result.vector[i], result.start[i], adjustedDownLen);
+//              }
+//            }
+//          }
+//        }
+//      }
+//      return result;
+//    }
   }
 
-  public static class VarcharTreeReader extends StringTreeReader {
-    int maxLength;
+//  public static class VarcharTreeReader extends StringTreeReader {
+//    int maxLength;
+//
+//    VarcharTreeReader(int columnId, int maxLength) throws IOException {
+//      this(columnId, maxLength, null, null, null, null, null);
+//    }
+//
+//    protected VarcharTreeReader(int columnId, int maxLength, InStream present, InStream data,
+//                                InStream length, InStream dictionary, OrcProto.ColumnEncoding encoding) throws IOException {
+//      super(columnId, present, data, length, dictionary, encoding);
+//      this.maxLength = maxLength;
+//    }
+//
+//    @Override
+//    Object next(Object previous) throws IOException {
+//      final HiveVarcharWritable result;
+//      if (previous == null) {
+//        result = new HiveVarcharWritable();
+//      } else {
+//        result = (HiveVarcharWritable) previous;
+//      }
+//      // Use the string reader implementation to populate the internal Text value
+//      Object textVal = super.next(result.getTextValue());
+//      if (textVal == null) {
+//        return null;
+//      }
+//      // result should now hold the value that was read in.
+//      // enforce varchar length
+//      result.enforceMaxLength(maxLength);
+//      return result;
+//    }
+//
+//    @Override
+//    public Object nextVector(Object previousVector, long batchSize) throws IOException {
+//      // Get the vector of strings from StringTreeReader, then make a 2nd pass to
+//      // adjust down the length (truncate) if necessary.
+//      BytesColumnVector result = (BytesColumnVector) super.nextVector(previousVector, batchSize);
+//
+//      int adjustedDownLen;
+//      if (result.isRepeating) {
+//        if (result.noNulls || !result.isNull[0]) {
+//          adjustedDownLen = StringExpr
+//              .truncate(result.vector[0], result.start[0], result.length[0], maxLength);
+//          if (adjustedDownLen < result.length[0]) {
+//            result.setRef(0, result.vector[0], result.start[0], adjustedDownLen);
+//          }
+//        }
+//      } else {
+//        if (result.noNulls) {
+//          for (int i = 0; i < batchSize; i++) {
+//            adjustedDownLen = StringExpr
+//                .truncate(result.vector[i], result.start[i], result.length[i], maxLength);
+//            if (adjustedDownLen < result.length[i]) {
+//              result.setRef(i, result.vector[i], result.start[i], adjustedDownLen);
+//            }
+//          }
+//        } else {
+//          for (int i = 0; i < batchSize; i++) {
+//            if (!result.isNull[i]) {
+//              adjustedDownLen = StringExpr
+//                  .truncate(result.vector[i], result.start[i], result.length[i], maxLength);
+//              if (adjustedDownLen < result.length[i]) {
+//                result.setRef(i, result.vector[i], result.start[i], adjustedDownLen);
+//              }
+//            }
+//          }
+//        }
+//      }
+//      return result;
+//    }
+//  }
 
-    VarcharTreeReader(int columnId, int maxLength) throws IOException {
-      this(columnId, maxLength, null, null, null, null, null);
-    }
-
-    protected VarcharTreeReader(int columnId, int maxLength, InStream present, InStream data,
-                                InStream length, InStream dictionary, OrcProto.ColumnEncoding encoding) throws IOException {
-      super(columnId, present, data, length, dictionary, encoding);
-      this.maxLength = maxLength;
-    }
-
-    @Override
-    Object next(Object previous) throws IOException {
-      final HiveVarcharWritable result;
-      if (previous == null) {
-        result = new HiveVarcharWritable();
-      } else {
-        result = (HiveVarcharWritable) previous;
-      }
-      // Use the string reader implementation to populate the internal Text value
-      Object textVal = super.next(result.getTextValue());
-      if (textVal == null) {
-        return null;
-      }
-      // result should now hold the value that was read in.
-      // enforce varchar length
-      result.enforceMaxLength(maxLength);
-      return result;
-    }
-
-    @Override
-    public Object nextVector(Object previousVector, long batchSize) throws IOException {
-      // Get the vector of strings from StringTreeReader, then make a 2nd pass to
-      // adjust down the length (truncate) if necessary.
-      BytesColumnVector result = (BytesColumnVector) super.nextVector(previousVector, batchSize);
-
-      int adjustedDownLen;
-      if (result.isRepeating) {
-        if (result.noNulls || !result.isNull[0]) {
-          adjustedDownLen = StringExpr
-              .truncate(result.vector[0], result.start[0], result.length[0], maxLength);
-          if (adjustedDownLen < result.length[0]) {
-            result.setRef(0, result.vector[0], result.start[0], adjustedDownLen);
-          }
-        }
-      } else {
-        if (result.noNulls) {
-          for (int i = 0; i < batchSize; i++) {
-            adjustedDownLen = StringExpr
-                .truncate(result.vector[i], result.start[i], result.length[i], maxLength);
-            if (adjustedDownLen < result.length[i]) {
-              result.setRef(i, result.vector[i], result.start[i], adjustedDownLen);
-            }
-          }
-        } else {
-          for (int i = 0; i < batchSize; i++) {
-            if (!result.isNull[i]) {
-              adjustedDownLen = StringExpr
-                  .truncate(result.vector[i], result.start[i], result.length[i], maxLength);
-              if (adjustedDownLen < result.length[i]) {
-                result.setRef(i, result.vector[i], result.start[i], adjustedDownLen);
-              }
-            }
-          }
-        }
-      }
-      return result;
-    }
-  }
-
-  protected static class StructTreeReader extends TreeReader {
-    private final int fileColumnCount;
-    private final int resultColumnCount;
-    protected final TreeReader[] fields;
-    private final String[] fieldNames;
-
-    protected StructTreeReader(
-        int columnId,
-        TreeReaderSchema treeReaderSchema,
-        boolean[] included,
-        boolean skipCorrupt) throws IOException {
-      super(columnId);
-
-      OrcProto.Type fileStructType = treeReaderSchema.getFileTypes().get(columnId);
-      fileColumnCount = fileStructType.getFieldNamesCount();
-
-      OrcProto.Type schemaStructType = treeReaderSchema.getSchemaTypes().get(columnId);
-
-      if (columnId == treeReaderSchema.getInnerStructSubtype()) {
-        // If there are more result columns than reader columns, we will default those additional
-        // columns to NULL.
-        resultColumnCount = schemaStructType.getFieldNamesCount();
-      } else {
-        resultColumnCount = fileColumnCount;
-      }
-
-      this.fields = new TreeReader[fileColumnCount];
-      this.fieldNames = new String[fileColumnCount];
-
-      if (included == null) {
-        for (int i = 0; i < fileColumnCount; ++i) {
-          int subtype = schemaStructType.getSubtypes(i);
-          this.fields[i] = createTreeReader(subtype, treeReaderSchema, included, skipCorrupt);
-          // Use the treeReaderSchema evolution name since file/reader types may not have the real column name.
-          this.fieldNames[i] = schemaStructType.getFieldNames(i);
-        }
-      } else {
-        for (int i = 0; i < fileColumnCount; ++i) {
-          int subtype = schemaStructType.getSubtypes(i);
-          if (subtype >= included.length) {
-            throw new IOException("subtype " + subtype + " exceeds the included array size " +
-                included.length + " fileTypes " + treeReaderSchema.getFileTypes().toString() +
-                " schemaTypes " + treeReaderSchema.getSchemaTypes().toString() +
-                " innerStructSubtype " + treeReaderSchema.getInnerStructSubtype());
-          }
-          if (included[subtype]) {
-            this.fields[i] = createTreeReader(subtype, treeReaderSchema, included, skipCorrupt);
-          }
-          // Use the treeReaderSchema evolution name since file/reader types may not have the real column name.
-          this.fieldNames[i] = schemaStructType.getFieldNames(i);
-        }
-      }
-    }
-
-    @Override
-    void seek(PositionProvider[] index) throws IOException {
-      super.seek(index);
-      for (TreeReader kid : fields) {
-        if (kid != null) {
-          kid.seek(index);
-        }
-      }
-    }
-
-    @Override
-    Object next(Object previous) throws IOException {
-      super.next(previous);
-      OrcStruct result = null;
-      if (valuePresent) {
-        if (previous == null) {
-          result = new OrcStruct(resultColumnCount);
-        } else {
-          result = (OrcStruct) previous;
-
-          // If the input format was initialized with a file with a
-          // different number of fields, the number of fields needs to
-          // be updated to the correct number
-          if (result.getNumFields() != resultColumnCount) {
-            result.setNumFields(resultColumnCount);
-          }
-        }
-        for (int i = 0; i < fileColumnCount; ++i) {
-          if (fields[i] != null) {
-            result.setFieldValue(i, fields[i].next(result.getFieldValue(i)));
-          }
-        }
-        if (resultColumnCount > fileColumnCount) {
-          for (int i = fileColumnCount; i < resultColumnCount; ++i) {
-            // Default new treeReaderSchema evolution fields to NULL.
-            result.setFieldValue(i, null);
-          }
-        }
-      }
-      return result;
-    }
-
-    @Override
-    public Object nextVector(Object previousVector, long batchSize) throws IOException {
-      final ColumnVector[] result;
-      if (previousVector == null) {
-        result = new ColumnVector[fileColumnCount];
-      } else {
-        result = (ColumnVector[]) previousVector;
-      }
-
-      // Read all the members of struct as column vectors
-      for (int i = 0; i < fileColumnCount; i++) {
-        if (fields[i] != null) {
-          if (result[i] == null) {
-            result[i] = (ColumnVector) fields[i].nextVector(null, batchSize);
-          } else {
-            fields[i].nextVector(result[i], batchSize);
-          }
-        }
-      }
-
-      // Default additional treeReaderSchema evolution fields to NULL.
-      if (vectorColumnCount != -1 && vectorColumnCount > fileColumnCount) {
-        for (int i = fileColumnCount; i < vectorColumnCount; ++i) {
-          ColumnVector colVector = result[i];
-          if (colVector != null) {
-            colVector.isRepeating = true;
-            colVector.noNulls = false;
-            colVector.isNull[0] = true;
-          }
-        }
-      }
-
-      return result;
-    }
-
-    @Override
-    void startStripe(Map<StreamName, InStream> streams,
-                     OrcProto.StripeFooter stripeFooter
-    ) throws IOException {
-      super.startStripe(streams, stripeFooter);
-      for (TreeReader field : fields) {
-        if (field != null) {
-          field.startStripe(streams, stripeFooter);
-        }
-      }
-    }
-
-    @Override
-    void skipRows(long items) throws IOException {
-      items = countNonNulls(items);
-      for (TreeReader field : fields) {
-        if (field != null) {
-          field.skipRows(items);
-        }
-      }
-    }
-  }
-
-  public static class UnionTreeReader extends TreeReader {
-    protected final TreeReader[] fields;
-    protected RunLengthByteReader tags;
-
-    protected UnionTreeReader(int columnId,
-                              TreeReaderSchema treeReaderSchema,
-                              boolean[] included,
-                              boolean skipCorrupt) throws IOException {
-      super(columnId);
-      OrcProto.Type type = treeReaderSchema.getSchemaTypes().get(columnId);
-      int fieldCount = type.getSubtypesCount();
-      this.fields = new TreeReader[fieldCount];
-      for (int i = 0; i < fieldCount; ++i) {
-        int subtype = type.getSubtypes(i);
-        if (included == null || included[subtype]) {
-          this.fields[i] = createTreeReader(subtype, treeReaderSchema, included, skipCorrupt);
-        }
-      }
-    }
-
-    @Override
-    void seek(PositionProvider[] index) throws IOException {
-      super.seek(index);
-      tags.seek(index[columnId]);
-      for (TreeReader kid : fields) {
-        kid.seek(index);
-      }
-    }
-
-    @Override
-    Object next(Object previous) throws IOException {
-      super.next(previous);
-      OrcUnion result = null;
-      if (valuePresent) {
-        if (previous == null) {
-          result = new OrcUnion();
-        } else {
-          result = (OrcUnion) previous;
-        }
-        byte tag = tags.next();
-        Object previousVal = result.getObject();
-        result.set(tag, fields[tag].next(tag == result.getTag() ?
-            previousVal : null));
-      }
-      return result;
-    }
-
-    @Override
-    public Object nextVector(Object previousVector, long batchSize) throws IOException {
-      throw new UnsupportedOperationException(
-          "NextVector is not supported operation for Union type");
-    }
-
-    @Override
-    void startStripe(Map<StreamName, InStream> streams,
-                     OrcProto.StripeFooter stripeFooter
-    ) throws IOException {
-      super.startStripe(streams, stripeFooter);
-      tags = new RunLengthByteReader(streams.get(new StreamName(columnId,
-          OrcProto.Stream.Kind.DATA)));
-      for (TreeReader field : fields) {
-        if (field != null) {
-          field.startStripe(streams, stripeFooter);
-        }
-      }
-    }
-
-    @Override
-    void skipRows(long items) throws IOException {
-      items = countNonNulls(items);
-      long[] counts = new long[fields.length];
-      for (int i = 0; i < items; ++i) {
-        counts[tags.next()] += 1;
-      }
-      for (int i = 0; i < counts.length; ++i) {
-        fields[i].skipRows(counts[i]);
-      }
-    }
-  }
-
-  public static class ListTreeReader extends TreeReader {
-    protected final TreeReader elementReader;
-    protected IntegerReader lengths = null;
-
-    protected ListTreeReader(int columnId,
-                             TreeReaderSchema treeReaderSchema,
-                             boolean[] included,
-                             boolean skipCorrupt) throws IOException {
-      super(columnId);
-      OrcProto.Type type = treeReaderSchema.getSchemaTypes().get(columnId);
-      elementReader = createTreeReader(type.getSubtypes(0), treeReaderSchema, included, skipCorrupt);
-    }
-
-    @Override
-    void seek(PositionProvider[] index) throws IOException {
-      super.seek(index);
-      lengths.seek(index[columnId]);
-      elementReader.seek(index);
-    }
-
-    @Override
-    @SuppressWarnings("unchecked")
-    Object next(Object previous) throws IOException {
-      super.next(previous);
-      List<Object> result = null;
-      if (valuePresent) {
-        if (previous == null) {
-          result = new ArrayList<>();
-        } else {
-          result = (ArrayList<Object>) previous;
-        }
-        int prevLength = result.size();
-        int length = (int) lengths.next();
-        // extend the list to the new length
-        for (int i = prevLength; i < length; ++i) {
-          result.add(null);
-        }
-        // read the new elements into the array
-        for (int i = 0; i < length; i++) {
-          result.set(i, elementReader.next(i < prevLength ?
-              result.get(i) : null));
-        }
-        // remove any extra elements
-        for (int i = prevLength - 1; i >= length; --i) {
-          result.remove(i);
-        }
-      }
-      return result;
-    }
-
-    @Override
-    public Object nextVector(Object previous, long batchSize) throws IOException {
-      throw new UnsupportedOperationException(
-          "NextVector is not supported operation for List type");
-    }
-
-    @Override
-    void checkEncoding(OrcProto.ColumnEncoding encoding) throws IOException {
-      if ((encoding.getKind() != OrcProto.ColumnEncoding.Kind.DIRECT) &&
-          (encoding.getKind() != OrcProto.ColumnEncoding.Kind.DIRECT_V2)) {
-        throw new IOException("Unknown encoding " + encoding + " in column " +
-            columnId);
-      }
-    }
-
-    @Override
-    void startStripe(Map<StreamName, InStream> streams,
-                     OrcProto.StripeFooter stripeFooter
-    ) throws IOException {
-      super.startStripe(streams, stripeFooter);
-      lengths = createIntegerReader(stripeFooter.getColumnsList().get(columnId).getKind(),
-          streams.get(new StreamName(columnId,
-              OrcProto.Stream.Kind.LENGTH)), false, false);
-      if (elementReader != null) {
-        elementReader.startStripe(streams, stripeFooter);
-      }
-    }
-
-    @Override
-    void skipRows(long items) throws IOException {
-      items = countNonNulls(items);
-      long childSkip = 0;
-      for (long i = 0; i < items; ++i) {
-        childSkip += lengths.next();
-      }
-      elementReader.skipRows(childSkip);
-    }
-  }
-
-  public static class MapTreeReader extends TreeReader {
-    protected final TreeReader keyReader;
-    protected final TreeReader valueReader;
-    protected IntegerReader lengths = null;
-
-    protected MapTreeReader(int columnId,
-                            TreeReaderSchema treeReaderSchema,
-                            boolean[] included,
-                            boolean skipCorrupt) throws IOException {
-      super(columnId);
-      OrcProto.Type type = treeReaderSchema.getSchemaTypes().get(columnId);
-      int keyColumn = type.getSubtypes(0);
-      int valueColumn = type.getSubtypes(1);
-      if (included == null || included[keyColumn]) {
-        keyReader = createTreeReader(keyColumn, treeReaderSchema, included, skipCorrupt);
-      } else {
-        keyReader = null;
-      }
-      if (included == null || included[valueColumn]) {
-        valueReader = createTreeReader(valueColumn, treeReaderSchema, included, skipCorrupt);
-      } else {
-        valueReader = null;
-      }
-    }
-
-    @Override
-    void seek(PositionProvider[] index) throws IOException {
-      super.seek(index);
-      lengths.seek(index[columnId]);
-      keyReader.seek(index);
-      valueReader.seek(index);
-    }
-
-    @Override
-    @SuppressWarnings("unchecked")
-    Object next(Object previous) throws IOException {
-      super.next(previous);
-      Map<Object, Object> result = null;
-      if (valuePresent) {
-        if (previous == null) {
-          result = new LinkedHashMap<>();
-        } else {
-          result = (LinkedHashMap<Object, Object>) previous;
-        }
-        // for now just clear and create new objects
-        result.clear();
-        int length = (int) lengths.next();
-        // read the new elements into the array
-        for (int i = 0; i < length; i++) {
-          result.put(keyReader.next(null), valueReader.next(null));
-        }
-      }
-      return result;
-    }
-
-    @Override
-    public Object nextVector(Object previous, long batchSize) throws IOException {
-      throw new UnsupportedOperationException(
-          "NextVector is not supported operation for Map type");
-    }
-
-    @Override
-    void checkEncoding(OrcProto.ColumnEncoding encoding) throws IOException {
-      if ((encoding.getKind() != OrcProto.ColumnEncoding.Kind.DIRECT) &&
-          (encoding.getKind() != OrcProto.ColumnEncoding.Kind.DIRECT_V2)) {
-        throw new IOException("Unknown encoding " + encoding + " in column " +
-            columnId);
-      }
-    }
-
-    @Override
-    void startStripe(Map<StreamName, InStream> streams,
-                     OrcProto.StripeFooter stripeFooter
-    ) throws IOException {
-      super.startStripe(streams, stripeFooter);
-      lengths = createIntegerReader(stripeFooter.getColumnsList().get(columnId).getKind(),
-          streams.get(new StreamName(columnId,
-              OrcProto.Stream.Kind.LENGTH)), false, false);
-      if (keyReader != null) {
-        keyReader.startStripe(streams, stripeFooter);
-      }
-      if (valueReader != null) {
-        valueReader.startStripe(streams, stripeFooter);
-      }
-    }
-
-    @Override
-    void skipRows(long items) throws IOException {
-      items = countNonNulls(items);
-      long childSkip = 0;
-      for (long i = 0; i < items; ++i) {
-        childSkip += lengths.next();
-      }
-      keyReader.skipRows(childSkip);
-      valueReader.skipRows(childSkip);
-    }
-  }
+//  protected static class StructTreeReader extends TreeReader {
+//    private final int fileColumnCount;
+//    private final int resultColumnCount;
+//    protected final TreeReader[] fields;
+//    private final String[] fieldNames;
+//
+//    protected StructTreeReader(
+//        int columnId,
+//        TreeReaderSchema treeReaderSchema,
+//        boolean[] included,
+//        boolean skipCorrupt) throws IOException {
+//      super(columnId);
+//
+//      OrcProto.Type fileStructType = treeReaderSchema.getFileTypes().get(columnId);
+//      fileColumnCount = fileStructType.getFieldNamesCount();
+//
+//      OrcProto.Type schemaStructType = treeReaderSchema.getSchemaTypes().get(columnId);
+//
+//      if (columnId == treeReaderSchema.getInnerStructSubtype()) {
+//        // If there are more result columns than reader columns, we will default those additional
+//        // columns to NULL.
+//        resultColumnCount = schemaStructType.getFieldNamesCount();
+//      } else {
+//        resultColumnCount = fileColumnCount;
+//      }
+//
+//      this.fields = new TreeReader[fileColumnCount];
+//      this.fieldNames = new String[fileColumnCount];
+//
+//      if (included == null) {
+//        for (int i = 0; i < fileColumnCount; ++i) {
+//          int subtype = schemaStructType.getSubtypes(i);
+//          this.fields[i] = createTreeReader(subtype, treeReaderSchema, included, skipCorrupt);
+//          // Use the treeReaderSchema evolution name since file/reader types may not have the real column name.
+//          this.fieldNames[i] = schemaStructType.getFieldNames(i);
+//        }
+//      } else {
+//        for (int i = 0; i < fileColumnCount; ++i) {
+//          int subtype = schemaStructType.getSubtypes(i);
+//          if (subtype >= included.length) {
+//            throw new IOException("subtype " + subtype + " exceeds the included array size " +
+//                included.length + " fileTypes " + treeReaderSchema.getFileTypes().toString() +
+//                " schemaTypes " + treeReaderSchema.getSchemaTypes().toString() +
+//                " innerStructSubtype " + treeReaderSchema.getInnerStructSubtype());
+//          }
+//          if (included[subtype]) {
+//            this.fields[i] = createTreeReader(subtype, treeReaderSchema, included, skipCorrupt);
+//          }
+//          // Use the treeReaderSchema evolution name since file/reader types may not have the real column name.
+//          this.fieldNames[i] = schemaStructType.getFieldNames(i);
+//        }
+//      }
+//    }
+//
+//    @Override
+//    void seek(PositionProvider[] index) throws IOException {
+//      super.seek(index);
+//      for (TreeReader kid : fields) {
+//        if (kid != null) {
+//          kid.seek(index);
+//        }
+//      }
+//    }
+//
+//    @Override
+//    Object next(Object previous) throws IOException {
+//      super.next(previous);
+//      OrcStruct result = null;
+//      if (valuePresent) {
+//        if (previous == null) {
+//          result = new OrcStruct(resultColumnCount);
+//        } else {
+//          result = (OrcStruct) previous;
+//
+//          // If the input format was initialized with a file with a
+//          // different number of fields, the number of fields needs to
+//          // be updated to the correct number
+//          if (result.getNumFields() != resultColumnCount) {
+//            result.setNumFields(resultColumnCount);
+//          }
+//        }
+//        for (int i = 0; i < fileColumnCount; ++i) {
+//          if (fields[i] != null) {
+//            result.setFieldValue(i, fields[i].next(result.getFieldValue(i)));
+//          }
+//        }
+//        if (resultColumnCount > fileColumnCount) {
+//          for (int i = fileColumnCount; i < resultColumnCount; ++i) {
+//            // Default new treeReaderSchema evolution fields to NULL.
+//            result.setFieldValue(i, null);
+//          }
+//        }
+//      }
+//      return result;
+//    }
+//
+//    @Override
+//    public Object nextVector(Object previousVector, long batchSize) throws IOException {
+//      final ColumnVector[] result;
+//      if (previousVector == null) {
+//        result = new ColumnVector[fileColumnCount];
+//      } else {
+//        result = (ColumnVector[]) previousVector;
+//      }
+//
+//      // Read all the members of struct as column vectors
+//      for (int i = 0; i < fileColumnCount; i++) {
+//        if (fields[i] != null) {
+//          if (result[i] == null) {
+//            result[i] = (ColumnVector) fields[i].nextVector(null, batchSize);
+//          } else {
+//            fields[i].nextVector(result[i], batchSize);
+//          }
+//        }
+//      }
+//
+//      // Default additional treeReaderSchema evolution fields to NULL.
+//      if (vectorColumnCount != -1 && vectorColumnCount > fileColumnCount) {
+//        for (int i = fileColumnCount; i < vectorColumnCount; ++i) {
+//          ColumnVector colVector = result[i];
+//          if (colVector != null) {
+//            colVector.isRepeating = true;
+//            colVector.noNulls = false;
+//            colVector.isNull[0] = true;
+//          }
+//        }
+//      }
+//
+//      return result;
+//    }
+//
+//    @Override
+//    void startStripe(Map<StreamName, InStream> streams,
+//                     OrcProto.StripeFooter stripeFooter
+//    ) throws IOException {
+//      super.startStripe(streams, stripeFooter);
+//      for (TreeReader field : fields) {
+//        if (field != null) {
+//          field.startStripe(streams, stripeFooter);
+//        }
+//      }
+//    }
+//
+//    @Override
+//    void skipRows(long items) throws IOException {
+//      items = countNonNulls(items);
+//      for (TreeReader field : fields) {
+//        if (field != null) {
+//          field.skipRows(items);
+//        }
+//      }
+//    }
+//  }
+//
+//  public static class UnionTreeReader extends TreeReader {
+//    protected final TreeReader[] fields;
+//    protected RunLengthByteReader tags;
+//
+//    protected UnionTreeReader(int columnId,
+//                              TreeReaderSchema treeReaderSchema,
+//                              boolean[] included,
+//                              boolean skipCorrupt) throws IOException {
+//      super(columnId);
+//      OrcProto.Type type = treeReaderSchema.getSchemaTypes().get(columnId);
+//      int fieldCount = type.getSubtypesCount();
+//      this.fields = new TreeReader[fieldCount];
+//      for (int i = 0; i < fieldCount; ++i) {
+//        int subtype = type.getSubtypes(i);
+//        if (included == null || included[subtype]) {
+//          this.fields[i] = createTreeReader(subtype, treeReaderSchema, included, skipCorrupt);
+//        }
+//      }
+//    }
+//
+//    @Override
+//    void seek(PositionProvider[] index) throws IOException {
+//      super.seek(index);
+//      tags.seek(index[columnId]);
+//      for (TreeReader kid : fields) {
+//        kid.seek(index);
+//      }
+//    }
+//
+//    @Override
+//    Object next(Object previous) throws IOException {
+//      super.next(previous);
+//      OrcUnion result = null;
+//      if (valuePresent) {
+//        if (previous == null) {
+//          result = new OrcUnion();
+//        } else {
+//          result = (OrcUnion) previous;
+//        }
+//        byte tag = tags.next();
+//        Object previousVal = result.getObject();
+//        result.set(tag, fields[tag].next(tag == result.getTag() ?
+//            previousVal : null));
+//      }
+//      return result;
+//    }
+//
+//    @Override
+//    public Object nextVector(Object previousVector, long batchSize) throws IOException {
+//      throw new UnsupportedOperationException(
+//          "NextVector is not supported operation for Union type");
+//    }
+//
+//    @Override
+//    void startStripe(Map<StreamName, InStream> streams,
+//                     OrcProto.StripeFooter stripeFooter
+//    ) throws IOException {
+//      super.startStripe(streams, stripeFooter);
+//      tags = new RunLengthByteReader(streams.get(new StreamName(columnId,
+//          OrcProto.Stream.Kind.DATA)));
+//      for (TreeReader field : fields) {
+//        if (field != null) {
+//          field.startStripe(streams, stripeFooter);
+//        }
+//      }
+//    }
+//
+//    @Override
+//    void skipRows(long items) throws IOException {
+//      items = countNonNulls(items);
+//      long[] counts = new long[fields.length];
+//      for (int i = 0; i < items; ++i) {
+//        counts[tags.next()] += 1;
+//      }
+//      for (int i = 0; i < counts.length; ++i) {
+//        fields[i].skipRows(counts[i]);
+//      }
+//    }
+//  }
+//
+//  public static class ListTreeReader extends TreeReader {
+//    protected final TreeReader elementReader;
+//    protected IntegerReader lengths = null;
+//
+//    protected ListTreeReader(int columnId,
+//                             TreeReaderSchema treeReaderSchema,
+//                             boolean[] included,
+//                             boolean skipCorrupt) throws IOException {
+//      super(columnId);
+//      OrcProto.Type type = treeReaderSchema.getSchemaTypes().get(columnId);
+//      elementReader = createTreeReader(type.getSubtypes(0), treeReaderSchema, included, skipCorrupt);
+//    }
+//
+//    @Override
+//    void seek(PositionProvider[] index) throws IOException {
+//      super.seek(index);
+//      lengths.seek(index[columnId]);
+//      elementReader.seek(index);
+//    }
+//
+//    @Override
+//    @SuppressWarnings("unchecked")
+//    Object next(Object previous) throws IOException {
+//      super.next(previous);
+//      List<Object> result = null;
+//      if (valuePresent) {
+//        if (previous == null) {
+//          result = new ArrayList<>();
+//        } else {
+//          result = (ArrayList<Object>) previous;
+//        }
+//        int prevLength = result.size();
+//        int length = (int) lengths.next();
+//        // extend the list to the new length
+//        for (int i = prevLength; i < length; ++i) {
+//          result.add(null);
+//        }
+//        // read the new elements into the array
+//        for (int i = 0; i < length; i++) {
+//          result.set(i, elementReader.next(i < prevLength ?
+//              result.get(i) : null));
+//        }
+//        // remove any extra elements
+//        for (int i = prevLength - 1; i >= length; --i) {
+//          result.remove(i);
+//        }
+//      }
+//      return result;
+//    }
+//
+//    @Override
+//    public Object nextVector(Object previous, long batchSize) throws IOException {
+//      throw new UnsupportedOperationException(
+//          "NextVector is not supported operation for List type");
+//    }
+//
+//    @Override
+//    void checkEncoding(OrcProto.ColumnEncoding encoding) throws IOException {
+//      if ((encoding.getKind() != OrcProto.ColumnEncoding.Kind.DIRECT) &&
+//          (encoding.getKind() != OrcProto.ColumnEncoding.Kind.DIRECT_V2)) {
+//        throw new IOException("Unknown encoding " + encoding + " in column " +
+//            columnId);
+//      }
+//    }
+//
+//    @Override
+//    void startStripe(Map<StreamName, InStream> streams,
+//                     OrcProto.StripeFooter stripeFooter
+//    ) throws IOException {
+//      super.startStripe(streams, stripeFooter);
+//      lengths = createIntegerReader(stripeFooter.getColumnsList().get(columnId).getKind(),
+//          streams.get(new StreamName(columnId,
+//              OrcProto.Stream.Kind.LENGTH)), false, false);
+//      if (elementReader != null) {
+//        elementReader.startStripe(streams, stripeFooter);
+//      }
+//    }
+//
+//    @Override
+//    void skipRows(long items) throws IOException {
+//      items = countNonNulls(items);
+//      long childSkip = 0;
+//      for (long i = 0; i < items; ++i) {
+//        childSkip += lengths.next();
+//      }
+//      elementReader.skipRows(childSkip);
+//    }
+//  }
+//
+//  public static class MapTreeReader extends TreeReader {
+//    protected final TreeReader keyReader;
+//    protected final TreeReader valueReader;
+//    protected IntegerReader lengths = null;
+//
+//    protected MapTreeReader(int columnId,
+//                            TreeReaderSchema treeReaderSchema,
+//                            boolean[] included,
+//                            boolean skipCorrupt) throws IOException {
+//      super(columnId);
+//      OrcProto.Type type = treeReaderSchema.getSchemaTypes().get(columnId);
+//      int keyColumn = type.getSubtypes(0);
+//      int valueColumn = type.getSubtypes(1);
+//      if (included == null || included[keyColumn]) {
+//        keyReader = createTreeReader(keyColumn, treeReaderSchema, included, skipCorrupt);
+//      } else {
+//        keyReader = null;
+//      }
+//      if (included == null || included[valueColumn]) {
+//        valueReader = createTreeReader(valueColumn, treeReaderSchema, included, skipCorrupt);
+//      } else {
+//        valueReader = null;
+//      }
+//    }
+//
+//    @Override
+//    void seek(PositionProvider[] index) throws IOException {
+//      super.seek(index);
+//      lengths.seek(index[columnId]);
+//      keyReader.seek(index);
+//      valueReader.seek(index);
+//    }
+//
+//    @Override
+//    @SuppressWarnings("unchecked")
+//    Object next(Object previous) throws IOException {
+//      super.next(previous);
+//      Map<Object, Object> result = null;
+//      if (valuePresent) {
+//        if (previous == null) {
+//          result = new LinkedHashMap<>();
+//        } else {
+//          result = (LinkedHashMap<Object, Object>) previous;
+//        }
+//        // for now just clear and create new objects
+//        result.clear();
+//        int length = (int) lengths.next();
+//        // read the new elements into the array
+//        for (int i = 0; i < length; i++) {
+//          result.put(keyReader.next(null), valueReader.next(null));
+//        }
+//      }
+//      return result;
+//    }
+//
+//    @Override
+//    public Object nextVector(Object previous, long batchSize) throws IOException {
+//      throw new UnsupportedOperationException(
+//          "NextVector is not supported operation for Map type");
+//    }
+//
+//    @Override
+//    void checkEncoding(OrcProto.ColumnEncoding encoding) throws IOException {
+//      if ((encoding.getKind() != OrcProto.ColumnEncoding.Kind.DIRECT) &&
+//          (encoding.getKind() != OrcProto.ColumnEncoding.Kind.DIRECT_V2)) {
+//        throw new IOException("Unknown encoding " + encoding + " in column " +
+//            columnId);
+//      }
+//    }
+//
+//    @Override
+//    void startStripe(Map<StreamName, InStream> streams,
+//                     OrcProto.StripeFooter stripeFooter
+//    ) throws IOException {
+//      super.startStripe(streams, stripeFooter);
+//      lengths = createIntegerReader(stripeFooter.getColumnsList().get(columnId).getKind(),
+//          streams.get(new StreamName(columnId,
+//              OrcProto.Stream.Kind.LENGTH)), false, false);
+//      if (keyReader != null) {
+//        keyReader.startStripe(streams, stripeFooter);
+//      }
+//      if (valueReader != null) {
+//        valueReader.startStripe(streams, stripeFooter);
+//      }
+//    }
+//
+//    @Override
+//    void skipRows(long items) throws IOException {
+//      items = countNonNulls(items);
+//      long childSkip = 0;
+//      for (long i = 0; i < items; ++i) {
+//        childSkip += lengths.next();
+//      }
+//      keyReader.skipRows(childSkip);
+//      valueReader.skipRows(childSkip);
+//    }
+//  }
 
   public static TreeReader createTreeReader(int columnId,
-                                            TreeReaderSchema treeReaderSchema,
-                                            boolean[] included,
+                                            Column column,
                                             boolean skipCorrupt
   ) throws IOException {
-    OrcProto.Type type = treeReaderSchema.getSchemaTypes().get(columnId);
-    switch (type.getKind()) {
+//    OrcProto.Type type = treeReaderSchema.getSchemaTypes().get(columnId);
+    TypeDesc typeDesc = column.getTypeDesc();
+    int orcColumnId = columnId + 1; // root record column is considered
+    switch (typeDesc.getDataType().getType()) {
       case BOOLEAN:
-        return new BooleanTreeReader(columnId);
-      case BYTE:
-        return new ByteTreeReader(columnId);
-      case DOUBLE:
-        return new DoubleTreeReader(columnId);
-      case FLOAT:
-        return new FloatTreeReader(columnId);
-      case SHORT:
-        return new ShortTreeReader(columnId);
-      case INT:
-        return new IntTreeReader(columnId);
-      case LONG:
-        return new LongTreeReader(columnId, skipCorrupt);
-      case STRING:
-        return new StringTreeReader(columnId);
+        return new BooleanTreeReader(orcColumnId);
+      case BIT:
+        return new ByteTreeReader(orcColumnId);
+      case FLOAT8:
+        return new DoubleTreeReader(orcColumnId);
+      case FLOAT4:
+        return new FloatTreeReader(orcColumnId);
+      case INT2:
+        return new ShortTreeReader(orcColumnId);
+      case INT4:
+      case INET4:
+        return new IntTreeReader(orcColumnId);
+      case INT8:
+        return new LongTreeReader(orcColumnId, skipCorrupt);
+      case TEXT:
+        return new StringTreeReader(orcColumnId);
       case CHAR:
-        if (!type.hasMaximumLength()) {
-          throw new IllegalArgumentException("ORC char type has no length specified");
-        }
-        return new CharTreeReader(columnId, type.getMaximumLength());
-      case VARCHAR:
-        if (!type.hasMaximumLength()) {
-          throw new IllegalArgumentException("ORC varchar type has no length specified");
-        }
-        return new VarcharTreeReader(columnId, type.getMaximumLength());
-      case BINARY:
-        return new BinaryTreeReader(columnId);
+        return new CharTreeReader(orcColumnId, typeDesc.getDataType().getLength());
+//      case VARCHAR:
+//        if (!type.hasMaximumLength()) {
+//          throw new IllegalArgumentException("ORC varchar type has no length specified");
+//        }
+//        return new VarcharTreeReader(columnId, type.getMaximumLength());
+      case BLOB:
+        return new BinaryTreeReader(orcColumnId);
       case TIMESTAMP:
-        return new TimestampTreeReader(columnId, skipCorrupt);
+        return new TimestampTreeReader(orcColumnId, skipCorrupt);
       case DATE:
-        return new DateTreeReader(columnId);
-      case DECIMAL:
-        int precision =
-            type.hasPrecision() ? type.getPrecision() : HiveDecimal.SYSTEM_DEFAULT_PRECISION;
-        int scale = type.hasScale() ? type.getScale() : HiveDecimal.SYSTEM_DEFAULT_SCALE;
-        return new DecimalTreeReader(columnId, precision, scale);
-      case STRUCT:
-        return new StructTreeReader(columnId, treeReaderSchema, included, skipCorrupt);
-      case LIST:
-        return new ListTreeReader(columnId, treeReaderSchema, included, skipCorrupt);
-      case MAP:
-        return new MapTreeReader(columnId, treeReaderSchema, included, skipCorrupt);
-      case UNION:
-        return new UnionTreeReader(columnId, treeReaderSchema, included, skipCorrupt);
+        return new DateTreeReader(orcColumnId);
+//      case DECIMAL:
+//        int precision =
+//            type.hasPrecision() ? type.getPrecision() : HiveDecimal.SYSTEM_DEFAULT_PRECISION;
+//        int scale = type.hasScale() ? type.getScale() : HiveDecimal.SYSTEM_DEFAULT_SCALE;
+//        return new DecimalTreeReader(columnId, precision, scale);
+//      case STRUCT:
+//        return new StructTreeReader(columnId, treeReaderSchema, included, skipCorrupt);
+//      case LIST:
+//        return new ListTreeReader(columnId, treeReaderSchema, included, skipCorrupt);
+//      case MAP:
+//        return new MapTreeReader(columnId, treeReaderSchema, included, skipCorrupt);
+//      case UNION:
+//        return new UnionTreeReader(columnId, treeReaderSchema, included, skipCorrupt);
       default:
-        throw new IllegalArgumentException("Unsupported type " +
-            type.getKind());
+        throw new TajoRuntimeException(new UnsupportedException("Unsupported type " +
+            typeDesc.getDataType().getType().name()));
     }
   }
 }

@@ -151,15 +151,16 @@ public class TestStorages {
   public static Collection<Object[]> generateParameters() {
     return Arrays.asList(new Object[][] {
         //type, splitable, statsable, seekable, internalType
-        {BuiltinStorages.RAW, false, true, true, true},
-        {BuiltinStorages.DRAW, false, true, true, true},
-        {BuiltinStorages.RCFILE, true, true, false, false},
-        {BuiltinStorages.PARQUET, false, false, false, false},
-        {BuiltinStorages.ORC, false, true, false, false},
-        {BuiltinStorages.SEQUENCE_FILE, true, true, false, false},
-        {BuiltinStorages.AVRO, false, false, false, false},
-        {BuiltinStorages.TEXT, true, true, true, false},
-        {BuiltinStorages.JSON, true, true, false, false},
+//        {BuiltinStorages.RAW, false, true, true, true},
+//        {BuiltinStorages.DRAW, false, true, true, true},
+//        {BuiltinStorages.RCFILE, true, true, false, false},
+//        {BuiltinStorages.PARQUET, false, false, false, false},
+//        {BuiltinStorages.ORC, false, true, false, false},
+        {BuiltinStorages.ORC2, false, true, false, false},
+//        {BuiltinStorages.SEQUENCE_FILE, true, true, false, false},
+//        {BuiltinStorages.AVRO, false, false, false, false},
+//        {BuiltinStorages.TEXT, true, true, true, false},
+//        {BuiltinStorages.JSON, true, true, false, false},
     });
   }
 
@@ -569,13 +570,13 @@ public class TestStorages {
     schema.addColumn("col6", Type.FLOAT4);
     schema.addColumn("col7", Type.FLOAT8);
     schema.addColumn("col8", Type.TEXT);
-    schema.addColumn("col9", Type.BLOB);
-    schema.addColumn("col10", Type.INET4);
-    schema.addColumn("col11", Type.NULL_TYPE);
+//    schema.addColumn("col9", Type.BLOB);
+//    schema.addColumn("col10", Type.INET4);
+//    schema.addColumn("col11", Type.NULL_TYPE);
 
-    if (handleProtobuf) {
-      schema.addColumn("col12", CatalogUtil.newDataType(Type.PROTOBUF, TajoIdProtos.QueryIdProto.class.getName()));
-    }
+//    if (handleProtobuf) {
+//      schema.addColumn("col12", CatalogUtil.newDataType(Type.PROTOBUF, TajoIdProtos.QueryIdProto.class.getName()));
+//    }
 
     KeyValueSet options = new KeyValueSet();
     TableMeta meta = CatalogUtil.newTableMeta(dataFormat, options);
@@ -606,14 +607,14 @@ public class TestStorages {
         DatumFactory.createFloat4(77.9f),             // 6
         DatumFactory.createFloat8(271.9f),            // 7
         DatumFactory.createText("hyunsik"),           // 8
-        DatumFactory.createBlob("hyunsik".getBytes()),// 9
-        DatumFactory.createInet4("192.168.0.1"),      // 10
-        NullDatum.get(),                              // 11
+//        DatumFactory.createBlob("hyunsik".getBytes()),// 9
+//        DatumFactory.createInet4("192.168.0.1"),      // 10
+//        NullDatum.get(),                              // 11
     });
 
-    if (handleProtobuf) {
-      seedTuple.put(11, factory.createDatum(queryid.getProto()));       // 12
-    }
+//    if (handleProtobuf) {
+//      seedTuple.put(11, factory.createDatum(queryid.getProto()));       // 12
+//    }
 
     // Making tuples with different null column positions
     Tuple tuple;
@@ -1131,7 +1132,8 @@ public class TestStorages {
   public void testLessThanSchemaSize() throws IOException {
     /* Internal storage must be same with schema size */
     if (internalType || dataFormat.equalsIgnoreCase(BuiltinStorages.AVRO)
-        || dataFormat.equalsIgnoreCase(BuiltinStorages.ORC)) {
+        || dataFormat.equalsIgnoreCase(BuiltinStorages.ORC)
+        || dataFormat.equalsIgnoreCase(BuiltinStorages.ORC2)) {
       return;
     }
 
@@ -1307,7 +1309,7 @@ public class TestStorages {
     try {
       appender = sm.getAppender(meta, schema, tablePath);
       appender.init();
-      if (BuiltinStorages.ORC.equals(dataFormat)) {
+      if (BuiltinStorages.ORC.equals(dataFormat) || BuiltinStorages.ORC2.equals(dataFormat)) {
         appender.close();
       }
       fail(dataFormat);
