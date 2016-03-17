@@ -355,12 +355,11 @@ public class OrcRecordReader implements Closeable {
     // if we haven't skipped the whole stripe, read the data
     if (rowInStripe < rowCountInStripe) {
       // if we aren't projecting columns or filtering rows, just read it all
-//      if (included == null) {
-//        readAllDataStreams(stripe);
-//      } else {
-//        readPartialDataStreams(stripe);
-//      }
-      readAllDataStreams(stripe);
+      if (included == null) {
+        readAllDataStreams(stripe);
+      } else {
+        readPartialDataStreams(stripe);
+      }
 
       for (TreeReaderFactory.TreeReader eachReader : reader) {
         eachReader.startStripe(streams, stripeFooter);

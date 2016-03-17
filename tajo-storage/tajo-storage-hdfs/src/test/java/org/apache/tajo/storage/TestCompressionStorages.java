@@ -61,6 +61,7 @@ public class TestCompressionStorages {
   public TestCompressionStorages(String type) throws IOException {
     this.dataFormat = type;
     conf = new TajoConf();
+    conf.setBoolean("hive.exec.orc.zerocopy", true);
 
     testDir = CommonTestingUtil.getTestDir(TEST_PATH);
     fs = testDir.getFileSystem(conf);
@@ -71,7 +72,8 @@ public class TestCompressionStorages {
     return Arrays.asList(new Object[][]{
         {BuiltinStorages.TEXT},
         {BuiltinStorages.RCFILE},
-        {BuiltinStorages.SEQUENCE_FILE}
+        {BuiltinStorages.SEQUENCE_FILE},
+        {BuiltinStorages.ORC2}
     });
   }
 

@@ -142,6 +142,7 @@ public class TestStorages {
     if (dataFormat.equalsIgnoreCase(BuiltinStorages.RCFILE)) {
       conf.setInt(RCFile.RECORD_INTERVAL_CONF_STR, 100);
     }
+    conf.setBoolean("hive.exec.orc.zerocopy", true);
 
     testDir = CommonTestingUtil.getTestDir(TEST_PATH);
     fs = testDir.getFileSystem(conf);
