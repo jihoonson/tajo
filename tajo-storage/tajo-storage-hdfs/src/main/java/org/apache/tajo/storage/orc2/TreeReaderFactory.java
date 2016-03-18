@@ -20,7 +20,6 @@ package org.apache.tajo.storage.orc2;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.hadoop.hive.ql.exec.vector.BytesColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.LongColumnVector;
 import org.apache.hadoop.io.Text;
 import org.apache.orc.OrcProto;
@@ -194,39 +193,6 @@ public class TreeReaderFactory {
       return NullDatum.get();
     }
 
-//    /**
-//     * Populates the isNull vector array in the previousVector object based on
-//     * the present stream values. This function is called from all the child
-//     * readers, and they all set the values based on isNull field value.
-//     *
-//     * @param previousVector The columnVector object whose isNull value is populated
-//     * @param batchSize      Size of the column vector
-//     * @return next column vector
-//     * @throws IOException
-//     */
-//    public Object nextVector(Object previousVector, long batchSize) throws IOException {
-//      ColumnVector result = (ColumnVector) previousVector;
-//      if (present != null) {
-//        // Set noNulls and isNull vector of the ColumnVector based on
-//        // present stream
-//        result.noNulls = true;
-//        for (int i = 0; i < batchSize; i++) {
-//          result.isNull[i] = (present.next() != 1);
-//          if (result.noNulls && result.isNull[i]) {
-//            result.noNulls = false;
-//          }
-//        }
-//      } else {
-//        // There is not present stream, this means that all the values are
-//        // present.
-//        result.noNulls = true;
-//        for (int i = 0; i < batchSize; i++) {
-//          result.isNull[i] = false;
-//        }
-//      }
-//      return previousVector;
-//    }
-
     public BitFieldReader getPresent() {
       return present;
     }
@@ -276,23 +242,6 @@ public class TreeReaderFactory {
       super.next();
       return valuePresent ? DatumFactory.createBool(reader.next() == 1) : NullDatum.get();
     }
-
-//    @Override
-//    public Object nextVector(Object previousVector, long batchSize) throws IOException {
-//      final LongColumnVector result;
-//      if (previousVector == null) {
-//        result = new LongColumnVector();
-//      } else {
-//        result = (LongColumnVector) previousVector;
-//      }
-//
-//      // Read present/isNull stream
-//      super.nextVector(result, batchSize);
-//
-//      // Read value entries based on isNull entries
-//      reader.nextVector(result, batchSize);
-//      return result;
-//    }
   }
 
   public static class ByteTreeReader extends TreeReader {
@@ -332,23 +281,6 @@ public class TreeReaderFactory {
       super.next();
       return valuePresent ? DatumFactory.createBit(reader.next()) : NullDatum.get();
     }
-
-//    @Override
-//    public Object nextVector(Object previousVector, long batchSize) throws IOException {
-//      final LongColumnVector result;
-//      if (previousVector == null) {
-//        result = new LongColumnVector();
-//      } else {
-//        result = (LongColumnVector) previousVector;
-//      }
-//
-//      // Read present/isNull stream
-//      super.nextVector(result, batchSize);
-//
-//      // Read value entries based on isNull entries
-//      reader.nextVector(result, batchSize);
-//      return result;
-//    }
 
     @Override
     void skipRows(long items) throws IOException {
@@ -410,22 +342,59 @@ public class TreeReaderFactory {
       return valuePresent ? DatumFactory.createInt2((short) reader.next()) : NullDatum.get();
     }
 
-//    @Override
-//    public Object nextVector(Object previousVector, long batchSize) throws IOException {
-//      final LongColumnVector result;
-//      if (previousVector == null) {
-//        result = new LongColumnVector();
-//      } else {
-//        result = (LongColumnVector) previousVector;
-//      }
-//
-//      // Read present/isNull stream
-//      super.nextVector(result, batchSize);
-//
-//      // Read value entries based on isNull entries
-//      reader.nextVector(result, batchSize);
-//      return result;
-//    }
+    @Override
+    void skipRows(long items) throws IOException {
+      reader.skip(countNonNulls(items));
+    }
+  }
+
+  public static class InetTreeReader extends TreeReader {
+    protected IntegerReader reader = null;
+
+    InetTreeReader(int columnId) throws IOException {
+      this(columnId, null, null, null);
+    }
+
+    protected InetTreeReader(int columnId, InStream present, InStream data,
+                             OrcProto.ColumnEncoding encoding)
+        throws IOException {
+      super(columnId, present);
+      if (data != null && encoding != null) {
+        checkEncoding(encoding);
+        this.reader = createIntegerReader(encoding.getKind(), data, true, false);
+      }
+    }
+
+    @Override
+    void checkEncoding(OrcProto.ColumnEncoding encoding) throws IOException {
+      if ((encoding.getKind() != OrcProto.ColumnEncoding.Kind.DIRECT) &&
+          (encoding.getKind() != OrcProto.ColumnEncoding.Kind.DIRECT_V2)) {
+        throw new IOException("Unknown encoding " + encoding + " in column " +
+            columnId);
+      }
+    }
+
+    @Override
+    void startStripe(Map<StreamName, InStream> streams,
+                     OrcProto.StripeFooter stripeFooter
+    ) throws IOException {
+      super.startStripe(streams, stripeFooter);
+      StreamName name = new StreamName(columnId,
+          OrcProto.Stream.Kind.DATA);
+      reader = createIntegerReader(stripeFooter.getColumnsList().get(columnId).getKind(),
+          streams.get(name), true, false);
+    }
+
+    @Override
+    void seek(PositionProvider[] index) throws IOException {
+      seek(index[columnId]);
+    }
+
+    @Override
+    Datum next() throws IOException {
+      super.next();
+      return valuePresent ? DatumFactory.createInet4((int) reader.next()) : NullDatum.get();
+    }
 
     @Override
     void skipRows(long items) throws IOException {
@@ -486,23 +455,6 @@ public class TreeReaderFactory {
       super.next();
       return valuePresent ? DatumFactory.createInt4((int) reader.next()) : NullDatum.get();
     }
-
-//    @Override
-//    public Object nextVector(Object previousVector, long batchSize) throws IOException {
-//      final LongColumnVector result;
-//      if (previousVector == null) {
-//        result = new LongColumnVector();
-//      } else {
-//        result = (LongColumnVector) previousVector;
-//      }
-//
-//      // Read present/isNull stream
-//      super.nextVector(result, batchSize);
-//
-//      // Read value entries based on isNull entries
-//      reader.nextVector(result, batchSize);
-//      return result;
-//    }
 
     @Override
     void skipRows(long items) throws IOException {
@@ -565,23 +517,6 @@ public class TreeReaderFactory {
       return valuePresent ? DatumFactory.createInt8(reader.next()) : NullDatum.get();
     }
 
-//    @Override
-//    public Object nextVector(Object previousVector, long batchSize) throws IOException {
-//      final LongColumnVector result;
-//      if (previousVector == null) {
-//        result = new LongColumnVector();
-//      } else {
-//        result = (LongColumnVector) previousVector;
-//      }
-//
-//      // Read present/isNull stream
-//      super.nextVector(result, batchSize);
-//
-//      // Read value entries based on isNull entries
-//      reader.nextVector(result, batchSize);
-//      return result;
-//    }
-
     @Override
     void skipRows(long items) throws IOException {
       reader.skip(countNonNulls(items));
@@ -628,59 +563,6 @@ public class TreeReaderFactory {
       super.next();
       return valuePresent ? DatumFactory.createFloat4(utils.readFloat(stream)) : NullDatum.get();
     }
-
-//    @Override
-//    public Object nextVector(Object previousVector, final long batchSize) throws IOException {
-//      final DoubleColumnVector result;
-//      if (previousVector == null) {
-//        result = new DoubleColumnVector();
-//      } else {
-//        result = (DoubleColumnVector) previousVector;
-//      }
-//
-//      // Read present/isNull stream
-//      super.nextVector(result, batchSize);
-//
-//      final boolean hasNulls = !result.noNulls;
-//      boolean allNulls = hasNulls;
-//
-//      if (hasNulls) {
-//        // conditions to ensure bounds checks skips
-//        for (int i = 0; batchSize <= result.isNull.length && i < batchSize; i++) {
-//          allNulls = allNulls & result.isNull[i];
-//        }
-//        if (allNulls) {
-//          result.vector[0] = Double.NaN;
-//          result.isRepeating = true;
-//        } else {
-//          // some nulls
-//          result.isRepeating = false;
-//          // conditions to ensure bounds checks skips
-//          for (int i = 0; batchSize <= result.isNull.length
-//              && batchSize <= result.vector.length && i < batchSize; i++) {
-//            if (!result.isNull[i]) {
-//              result.vector[i] = utils.readFloat(stream);
-//            } else {
-//              // If the value is not present then set NaN
-//              result.vector[i] = Double.NaN;
-//            }
-//          }
-//        }
-//      } else {
-//        // no nulls & > 1 row (check repeating)
-//        boolean repeating = (batchSize > 1);
-//        final float f1 = utils.readFloat(stream);
-//        result.vector[0] = f1;
-//        // conditions to ensure bounds checks skips
-//        for (int i = 1; i < batchSize && batchSize <= result.vector.length; i++) {
-//          final float f2 = utils.readFloat(stream);
-//          repeating = repeating && (f1 == f2);
-//          result.vector[i] = f2;
-//        }
-//        result.isRepeating = repeating;
-//      }
-//      return result;
-//    }
 
     @Override
     protected void skipRows(long items) throws IOException {
@@ -732,60 +614,6 @@ public class TreeReaderFactory {
       super.next();
       return valuePresent ? DatumFactory.createFloat8(utils.readDouble(stream)) : NullDatum.get();
     }
-
-//    @Override
-//    public Object nextVector(Object previousVector, final long batchSize) throws IOException {
-//      final DoubleColumnVector result;
-//      if (previousVector == null) {
-//        result = new DoubleColumnVector();
-//      } else {
-//        result = (DoubleColumnVector) previousVector;
-//      }
-//
-//      // Read present/isNull stream
-//      super.nextVector(result, batchSize);
-//
-//      final boolean hasNulls = !result.noNulls;
-//      boolean allNulls = hasNulls;
-//
-//      if (hasNulls) {
-//        // conditions to ensure bounds checks skips
-//        for (int i = 0; i < batchSize && batchSize <= result.isNull.length; i++) {
-//          allNulls = allNulls & result.isNull[i];
-//        }
-//        if (allNulls) {
-//          result.vector[0] = Double.NaN;
-//          result.isRepeating = true;
-//        } else {
-//          // some nulls
-//          result.isRepeating = false;
-//          // conditions to ensure bounds checks skips
-//          for (int i = 0; batchSize <= result.isNull.length
-//              && batchSize <= result.vector.length && i < batchSize; i++) {
-//            if (!result.isNull[i]) {
-//              result.vector[i] = utils.readDouble(stream);
-//            } else {
-//              // If the value is not present then set NaN
-//              result.vector[i] = Double.NaN;
-//            }
-//          }
-//        }
-//      } else {
-//        // no nulls
-//        boolean repeating = (batchSize > 1);
-//        final double d1 = utils.readDouble(stream);
-//        result.vector[0] = d1;
-//        // conditions to ensure bounds checks skips
-//        for (int i = 1; i < batchSize && batchSize <= result.vector.length; i++) {
-//          final double d2 = utils.readDouble(stream);
-//          repeating = repeating && (d1 == d2);
-//          result.vector[i] = d2;
-//        }
-//        result.isRepeating = repeating;
-//      }
-//
-//      return result;
-//    }
 
     @Override
     void skipRows(long items) throws IOException {
@@ -871,22 +699,6 @@ public class TreeReaderFactory {
         return NullDatum.get();
       }
     }
-
-//    @Override
-//    public Object nextVector(Object previousVector, long batchSize) throws IOException {
-//      final BytesColumnVector result;
-//      if (previousVector == null) {
-//        result = new BytesColumnVector();
-//      } else {
-//        result = (BytesColumnVector) previousVector;
-//      }
-//
-//      // Read present/isNull stream
-//      super.nextVector(result, batchSize);
-//
-//      BytesColumnVectorUtil.readOrcByteArrays(stream, lengths, scratchlcv, result, batchSize);
-//      return result;
-//    }
 
     @Override
     void skipRows(long items) throws IOException {
@@ -1039,32 +851,6 @@ public class TreeReaderFactory {
       }
     }
 
-//    @Override
-//    public Object nextVector(Object previousVector, long batchSize) throws IOException {
-//      final LongColumnVector result;
-//      if (previousVector == null) {
-//        result = new LongColumnVector();
-//      } else {
-//        result = (LongColumnVector) previousVector;
-//      }
-//
-//      result.reset();
-//      Datum obj = null;
-//      for (int i = 0; i < batchSize; i++) {
-//        obj = next();
-//        if (obj == null) {
-//          result.noNulls = false;
-//          result.isNull[i] = true;
-//        } else {
-//          // TODO: check the below is valid
-//          TimestampDatum datum = (TimestampDatum) obj;
-//          result.vector[i] = datum.asInt8();
-//        }
-//      }
-//
-//      return result;
-//    }
-
     private static int parseNanos(long serialized) {
       int zeros = 7 & (int) serialized;
       int result = (int) (serialized >>> 3);
@@ -1134,160 +920,15 @@ public class TreeReaderFactory {
     @Override
     Datum next() throws IOException {
       super.next();
-      return valuePresent ? DatumFactory.createDate((int) reader.next()) : NullDatum.get();
+      return valuePresent ?
+          DatumFactory.createDate((int) reader.next() + DateTimeUtil.DAYS_FROM_JULIAN_TO_EPOCH) : NullDatum.get();
     }
-
-//    @Override
-//    public Object nextVector(Object previousVector, long batchSize) throws IOException {
-//      final LongColumnVector result;
-//      if (previousVector == null) {
-//        result = new LongColumnVector();
-//      } else {
-//        result = (LongColumnVector) previousVector;
-//      }
-//
-//      // Read present/isNull stream
-//      super.nextVector(result, batchSize);
-//
-//      // Read value entries based on isNull entries
-//      reader.nextVector(result, batchSize);
-//      return result;
-//    }
 
     @Override
     void skipRows(long items) throws IOException {
       reader.skip(countNonNulls(items));
     }
   }
-
-//  public static class DecimalTreeReader extends TreeReader {
-//    protected InStream valueStream;
-//    protected IntegerReader scaleReader = null;
-//    private LongColumnVector scratchScaleVector;
-//
-//    private final int precision;
-//    private final int scale;
-//
-//    DecimalTreeReader(int columnId, int precision, int scale) throws IOException {
-//      this(columnId, precision, scale, null, null, null, null);
-//    }
-//
-//    protected DecimalTreeReader(int columnId, int precision, int scale, InStream present,
-//                                InStream valueStream, InStream scaleStream, OrcProto.ColumnEncoding encoding)
-//        throws IOException {
-//      super(columnId, present);
-//      this.precision = precision;
-//      this.scale = scale;
-//      this.scratchScaleVector = new LongColumnVector(VectorizedRowBatch.DEFAULT_SIZE);
-//      this.valueStream = valueStream;
-//      if (scaleStream != null && encoding != null) {
-//        checkEncoding(encoding);
-//        this.scaleReader = createIntegerReader(encoding.getKind(), scaleStream, true, false);
-//      }
-//    }
-//
-//    @Override
-//    void checkEncoding(OrcProto.ColumnEncoding encoding) throws IOException {
-//      if ((encoding.getKind() != OrcProto.ColumnEncoding.Kind.DIRECT) &&
-//          (encoding.getKind() != OrcProto.ColumnEncoding.Kind.DIRECT_V2)) {
-//        throw new IOException("Unknown encoding " + encoding + " in column " +
-//            columnId);
-//      }
-//    }
-//
-//    @Override
-//    void startStripe(Map<StreamName, InStream> streams,
-//                     OrcProto.StripeFooter stripeFooter
-//    ) throws IOException {
-//      super.startStripe(streams, stripeFooter);
-//      valueStream = streams.get(new StreamName(columnId,
-//          OrcProto.Stream.Kind.DATA));
-//      scaleReader = createIntegerReader(stripeFooter.getColumnsList().get(columnId).getKind(),
-//          streams.get(new StreamName(columnId, OrcProto.Stream.Kind.SECONDARY)), true, false);
-//    }
-//
-//    @Override
-//    void seek(PositionProvider[] index) throws IOException {
-//      seek(index[columnId]);
-//    }
-//
-//    @Override
-//    public void seek(PositionProvider index) throws IOException {
-//      super.seek(index);
-//      valueStream.seek(index);
-//      scaleReader.seek(index);
-//    }
-//
-//    @Override
-//    Object next(Object previous) throws IOException {
-//      super.next(previous);
-//      final HiveDecimalWritable result;
-//      if (valuePresent) {
-//        if (previous == null) {
-//          result = new HiveDecimalWritable();
-//        } else {
-//          result = (HiveDecimalWritable) previous;
-//        }
-//        result.set(HiveDecimal.create(SerializationUtils.readBigInteger
-//            (valueStream), (int) scaleReader.next()));
-//        return HiveDecimalWritable.enforcePrecisionScale(result, precision,
-//            scale);
-//      }
-//      return null;
-//    }
-//
-//    @Override
-//    public Object nextVector(Object previousVector, long batchSize) throws IOException {
-//      final DecimalColumnVector result;
-//      if (previousVector == null) {
-//        result = new DecimalColumnVector(precision, scale);
-//      } else {
-//        result = (DecimalColumnVector) previousVector;
-//      }
-//
-//      // Save the reference for isNull in the scratch vector
-//      boolean[] scratchIsNull = scratchScaleVector.isNull;
-//
-//      // Read present/isNull stream
-//      super.nextVector(result, batchSize);
-//
-//      // Read value entries based on isNull entries
-//      if (result.isRepeating) {
-//        if (!result.isNull[0]) {
-//          BigInteger bInt = SerializationUtils.readBigInteger(valueStream);
-//          short scaleInData = (short) scaleReader.next();
-//          HiveDecimal dec = HiveDecimal.create(bInt, scaleInData);
-//          dec = HiveDecimal.enforcePrecisionScale(dec, precision, scale);
-//          result.set(0, dec);
-//        }
-//      } else {
-//        // result vector has isNull values set, use the same to read scale vector.
-//        scratchScaleVector.isNull = result.isNull;
-//        scaleReader.nextVector(scratchScaleVector, batchSize);
-//        for (int i = 0; i < batchSize; i++) {
-//          if (!result.isNull[i]) {
-//            BigInteger bInt = SerializationUtils.readBigInteger(valueStream);
-//            short scaleInData = (short) scratchScaleVector.vector[i];
-//            HiveDecimal dec = HiveDecimal.create(bInt, scaleInData);
-//            dec = HiveDecimal.enforcePrecisionScale(dec, precision, scale);
-//            result.set(i, dec);
-//          }
-//        }
-//      }
-//      // Switch back the null vector.
-//      scratchScaleVector.isNull = scratchIsNull;
-//      return result;
-//    }
-//
-//    @Override
-//    void skipRows(long items) throws IOException {
-//      items = countNonNulls(items);
-//      for (int i = 0; i < items; i++) {
-//        SerializationUtils.readBigInteger(valueStream);
-//      }
-//      scaleReader.skip(items);
-//    }
-//  }
 
   /**
    * A tree reader that will read string columns. At the start of the
@@ -1365,86 +1006,9 @@ public class TreeReaderFactory {
       return reader.next();
     }
 
-//    @Override
-//    public Object nextVector(Object previousVector, long batchSize) throws IOException {
-//      return reader.nextVector(previousVector, batchSize);
-//    }
-
     @Override
     void skipRows(long items) throws IOException {
       reader.skipRows(items);
-    }
-  }
-
-  // This class collects together very similar methods for reading an ORC vector of byte arrays and
-  // creating the BytesColumnVector.
-  //
-  public static class BytesColumnVectorUtil {
-
-    private static byte[] commonReadByteArrays(InStream stream, IntegerReader lengths,
-                                               LongColumnVector scratchlcv,
-                                               BytesColumnVector result, long batchSize) throws IOException {
-      // Read lengths
-      scratchlcv.isNull = result.isNull;  // Notice we are replacing the isNull vector here...
-      lengths.nextVector(scratchlcv, batchSize);
-      int totalLength = 0;
-      if (!scratchlcv.isRepeating) {
-        for (int i = 0; i < batchSize; i++) {
-          if (!scratchlcv.isNull[i]) {
-            totalLength += (int) scratchlcv.vector[i];
-          }
-        }
-      } else {
-        if (!scratchlcv.isNull[0]) {
-          totalLength = (int) (batchSize * scratchlcv.vector[0]);
-        }
-      }
-
-      // Read all the strings for this batch
-      byte[] allBytes = new byte[totalLength];
-      int offset = 0;
-      int len = totalLength;
-      while (len > 0) {
-        int bytesRead = stream.read(allBytes, offset, len);
-        if (bytesRead < 0) {
-          throw new EOFException("Can't finish byte read from " + stream);
-        }
-        len -= bytesRead;
-        offset += bytesRead;
-      }
-
-      return allBytes;
-    }
-
-    // This method has the common code for reading in bytes into a BytesColumnVector.
-    public static void readOrcByteArrays(InStream stream, IntegerReader lengths,
-                                         LongColumnVector scratchlcv,
-                                         BytesColumnVector result, long batchSize) throws IOException {
-
-      byte[] allBytes = commonReadByteArrays(stream, lengths, scratchlcv, result, batchSize);
-
-      // Too expensive to figure out 'repeating' by comparisons.
-      result.isRepeating = false;
-      int offset = 0;
-      if (!scratchlcv.isRepeating) {
-        for (int i = 0; i < batchSize; i++) {
-          if (!scratchlcv.isNull[i]) {
-            result.setRef(i, allBytes, offset, (int) scratchlcv.vector[i]);
-            offset += scratchlcv.vector[i];
-          } else {
-            result.setRef(i, allBytes, 0, 0);
-          }
-        }
-      } else {
-        for (int i = 0; i < batchSize; i++) {
-          if (!scratchlcv.isNull[i]) {
-            result.setRef(i, allBytes, offset, (int) scratchlcv.vector[0]);
-            offset += scratchlcv.vector[0];
-          } else {
-            result.setRef(i, allBytes, 0, 0);
-          }
-        }
-      }
     }
   }
 
@@ -1538,22 +1102,6 @@ public class TreeReaderFactory {
       int len = (int) lengths.next();
       return valuePresent ? DatumFactory.createText(data.read(len)) : NullDatum.get();
     }
-
-//    @Override
-//    public Object nextVector(Object previousVector, long batchSize) throws IOException {
-//      final BytesColumnVector result;
-//      if (previousVector == null) {
-//        result = new BytesColumnVector();
-//      } else {
-//        result = (BytesColumnVector) previousVector;
-//      }
-//
-//      // Read present/isNull stream
-//      super.nextVector(result, batchSize);
-//
-//      BytesColumnVectorUtil.readOrcByteArrays(stream, lengths, scratchlcv, result, batchSize);
-//      return result;
-//    }
 
     @Override
     void skipRows(long items) throws IOException {
@@ -1710,63 +1258,6 @@ public class TreeReaderFactory {
       }
     }
 
-//    @Override
-//    public Object nextVector(Object previousVector, long batchSize) throws IOException {
-//      final BytesColumnVector result;
-//      int offset;
-//      int length;
-//      if (previousVector == null) {
-//        result = new BytesColumnVector();
-//      } else {
-//        result = (BytesColumnVector) previousVector;
-//      }
-//
-//      // Read present/isNull stream
-//      super.nextVector(result, batchSize);
-//
-//      if (dictionaryBuffer != null) {
-//
-//        // Load dictionaryBuffer into cache.
-//        if (dictionaryBufferInBytesCache == null) {
-//          dictionaryBufferInBytesCache = dictionaryBuffer.get();
-//        }
-//
-//        // Read string offsets
-//        scratchlcv.isNull = result.isNull;
-//        reader.nextVector(scratchlcv, batchSize);
-//        if (!scratchlcv.isRepeating) {
-//
-//          // The vector has non-repeating strings. Iterate thru the batch
-//          // and set strings one by one
-//          for (int i = 0; i < batchSize; i++) {
-//            if (!scratchlcv.isNull[i]) {
-//              offset = dictionaryOffsets[(int) scratchlcv.vector[i]];
-//              length = getDictionaryEntryLength((int) scratchlcv.vector[i], offset);
-//              result.setRef(i, dictionaryBufferInBytesCache, offset, length);
-//            } else {
-//              // If the value is null then set offset and length to zero (null string)
-//              result.setRef(i, dictionaryBufferInBytesCache, 0, 0);
-//            }
-//          }
-//        } else {
-//          // If the value is repeating then just set the first value in the
-//          // vector and set the isRepeating flag to true. No need to iterate thru and
-//          // set all the elements to the same value
-//          offset = dictionaryOffsets[(int) scratchlcv.vector[0]];
-//          length = getDictionaryEntryLength((int) scratchlcv.vector[0], offset);
-//          result.setRef(0, dictionaryBufferInBytesCache, offset, length);
-//        }
-//        result.isRepeating = scratchlcv.isRepeating;
-//      } else {
-//        // Entire stripe contains null strings.
-//        result.isRepeating = true;
-//        result.noNulls = false;
-//        result.isNull[0] = true;
-//        result.setRef(0, "".getBytes(), 0, 0);
-//      }
-//      return result;
-//    }
-
     int getDictionaryEntryLength(int entry, int offset) {
       final int length;
       // if it isn't the last entry, subtract the offsets otherwise use
@@ -1819,120 +1310,7 @@ public class TreeReaderFactory {
         return NullDatum.get();
       }
     }
-
-//    @Override
-//    public Object nextVector(Object previousVector, long batchSize) throws IOException {
-//      // Get the vector of strings from StringTreeReader, then make a 2nd pass to
-//      // adjust down the length (right trim and truncate) if necessary.
-//      BytesColumnVector result = (BytesColumnVector) super.nextVector(previousVector, batchSize);
-//
-//      int adjustedDownLen;
-//      if (result.isRepeating) {
-//        if (result.noNulls || !result.isNull[0]) {
-//          adjustedDownLen = StringExpr
-//              .rightTrimAndTruncate(result.vector[0], result.start[0], result.length[0], maxLength);
-//          if (adjustedDownLen < result.length[0]) {
-//            result.setRef(0, result.vector[0], result.start[0], adjustedDownLen);
-//          }
-//        }
-//      } else {
-//        if (result.noNulls) {
-//          for (int i = 0; i < batchSize; i++) {
-//            adjustedDownLen = StringExpr
-//                .rightTrimAndTruncate(result.vector[i], result.start[i], result.length[i],
-//                    maxLength);
-//            if (adjustedDownLen < result.length[i]) {
-//              result.setRef(i, result.vector[i], result.start[i], adjustedDownLen);
-//            }
-//          }
-//        } else {
-//          for (int i = 0; i < batchSize; i++) {
-//            if (!result.isNull[i]) {
-//              adjustedDownLen = StringExpr
-//                  .rightTrimAndTruncate(result.vector[i], result.start[i], result.length[i],
-//                      maxLength);
-//              if (adjustedDownLen < result.length[i]) {
-//                result.setRef(i, result.vector[i], result.start[i], adjustedDownLen);
-//              }
-//            }
-//          }
-//        }
-//      }
-//      return result;
-//    }
   }
-
-//  public static class VarcharTreeReader extends StringTreeReader {
-//    int maxLength;
-//
-//    VarcharTreeReader(int columnId, int maxLength) throws IOException {
-//      this(columnId, maxLength, null, null, null, null, null);
-//    }
-//
-//    protected VarcharTreeReader(int columnId, int maxLength, InStream present, InStream data,
-//                                InStream length, InStream dictionary, OrcProto.ColumnEncoding encoding) throws IOException {
-//      super(columnId, present, data, length, dictionary, encoding);
-//      this.maxLength = maxLength;
-//    }
-//
-//    @Override
-//    Object next(Object previous) throws IOException {
-//      final HiveVarcharWritable result;
-//      if (previous == null) {
-//        result = new HiveVarcharWritable();
-//      } else {
-//        result = (HiveVarcharWritable) previous;
-//      }
-//      // Use the string reader implementation to populate the internal Text value
-//      Object textVal = super.next(result.getTextValue());
-//      if (textVal == null) {
-//        return null;
-//      }
-//      // result should now hold the value that was read in.
-//      // enforce varchar length
-//      result.enforceMaxLength(maxLength);
-//      return result;
-//    }
-//
-//    @Override
-//    public Object nextVector(Object previousVector, long batchSize) throws IOException {
-//      // Get the vector of strings from StringTreeReader, then make a 2nd pass to
-//      // adjust down the length (truncate) if necessary.
-//      BytesColumnVector result = (BytesColumnVector) super.nextVector(previousVector, batchSize);
-//
-//      int adjustedDownLen;
-//      if (result.isRepeating) {
-//        if (result.noNulls || !result.isNull[0]) {
-//          adjustedDownLen = StringExpr
-//              .truncate(result.vector[0], result.start[0], result.length[0], maxLength);
-//          if (adjustedDownLen < result.length[0]) {
-//            result.setRef(0, result.vector[0], result.start[0], adjustedDownLen);
-//          }
-//        }
-//      } else {
-//        if (result.noNulls) {
-//          for (int i = 0; i < batchSize; i++) {
-//            adjustedDownLen = StringExpr
-//                .truncate(result.vector[i], result.start[i], result.length[i], maxLength);
-//            if (adjustedDownLen < result.length[i]) {
-//              result.setRef(i, result.vector[i], result.start[i], adjustedDownLen);
-//            }
-//          }
-//        } else {
-//          for (int i = 0; i < batchSize; i++) {
-//            if (!result.isNull[i]) {
-//              adjustedDownLen = StringExpr
-//                  .truncate(result.vector[i], result.start[i], result.length[i], maxLength);
-//              if (adjustedDownLen < result.length[i]) {
-//                result.setRef(i, result.vector[i], result.start[i], adjustedDownLen);
-//              }
-//            }
-//          }
-//        }
-//      }
-//      return result;
-//    }
-//  }
 
 //  protected static class StructTreeReader extends TreeReader {
 //    private final int fileColumnCount;
@@ -2087,279 +1465,11 @@ public class TreeReaderFactory {
 //      }
 //    }
 //  }
-//
-//  public static class UnionTreeReader extends TreeReader {
-//    protected final TreeReader[] fields;
-//    protected RunLengthByteReader tags;
-//
-//    protected UnionTreeReader(int columnId,
-//                              TreeReaderSchema treeReaderSchema,
-//                              boolean[] included,
-//                              boolean skipCorrupt) throws IOException {
-//      super(columnId);
-//      OrcProto.Type type = treeReaderSchema.getSchemaTypes().get(columnId);
-//      int fieldCount = type.getSubtypesCount();
-//      this.fields = new TreeReader[fieldCount];
-//      for (int i = 0; i < fieldCount; ++i) {
-//        int subtype = type.getSubtypes(i);
-//        if (included == null || included[subtype]) {
-//          this.fields[i] = createTreeReader(subtype, treeReaderSchema, included, skipCorrupt);
-//        }
-//      }
-//    }
-//
-//    @Override
-//    void seek(PositionProvider[] index) throws IOException {
-//      super.seek(index);
-//      tags.seek(index[columnId]);
-//      for (TreeReader kid : fields) {
-//        kid.seek(index);
-//      }
-//    }
-//
-//    @Override
-//    Object next(Object previous) throws IOException {
-//      super.next(previous);
-//      OrcUnion result = null;
-//      if (valuePresent) {
-//        if (previous == null) {
-//          result = new OrcUnion();
-//        } else {
-//          result = (OrcUnion) previous;
-//        }
-//        byte tag = tags.next();
-//        Object previousVal = result.getObject();
-//        result.set(tag, fields[tag].next(tag == result.getTag() ?
-//            previousVal : null));
-//      }
-//      return result;
-//    }
-//
-//    @Override
-//    public Object nextVector(Object previousVector, long batchSize) throws IOException {
-//      throw new UnsupportedOperationException(
-//          "NextVector is not supported operation for Union type");
-//    }
-//
-//    @Override
-//    void startStripe(Map<StreamName, InStream> streams,
-//                     OrcProto.StripeFooter stripeFooter
-//    ) throws IOException {
-//      super.startStripe(streams, stripeFooter);
-//      tags = new RunLengthByteReader(streams.get(new StreamName(columnId,
-//          OrcProto.Stream.Kind.DATA)));
-//      for (TreeReader field : fields) {
-//        if (field != null) {
-//          field.startStripe(streams, stripeFooter);
-//        }
-//      }
-//    }
-//
-//    @Override
-//    void skipRows(long items) throws IOException {
-//      items = countNonNulls(items);
-//      long[] counts = new long[fields.length];
-//      for (int i = 0; i < items; ++i) {
-//        counts[tags.next()] += 1;
-//      }
-//      for (int i = 0; i < counts.length; ++i) {
-//        fields[i].skipRows(counts[i]);
-//      }
-//    }
-//  }
-//
-//  public static class ListTreeReader extends TreeReader {
-//    protected final TreeReader elementReader;
-//    protected IntegerReader lengths = null;
-//
-//    protected ListTreeReader(int columnId,
-//                             TreeReaderSchema treeReaderSchema,
-//                             boolean[] included,
-//                             boolean skipCorrupt) throws IOException {
-//      super(columnId);
-//      OrcProto.Type type = treeReaderSchema.getSchemaTypes().get(columnId);
-//      elementReader = createTreeReader(type.getSubtypes(0), treeReaderSchema, included, skipCorrupt);
-//    }
-//
-//    @Override
-//    void seek(PositionProvider[] index) throws IOException {
-//      super.seek(index);
-//      lengths.seek(index[columnId]);
-//      elementReader.seek(index);
-//    }
-//
-//    @Override
-//    @SuppressWarnings("unchecked")
-//    Object next(Object previous) throws IOException {
-//      super.next(previous);
-//      List<Object> result = null;
-//      if (valuePresent) {
-//        if (previous == null) {
-//          result = new ArrayList<>();
-//        } else {
-//          result = (ArrayList<Object>) previous;
-//        }
-//        int prevLength = result.size();
-//        int length = (int) lengths.next();
-//        // extend the list to the new length
-//        for (int i = prevLength; i < length; ++i) {
-//          result.add(null);
-//        }
-//        // read the new elements into the array
-//        for (int i = 0; i < length; i++) {
-//          result.set(i, elementReader.next(i < prevLength ?
-//              result.get(i) : null));
-//        }
-//        // remove any extra elements
-//        for (int i = prevLength - 1; i >= length; --i) {
-//          result.remove(i);
-//        }
-//      }
-//      return result;
-//    }
-//
-//    @Override
-//    public Object nextVector(Object previous, long batchSize) throws IOException {
-//      throw new UnsupportedOperationException(
-//          "NextVector is not supported operation for List type");
-//    }
-//
-//    @Override
-//    void checkEncoding(OrcProto.ColumnEncoding encoding) throws IOException {
-//      if ((encoding.getKind() != OrcProto.ColumnEncoding.Kind.DIRECT) &&
-//          (encoding.getKind() != OrcProto.ColumnEncoding.Kind.DIRECT_V2)) {
-//        throw new IOException("Unknown encoding " + encoding + " in column " +
-//            columnId);
-//      }
-//    }
-//
-//    @Override
-//    void startStripe(Map<StreamName, InStream> streams,
-//                     OrcProto.StripeFooter stripeFooter
-//    ) throws IOException {
-//      super.startStripe(streams, stripeFooter);
-//      lengths = createIntegerReader(stripeFooter.getColumnsList().get(columnId).getKind(),
-//          streams.get(new StreamName(columnId,
-//              OrcProto.Stream.Kind.LENGTH)), false, false);
-//      if (elementReader != null) {
-//        elementReader.startStripe(streams, stripeFooter);
-//      }
-//    }
-//
-//    @Override
-//    void skipRows(long items) throws IOException {
-//      items = countNonNulls(items);
-//      long childSkip = 0;
-//      for (long i = 0; i < items; ++i) {
-//        childSkip += lengths.next();
-//      }
-//      elementReader.skipRows(childSkip);
-//    }
-//  }
-//
-//  public static class MapTreeReader extends TreeReader {
-//    protected final TreeReader keyReader;
-//    protected final TreeReader valueReader;
-//    protected IntegerReader lengths = null;
-//
-//    protected MapTreeReader(int columnId,
-//                            TreeReaderSchema treeReaderSchema,
-//                            boolean[] included,
-//                            boolean skipCorrupt) throws IOException {
-//      super(columnId);
-//      OrcProto.Type type = treeReaderSchema.getSchemaTypes().get(columnId);
-//      int keyColumn = type.getSubtypes(0);
-//      int valueColumn = type.getSubtypes(1);
-//      if (included == null || included[keyColumn]) {
-//        keyReader = createTreeReader(keyColumn, treeReaderSchema, included, skipCorrupt);
-//      } else {
-//        keyReader = null;
-//      }
-//      if (included == null || included[valueColumn]) {
-//        valueReader = createTreeReader(valueColumn, treeReaderSchema, included, skipCorrupt);
-//      } else {
-//        valueReader = null;
-//      }
-//    }
-//
-//    @Override
-//    void seek(PositionProvider[] index) throws IOException {
-//      super.seek(index);
-//      lengths.seek(index[columnId]);
-//      keyReader.seek(index);
-//      valueReader.seek(index);
-//    }
-//
-//    @Override
-//    @SuppressWarnings("unchecked")
-//    Object next(Object previous) throws IOException {
-//      super.next(previous);
-//      Map<Object, Object> result = null;
-//      if (valuePresent) {
-//        if (previous == null) {
-//          result = new LinkedHashMap<>();
-//        } else {
-//          result = (LinkedHashMap<Object, Object>) previous;
-//        }
-//        // for now just clear and create new objects
-//        result.clear();
-//        int length = (int) lengths.next();
-//        // read the new elements into the array
-//        for (int i = 0; i < length; i++) {
-//          result.put(keyReader.next(null), valueReader.next(null));
-//        }
-//      }
-//      return result;
-//    }
-//
-//    @Override
-//    public Object nextVector(Object previous, long batchSize) throws IOException {
-//      throw new UnsupportedOperationException(
-//          "NextVector is not supported operation for Map type");
-//    }
-//
-//    @Override
-//    void checkEncoding(OrcProto.ColumnEncoding encoding) throws IOException {
-//      if ((encoding.getKind() != OrcProto.ColumnEncoding.Kind.DIRECT) &&
-//          (encoding.getKind() != OrcProto.ColumnEncoding.Kind.DIRECT_V2)) {
-//        throw new IOException("Unknown encoding " + encoding + " in column " +
-//            columnId);
-//      }
-//    }
-//
-//    @Override
-//    void startStripe(Map<StreamName, InStream> streams,
-//                     OrcProto.StripeFooter stripeFooter
-//    ) throws IOException {
-//      super.startStripe(streams, stripeFooter);
-//      lengths = createIntegerReader(stripeFooter.getColumnsList().get(columnId).getKind(),
-//          streams.get(new StreamName(columnId,
-//              OrcProto.Stream.Kind.LENGTH)), false, false);
-//      if (keyReader != null) {
-//        keyReader.startStripe(streams, stripeFooter);
-//      }
-//      if (valueReader != null) {
-//        valueReader.startStripe(streams, stripeFooter);
-//      }
-//    }
-//
-//    @Override
-//    void skipRows(long items) throws IOException {
-//      items = countNonNulls(items);
-//      long childSkip = 0;
-//      for (long i = 0; i < items; ++i) {
-//        childSkip += lengths.next();
-//      }
-//      keyReader.skipRows(childSkip);
-//      valueReader.skipRows(childSkip);
-//    }
-//  }
 
   public static TreeReader createTreeReader(int columnId,
                                             Column column,
                                             boolean skipCorrupt
   ) throws IOException {
-//    OrcProto.Type type = treeReaderSchema.getSchemaTypes().get(columnId);
     TypeDesc typeDesc = column.getTypeDesc();
     int orcColumnId = columnId + 1; // root record column is considered
     switch (typeDesc.getDataType().getType()) {
@@ -2374,7 +1484,6 @@ public class TreeReaderFactory {
       case INT2:
         return new ShortTreeReader(orcColumnId);
       case INT4:
-      case INET4:
         return new IntTreeReader(orcColumnId);
       case INT8:
         return new LongTreeReader(orcColumnId, skipCorrupt);
@@ -2382,30 +1491,16 @@ public class TreeReaderFactory {
         return new StringTreeReader(orcColumnId);
       case CHAR:
         return new CharTreeReader(orcColumnId, typeDesc.getDataType().getLength());
-//      case VARCHAR:
-//        if (!type.hasMaximumLength()) {
-//          throw new IllegalArgumentException("ORC varchar type has no length specified");
-//        }
-//        return new VarcharTreeReader(columnId, type.getMaximumLength());
       case BLOB:
         return new BinaryTreeReader(orcColumnId);
       case TIMESTAMP:
         return new TimestampTreeReader(orcColumnId, skipCorrupt);
       case DATE:
         return new DateTreeReader(orcColumnId);
-//      case DECIMAL:
-//        int precision =
-//            type.hasPrecision() ? type.getPrecision() : HiveDecimal.SYSTEM_DEFAULT_PRECISION;
-//        int scale = type.hasScale() ? type.getScale() : HiveDecimal.SYSTEM_DEFAULT_SCALE;
-//        return new DecimalTreeReader(columnId, precision, scale);
+      case INET4:
+        return new InetTreeReader(orcColumnId);
 //      case STRUCT:
 //        return new StructTreeReader(columnId, treeReaderSchema, included, skipCorrupt);
-//      case LIST:
-//        return new ListTreeReader(columnId, treeReaderSchema, included, skipCorrupt);
-//      case MAP:
-//        return new MapTreeReader(columnId, treeReaderSchema, included, skipCorrupt);
-//      case UNION:
-//        return new UnionTreeReader(columnId, treeReaderSchema, included, skipCorrupt);
       default:
         throw new TajoRuntimeException(new UnsupportedException("Unsupported type " +
             typeDesc.getDataType().getType().name()));
