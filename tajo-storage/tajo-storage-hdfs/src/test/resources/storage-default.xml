@@ -34,7 +34,7 @@
   <!--- Registered Scanner Handler -->
   <property>
     <name>tajo.storage.scanner-handler</name>
-    <value>text,json,raw,draw,rcfile,row,parquet,orc,orc2,sequencefile,avro</value>
+    <value>text,json,raw,draw,rcfile,row,parquet,orc,sequencefile,avro</value>
   </property>
 
   <!--- Fragment Class Configurations -->
@@ -68,10 +68,6 @@
   </property>
   <property>
     <name>tajo.storage.fragment.orc.class</name>
-    <value>org.apache.tajo.storage.fragment.FileFragment</value>
-  </property>
-  <property>
-    <name>tajo.storage.fragment.orc2.class</name>
     <value>org.apache.tajo.storage.fragment.FileFragment</value>
   </property>
   <property>
@@ -121,11 +117,7 @@
 
   <property>
     <name>tajo.storage.scanner-handler.orc.class</name>
-    <value>org.apache.tajo.storage.orc.ORCScanner</value>
-  </property>
-  <property>
-    <name>tajo.storage.scanner-handler.orc2.class</name>
-    <value>org.apache.tajo.storage.orc2.OrcScanner</value>
+    <value>org.apache.tajo.storage.orc.OrcScanner</value>
   </property>
 
   <property>
@@ -141,7 +133,7 @@
   <!--- Appender Handler -->
   <property>
     <name>tajo.storage.appender-handler</name>
-    <value>text,raw,draw,rcfile,row,parquet,orc,orc2,sequencefile,avro</value>
+    <value>text,raw,draw,rcfile,row,parquet,orc,sequencefile,avro</value>
   </property>
 
   <property>
@@ -181,11 +173,7 @@
 
   <property>
     <name>tajo.storage.appender-handler.orc.class</name>
-    <value>org.apache.tajo.storage.orc.ORCAppender</value>
-  </property>
-  <property>
-    <name>tajo.storage.appender-handler.orc2.class</name>
-    <value>org.apache.tajo.storage.orc.ORCAppender</value>
+    <value>org.apache.tajo.storage.orc.OrcAppender</value>
   </property>
 
   <property>

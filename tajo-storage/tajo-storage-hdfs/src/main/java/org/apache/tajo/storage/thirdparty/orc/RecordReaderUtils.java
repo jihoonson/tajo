@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package org.apache.tajo.storage.orc2;
+package org.apache.tajo.storage.thirdparty.orc;
 
 import com.google.common.collect.ComparisonChain;
 import org.apache.commons.lang.builder.HashCodeBuilder;
@@ -43,7 +43,7 @@ import java.util.TreeMap;
 
 public class RecordReaderUtils {
 
-  private static class DefaultDataReader implements DataReader {
+  public static class DefaultDataReader implements DataReader {
     private FSDataInputStream file;
     private ByteBufferAllocatorPool pool;
     private HadoopShims.ZeroCopyReaderShim zcr;
@@ -51,6 +51,7 @@ public class RecordReaderUtils {
     private Path path;
     private boolean useZeroCopy;
     private CompressionCodec codec;
+    private long readBytes = 0;
 
     public DefaultDataReader(
         FileSystem fs, Path path, boolean useZeroCopy, CompressionCodec codec) {
@@ -75,7 +76,7 @@ public class RecordReaderUtils {
     @Override
     public DiskRangeList readFileData(
         DiskRangeList range, long baseOffset, boolean doForceDirect) throws IOException {
-      return RecordReaderUtils.readDiskRanges(file, zcr, baseOffset, range, doForceDirect);
+      return readDiskRanges(file, zcr, baseOffset, range, doForceDirect);
     }
 
     @Override
@@ -98,9 +99,77 @@ public class RecordReaderUtils {
       zcr.releaseBuffer(buffer);
     }
 
+    public long getReadBytes() {
+      return readBytes;
+    }
+
+    /**
+     * Read the list of ranges from the file.
+     * @param file the file to read
+     * @param base the base of the stripe
+     * @param range the disk ranges within the stripe to read
+     * @return the bytes read for each disk range, which is the same length as
+     *    ranges
+     * @throws IOException
+     */
+    private DiskRangeList readDiskRanges(FSDataInputStream file,
+                                        HadoopShims.ZeroCopyReaderShim zcr,
+                                        long base,
+                                        DiskRangeList range,
+                                        boolean doForceDirect) throws IOException {
+      if (range == null) return null;
+      DiskRangeList prev = range.prev;
+      if (prev == null) {
+        prev = new DiskRangeList.MutateHelper(range);
+      }
+      while (range != null) {
+        if (range.hasData()) {
+          range = range.next;
+          continue;
+        }
+        int len = (int) (range.getEnd() - range.getOffset());
+        long off = range.getOffset();
+        if (zcr != null) {
+          file.seek(base + off);
+          boolean hasReplaced = false;
+          while (len > 0) {
+            ByteBuffer partial = zcr.readBuffer(len, false);
+            readBytes += partial.remaining();
+            BufferChunk bc = new BufferChunk(partial, off);
+            if (!hasReplaced) {
+              range.replaceSelfWith(bc);
+              hasReplaced = true;
+            } else {
+              range.insertAfter(bc);
+            }
+            range = bc;
+            int read = partial.remaining();
+            len -= read;
+            off += read;
+          }
+        } else {
+          // Don't use HDFS ByteBuffer API because it has no readFully, and is buggy and pointless.
+          byte[] buffer = new byte[len];
+          file.readFully((base + off), buffer, 0, buffer.length);
+          readBytes += buffer.length;
+          ByteBuffer bb = null;
+          if (doForceDirect) {
+            bb = ByteBuffer.allocateDirect(len);
+            bb.put(buffer);
+            bb.position(0);
+            bb.limit(len);
+          } else {
+            bb = ByteBuffer.wrap(buffer);
+          }
+          range = range.replaceSelfWith(new BufferChunk(bb, range.getOffset()));
+        }
+        range = range.next;
+      }
+      return prev.next;
+    }
   }
 
-  static DataReader createDefaultDataReader(
+  public static DataReader createDefaultDataReader(
       FileSystem fs, Path path, boolean useZeroCopy, CompressionCodec codec) {
     return new DefaultDataReader(fs, path, useZeroCopy, codec);
   }
@@ -280,71 +349,7 @@ public class RecordReaderUtils {
     return buffer.toString();
   }
 
-  /**
-   * Read the list of ranges from the file.
-   * @param file the file to read
-   * @param base the base of the stripe
-   * @param range the disk ranges within the stripe to read
-   * @return the bytes read for each disk range, which is the same length as
-   *    ranges
-   * @throws IOException
-   */
-  static DiskRangeList readDiskRanges(FSDataInputStream file,
-                                      HadoopShims.ZeroCopyReaderShim zcr,
-                                      long base,
-                                      DiskRangeList range,
-                                      boolean doForceDirect) throws IOException {
-    if (range == null) return null;
-    DiskRangeList prev = range.prev;
-    if (prev == null) {
-      prev = new DiskRangeList.MutateHelper(range);
-    }
-    while (range != null) {
-      if (range.hasData()) {
-        range = range.next;
-        continue;
-      }
-      int len = (int) (range.getEnd() - range.getOffset());
-      long off = range.getOffset();
-      if (zcr != null) {
-        file.seek(base + off);
-        boolean hasReplaced = false;
-        while (len > 0) {
-          ByteBuffer partial = zcr.readBuffer(len, false);
-          BufferChunk bc = new BufferChunk(partial, off);
-          if (!hasReplaced) {
-            range.replaceSelfWith(bc);
-            hasReplaced = true;
-          } else {
-            range.insertAfter(bc);
-          }
-          range = bc;
-          int read = partial.remaining();
-          len -= read;
-          off += read;
-        }
-      } else {
-        // Don't use HDFS ByteBuffer API because it has no readFully, and is buggy and pointless.
-        byte[] buffer = new byte[len];
-        file.readFully((base + off), buffer, 0, buffer.length);
-        ByteBuffer bb = null;
-        if (doForceDirect) {
-          bb = ByteBuffer.allocateDirect(len);
-          bb.put(buffer);
-          bb.position(0);
-          bb.limit(len);
-        } else {
-          bb = ByteBuffer.wrap(buffer);
-        }
-        range = range.replaceSelfWith(new BufferChunk(bb, range.getOffset()));
-      }
-      range = range.next;
-    }
-    return prev.next;
-  }
-
-
-  static List<DiskRange> getStreamBuffers(DiskRangeList range, long offset, long length) {
+  public static List<DiskRange> getStreamBuffers(DiskRangeList range, long offset, long length) {
     // This assumes sorted ranges (as do many other parts of ORC code.
     ArrayList<DiskRange> buffers = new ArrayList<DiskRange>();
     if (length == 0) return buffers;

@@ -37,12 +37,12 @@ import org.apache.tajo.storage.thirdparty.orc.Writer;
 import java.io.IOException;
 import java.util.TimeZone;
 
-public class ORCAppender extends FileAppender {
+public class OrcAppender extends FileAppender {
   private Writer writer;
   private TableStatistics stats;
   private TimeZone timezone;
 
-  public ORCAppender(Configuration conf, TaskAttemptId taskAttemptId, Schema schema,
+  public OrcAppender(Configuration conf, TaskAttemptId taskAttemptId, Schema schema,
                      TableMeta meta, Path workDir) {
     super(conf, taskAttemptId, schema, meta, workDir);
 

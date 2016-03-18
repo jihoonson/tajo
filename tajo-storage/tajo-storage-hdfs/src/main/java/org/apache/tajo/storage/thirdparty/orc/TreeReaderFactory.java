@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package org.apache.tajo.storage.orc2;
+package org.apache.tajo.storage.thirdparty.orc;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -24,14 +24,21 @@ import org.apache.hadoop.hive.ql.exec.vector.LongColumnVector;
 import org.apache.hadoop.io.Text;
 import org.apache.orc.OrcProto;
 import org.apache.orc.impl.*;
+import org.apache.orc.impl.DynamicByteArray;
+import org.apache.orc.impl.SerializationUtils;
+import org.apache.orc.impl.StreamName;
+import org.apache.orc.impl.WriterImpl;
+import org.apache.tajo.TajoConstants;
 import org.apache.tajo.catalog.Column;
+import org.apache.tajo.catalog.TableMeta;
 import org.apache.tajo.catalog.TypeDesc;
 import org.apache.tajo.datum.Datum;
 import org.apache.tajo.datum.DatumFactory;
 import org.apache.tajo.datum.NullDatum;
-import org.apache.tajo.datum.TextDatum;
 import org.apache.tajo.exception.TajoRuntimeException;
 import org.apache.tajo.exception.UnsupportedException;
+import org.apache.tajo.storage.StorageConstants;
+import org.apache.tajo.unit.TimeUnit;
 import org.apache.tajo.util.datetime.DateTimeUtil;
 
 import java.io.EOFException;
@@ -140,11 +147,11 @@ public class TreeReaderFactory {
       }
     }
 
-    void startStripe(Map<StreamName, InStream> streams,
+    void startStripe(Map<org.apache.orc.impl.StreamName, InStream> streams,
                      OrcProto.StripeFooter stripeFooter
     ) throws IOException {
       checkEncoding(stripeFooter.getColumnsList().get(columnId));
-      InStream in = streams.get(new StreamName(columnId,
+      InStream in = streams.get(new org.apache.orc.impl.StreamName(columnId,
           OrcProto.Stream.Kind.PRESENT));
       if (in == null) {
         present = null;
@@ -186,19 +193,47 @@ public class TreeReaderFactory {
 
     abstract void skipRows(long rows) throws IOException;
 
+    public BitFieldReader getPresent() {
+      return present;
+    }
+  }
+
+  public abstract static class DatumTreeReader extends TreeReader {
+
+    DatumTreeReader(int columnId) throws IOException {
+      super(columnId);
+    }
+
+    protected DatumTreeReader(int columnId, InStream in) throws IOException {
+      super(columnId, in);
+    }
+
     Datum next() throws IOException {
       if (present != null) {
         valuePresent = present.next() == 1;
       }
       return NullDatum.get();
     }
+  }
 
-    public BitFieldReader getPresent() {
-      return present;
+  public abstract static class RawStringTreeReader extends TreeReader {
+    RawStringTreeReader(int columnId) throws IOException {
+      super(columnId);
+    }
+
+    protected RawStringTreeReader(int columnId, InStream in) throws IOException {
+      super(columnId, in);
+    }
+
+    byte[] next() throws IOException {
+      if (present != null) {
+        valuePresent = present.next() == 1;
+      }
+      return null;
     }
   }
 
-  public static class BooleanTreeReader extends TreeReader {
+  public static class BooleanTreeReader extends DatumTreeReader {
     protected BitFieldReader reader = null;
 
     BooleanTreeReader(int columnId) throws IOException {
@@ -213,11 +248,11 @@ public class TreeReaderFactory {
     }
 
     @Override
-    void startStripe(Map<StreamName, InStream> streams,
+    void startStripe(Map<org.apache.orc.impl.StreamName, InStream> streams,
                      OrcProto.StripeFooter stripeFooter
     ) throws IOException {
       super.startStripe(streams, stripeFooter);
-      reader = new BitFieldReader(streams.get(new StreamName(columnId,
+      reader = new BitFieldReader(streams.get(new org.apache.orc.impl.StreamName(columnId,
           OrcProto.Stream.Kind.DATA)), 1);
     }
 
@@ -244,7 +279,7 @@ public class TreeReaderFactory {
     }
   }
 
-  public static class ByteTreeReader extends TreeReader {
+  public static class ByteTreeReader extends DatumTreeReader {
     protected RunLengthByteReader reader = null;
 
     ByteTreeReader(int columnId) throws IOException {
@@ -257,11 +292,11 @@ public class TreeReaderFactory {
     }
 
     @Override
-    void startStripe(Map<StreamName, InStream> streams,
+    void startStripe(Map<org.apache.orc.impl.StreamName, InStream> streams,
                      OrcProto.StripeFooter stripeFooter
     ) throws IOException {
       super.startStripe(streams, stripeFooter);
-      reader = new RunLengthByteReader(streams.get(new StreamName(columnId,
+      reader = new RunLengthByteReader(streams.get(new org.apache.orc.impl.StreamName(columnId,
           OrcProto.Stream.Kind.DATA)));
     }
 
@@ -288,7 +323,7 @@ public class TreeReaderFactory {
     }
   }
 
-  public static class ShortTreeReader extends TreeReader {
+  public static class ShortTreeReader extends DatumTreeReader {
     protected IntegerReader reader = null;
 
     ShortTreeReader(int columnId) throws IOException {
@@ -315,11 +350,11 @@ public class TreeReaderFactory {
     }
 
     @Override
-    void startStripe(Map<StreamName, InStream> streams,
+    void startStripe(Map<org.apache.orc.impl.StreamName, InStream> streams,
                      OrcProto.StripeFooter stripeFooter
     ) throws IOException {
       super.startStripe(streams, stripeFooter);
-      StreamName name = new StreamName(columnId,
+      org.apache.orc.impl.StreamName name = new org.apache.orc.impl.StreamName(columnId,
           OrcProto.Stream.Kind.DATA);
       reader = createIntegerReader(stripeFooter.getColumnsList().get(columnId).getKind(),
           streams.get(name), true, false);
@@ -348,7 +383,7 @@ public class TreeReaderFactory {
     }
   }
 
-  public static class InetTreeReader extends TreeReader {
+  public static class InetTreeReader extends DatumTreeReader {
     protected IntegerReader reader = null;
 
     InetTreeReader(int columnId) throws IOException {
@@ -375,11 +410,11 @@ public class TreeReaderFactory {
     }
 
     @Override
-    void startStripe(Map<StreamName, InStream> streams,
+    void startStripe(Map<org.apache.orc.impl.StreamName, InStream> streams,
                      OrcProto.StripeFooter stripeFooter
     ) throws IOException {
       super.startStripe(streams, stripeFooter);
-      StreamName name = new StreamName(columnId,
+      org.apache.orc.impl.StreamName name = new org.apache.orc.impl.StreamName(columnId,
           OrcProto.Stream.Kind.DATA);
       reader = createIntegerReader(stripeFooter.getColumnsList().get(columnId).getKind(),
           streams.get(name), true, false);
@@ -402,7 +437,7 @@ public class TreeReaderFactory {
     }
   }
 
-  public static class IntTreeReader extends TreeReader {
+  public static class IntTreeReader extends DatumTreeReader {
     protected IntegerReader reader = null;
 
     IntTreeReader(int columnId) throws IOException {
@@ -429,11 +464,11 @@ public class TreeReaderFactory {
     }
 
     @Override
-    void startStripe(Map<StreamName, InStream> streams,
+    void startStripe(Map<org.apache.orc.impl.StreamName, InStream> streams,
                      OrcProto.StripeFooter stripeFooter
     ) throws IOException {
       super.startStripe(streams, stripeFooter);
-      StreamName name = new StreamName(columnId,
+      org.apache.orc.impl.StreamName name = new org.apache.orc.impl.StreamName(columnId,
           OrcProto.Stream.Kind.DATA);
       reader = createIntegerReader(stripeFooter.getColumnsList().get(columnId).getKind(),
           streams.get(name), true, false);
@@ -462,7 +497,7 @@ public class TreeReaderFactory {
     }
   }
 
-  public static class LongTreeReader extends TreeReader {
+  public static class LongTreeReader extends DatumTreeReader {
     protected IntegerReader reader = null;
 
     LongTreeReader(int columnId, boolean skipCorrupt) throws IOException {
@@ -490,11 +525,11 @@ public class TreeReaderFactory {
     }
 
     @Override
-    void startStripe(Map<StreamName, InStream> streams,
+    void startStripe(Map<org.apache.orc.impl.StreamName, InStream> streams,
                      OrcProto.StripeFooter stripeFooter
     ) throws IOException {
       super.startStripe(streams, stripeFooter);
-      StreamName name = new StreamName(columnId,
+      org.apache.orc.impl.StreamName name = new org.apache.orc.impl.StreamName(columnId,
           OrcProto.Stream.Kind.DATA);
       reader = createIntegerReader(stripeFooter.getColumnsList().get(columnId).getKind(),
           streams.get(name), true, false);
@@ -523,9 +558,9 @@ public class TreeReaderFactory {
     }
   }
 
-  public static class FloatTreeReader extends TreeReader {
+  public static class FloatTreeReader extends DatumTreeReader {
     protected InStream stream;
-    private final SerializationUtils utils;
+    private final org.apache.orc.impl.SerializationUtils utils;
 
     FloatTreeReader(int columnId) throws IOException {
       this(columnId, null, null);
@@ -533,16 +568,16 @@ public class TreeReaderFactory {
 
     protected FloatTreeReader(int columnId, InStream present, InStream data) throws IOException {
       super(columnId, present);
-      this.utils = new SerializationUtils();
+      this.utils = new org.apache.orc.impl.SerializationUtils();
       this.stream = data;
     }
 
     @Override
-    void startStripe(Map<StreamName, InStream> streams,
+    void startStripe(Map<org.apache.orc.impl.StreamName, InStream> streams,
                      OrcProto.StripeFooter stripeFooter
     ) throws IOException {
       super.startStripe(streams, stripeFooter);
-      StreamName name = new StreamName(columnId,
+      org.apache.orc.impl.StreamName name = new org.apache.orc.impl.StreamName(columnId,
           OrcProto.Stream.Kind.DATA);
       stream = streams.get(name);
     }
@@ -573,9 +608,9 @@ public class TreeReaderFactory {
     }
   }
 
-  public static class DoubleTreeReader extends TreeReader {
+  public static class DoubleTreeReader extends DatumTreeReader {
     protected InStream stream;
-    private final SerializationUtils utils;
+    private final org.apache.orc.impl.SerializationUtils utils;
 
     DoubleTreeReader(int columnId) throws IOException {
       this(columnId, null, null);
@@ -588,12 +623,12 @@ public class TreeReaderFactory {
     }
 
     @Override
-    void startStripe(Map<StreamName, InStream> streams,
+    void startStripe(Map<org.apache.orc.impl.StreamName, InStream> streams,
                      OrcProto.StripeFooter stripeFooter
     ) throws IOException {
       super.startStripe(streams, stripeFooter);
-      StreamName name =
-          new StreamName(columnId,
+      org.apache.orc.impl.StreamName name =
+          new org.apache.orc.impl.StreamName(columnId,
               OrcProto.Stream.Kind.DATA);
       stream = streams.get(name);
     }
@@ -625,7 +660,7 @@ public class TreeReaderFactory {
     }
   }
 
-  public static class BinaryTreeReader extends TreeReader {
+  public static class BinaryTreeReader extends DatumTreeReader {
     protected InStream stream;
     protected IntegerReader lengths = null;
     protected final LongColumnVector scratchlcv;
@@ -655,15 +690,15 @@ public class TreeReaderFactory {
     }
 
     @Override
-    void startStripe(Map<StreamName, InStream> streams,
+    void startStripe(Map<org.apache.orc.impl.StreamName, InStream> streams,
                      OrcProto.StripeFooter stripeFooter
     ) throws IOException {
       super.startStripe(streams, stripeFooter);
-      StreamName name = new StreamName(columnId,
+      org.apache.orc.impl.StreamName name = new org.apache.orc.impl.StreamName(columnId,
           OrcProto.Stream.Kind.DATA);
       stream = streams.get(name);
       lengths = createIntegerReader(stripeFooter.getColumnsList().get(columnId).getKind(),
-          streams.get(new StreamName(columnId, OrcProto.Stream.Kind.LENGTH)), false, false);
+          streams.get(new org.apache.orc.impl.StreamName(columnId, OrcProto.Stream.Kind.LENGTH)), false, false);
     }
 
     @Override
@@ -713,7 +748,7 @@ public class TreeReaderFactory {
     }
   }
 
-  public static class TimestampTreeReader extends TreeReader {
+  public static class TimestampTreeReader extends DatumTreeReader {
     protected IntegerReader data = null;
     protected IntegerReader nanos = null;
     private final boolean skipCorrupt;
@@ -723,11 +758,11 @@ public class TreeReaderFactory {
     private TimeZone writerTimeZone;
     private boolean hasSameTZRules;
 
-    TimestampTreeReader(int columnId, boolean skipCorrupt) throws IOException {
-      this(columnId, null, null, null, null, skipCorrupt);
+    TimestampTreeReader(TableMeta meta, int columnId, boolean skipCorrupt) throws IOException {
+      this(meta, columnId, null, null, null, null, skipCorrupt);
     }
 
-    protected TimestampTreeReader(int columnId, InStream presentStream, InStream dataStream,
+    protected TimestampTreeReader(TableMeta meta, int columnId, InStream presentStream, InStream dataStream,
                                   InStream nanosStream, OrcProto.ColumnEncoding encoding, boolean skipCorrupt)
         throws IOException {
       super(columnId, presentStream);
@@ -736,7 +771,8 @@ public class TreeReaderFactory {
       this.readerTimeZone = TimeZone.getDefault();
       this.writerTimeZone = readerTimeZone;
       this.hasSameTZRules = writerTimeZone.hasSameRules(readerTimeZone);
-      this.base_timestamp = getBaseTimestamp(readerTimeZone.getID());
+      this.base_timestamp = getBaseTimestamp(TimeZone.getTimeZone(meta.getOption(StorageConstants.TIMEZONE,
+          TajoConstants.DEFAULT_SYSTEM_TIMEZONE)).getID());
       if (encoding != null) {
         checkEncoding(encoding);
 
@@ -760,15 +796,15 @@ public class TreeReaderFactory {
     }
 
     @Override
-    void startStripe(Map<StreamName, InStream> streams,
+    void startStripe(Map<org.apache.orc.impl.StreamName, InStream> streams,
                      OrcProto.StripeFooter stripeFooter
     ) throws IOException {
       super.startStripe(streams, stripeFooter);
       data = createIntegerReader(stripeFooter.getColumnsList().get(columnId).getKind(),
-          streams.get(new StreamName(columnId,
+          streams.get(new org.apache.orc.impl.StreamName(columnId,
               OrcProto.Stream.Kind.DATA)), true, skipCorrupt);
       nanos = createIntegerReader(stripeFooter.getColumnsList().get(columnId).getKind(),
-          streams.get(new StreamName(columnId,
+          streams.get(new org.apache.orc.impl.StreamName(columnId,
               OrcProto.Stream.Kind.SECONDARY)), false, skipCorrupt);
       base_timestamp = getBaseTimestamp(stripeFooter.getWriterTimezone());
     }
@@ -786,7 +822,7 @@ public class TreeReaderFactory {
         sdf.setTimeZone(writerTimeZone);
         try {
           long epoch =
-              sdf.parse(WriterImpl.BASE_TIMESTAMP_STRING).getTime() / WriterImpl.MILLIS_PER_SECOND;
+              sdf.parse(org.apache.orc.impl.WriterImpl.BASE_TIMESTAMP_STRING).getTime() / WriterImpl.MILLIS_PER_SECOND;
           baseTimestampMap.put(timeZoneId, epoch);
           return epoch;
         } catch (ParseException e) {
@@ -816,14 +852,7 @@ public class TreeReaderFactory {
       super.next();
 
       if (valuePresent) {
-        long millis = (data.next() + base_timestamp) * WriterImpl.MILLIS_PER_SECOND;
-        int newNanos = parseNanos(nanos.next());
-        // fix the rounding when we divided by 1000.
-        if (millis >= 0) {
-          millis += newNanos / 1000000;
-        } else {
-          millis -= newNanos / 1000000;
-        }
+        long millis = decodeTimestamp(data.next(), nanos.next(), base_timestamp);
         long offset = 0;
         // If reader and writer time zones have different rules, adjust the timezone difference
         // between reader and writer taking day light savings into account.
@@ -831,7 +860,6 @@ public class TreeReaderFactory {
           offset = writerTimeZone.getOffset(millis) - readerTimeZone.getOffset(millis);
         }
         long adjustedMillis = millis + offset;
-//        Timestamp ts = new Timestamp(adjustedMillis);
 
         // Sometimes the reader timezone might have changed after adding the adjustedMillis.
         // To account for that change, check for any difference in reader timezone after
@@ -841,10 +869,7 @@ public class TreeReaderFactory {
           long newOffset =
               writerTimeZone.getOffset(millis) - readerTimeZone.getOffset(adjustedMillis);
           adjustedMillis = millis + newOffset;
-//          ts.setTime(adjustedMillis);
         }
-//        ts.setNanos(newNanos);
-        // TODO: check the below is valid
         return DatumFactory.createTimestamp(DateTimeUtil.javaTimeToJulianTime(adjustedMillis));
       } else {
         return NullDatum.get();
@@ -862,6 +887,23 @@ public class TreeReaderFactory {
       return result;
     }
 
+    // borrowed from Facebook's TimestampStreamReader
+    private static long decodeTimestamp(long seconds, long serializedNanos, long baseTimestampInSeconds) {
+      long millis = (seconds + baseTimestampInSeconds) * TimeUnit.MILLIS_PER_SECOND;
+      long nanos = parseNanos(serializedNanos);
+
+      // the rounding error exists because java always rounds up when dividing integers
+      // -42001/1000 = -42; and -42001 % 1000 = -1 (+ 1000)
+      // to get the correct value we need
+      // (-42 - 1)*1000 + 999 = -42001
+      // (42)*1000 + 1 = 42001
+      if (millis < 0 && nanos != 0) {
+        millis -= 1000;
+      }
+      // Truncate nanos to millis and add to mills
+      return millis + (nanos / 1_000_000);
+    }
+
     @Override
     void skipRows(long items) throws IOException {
       items = countNonNulls(items);
@@ -870,7 +912,7 @@ public class TreeReaderFactory {
     }
   }
 
-  public static class DateTreeReader extends TreeReader {
+  public static class DateTreeReader extends DatumTreeReader {
     protected IntegerReader reader = null;
 
     DateTreeReader(int columnId) throws IOException {
@@ -896,11 +938,11 @@ public class TreeReaderFactory {
     }
 
     @Override
-    void startStripe(Map<StreamName, InStream> streams,
+    void startStripe(Map<org.apache.orc.impl.StreamName, InStream> streams,
                      OrcProto.StripeFooter stripeFooter
     ) throws IOException {
       super.startStripe(streams, stripeFooter);
-      StreamName name = new StreamName(columnId,
+      org.apache.orc.impl.StreamName name = new org.apache.orc.impl.StreamName(columnId,
           OrcProto.Stream.Kind.DATA);
       reader = createIntegerReader(stripeFooter.getColumnsList().get(columnId).getKind(),
           streams.get(name), true, false);
@@ -935,8 +977,8 @@ public class TreeReaderFactory {
    * stripe, it creates an internal reader based on whether a direct or
    * dictionary encoding was used.
    */
-  public static class StringTreeReader extends TreeReader {
-    protected TreeReader reader;
+  public static class StringTreeReader extends DatumTreeReader {
+    protected RawStringTreeReader reader;
 
     StringTreeReader(int columnId) throws IOException {
       super(columnId);
@@ -945,6 +987,359 @@ public class TreeReaderFactory {
     protected StringTreeReader(int columnId, InStream present, InStream data, InStream length,
                                InStream dictionary, OrcProto.ColumnEncoding encoding) throws IOException {
       super(columnId, present);
+      if (encoding != null) {
+        switch (encoding.getKind()) {
+          case DIRECT:
+          case DIRECT_V2:
+            reader = new StringDirectTreeReader(columnId, present, data, length,
+                encoding.getKind());
+            break;
+          case DICTIONARY:
+          case DICTIONARY_V2:
+            reader = new StringDictionaryTreeReader(columnId, present, data, length, dictionary,
+                encoding);
+            break;
+          default:
+            throw new IllegalArgumentException("Unsupported encoding " +
+                encoding.getKind());
+        }
+      }
+    }
+
+    @Override
+    void checkEncoding(OrcProto.ColumnEncoding encoding) throws IOException {
+      reader.checkEncoding(encoding);
+    }
+
+    @Override
+    void startStripe(Map<org.apache.orc.impl.StreamName, InStream> streams,
+                     OrcProto.StripeFooter stripeFooter
+    ) throws IOException {
+      // For each stripe, checks the encoding and initializes the appropriate
+      // reader
+      switch (stripeFooter.getColumnsList().get(columnId).getKind()) {
+        case DIRECT:
+        case DIRECT_V2:
+          reader = new StringDirectTreeReader(columnId);
+          break;
+        case DICTIONARY:
+        case DICTIONARY_V2:
+          reader = new StringDictionaryTreeReader(columnId);
+          break;
+        default:
+          throw new IllegalArgumentException("Unsupported encoding " +
+              stripeFooter.getColumnsList().get(columnId).getKind());
+      }
+      reader.startStripe(streams, stripeFooter);
+    }
+
+    @Override
+    void seek(PositionProvider[] index) throws IOException {
+      reader.seek(index);
+    }
+
+    @Override
+    public void seek(PositionProvider index) throws IOException {
+      reader.seek(index);
+    }
+
+    @Override
+    Datum next() throws IOException {
+      byte[] bytes = reader.next();
+      return bytes == null ? NullDatum.get() : DatumFactory.createText(bytes);
+    }
+
+    @Override
+    void skipRows(long items) throws IOException {
+      reader.skipRows(items);
+    }
+  }
+
+  private final static class BasicTextReaderShim {
+    private final InputStream in;
+
+    public BasicTextReaderShim(InputStream in) {
+      this.in = in;
+    }
+
+    public byte[] read(int len) throws IOException {
+      int offset = 0;
+      byte[] bytes = new byte[len];
+      while (len > 0) {
+        int written = in.read(bytes, offset, len);
+        if (written < 0) {
+          throw new EOFException("Can't finish read from " + in + " read "
+              + (offset) + " bytes out of " + bytes.length);
+        }
+        len -= written;
+        offset += written;
+      }
+      return bytes;
+    }
+  }
+
+  /**
+   * A reader for string columns that are direct encoded in the current
+   * stripe.
+   */
+  public static class StringDirectTreeReader extends RawStringTreeReader {
+    protected InStream stream;
+    protected BasicTextReaderShim data;
+    protected IntegerReader lengths;
+    private final LongColumnVector scratchlcv;
+
+    StringDirectTreeReader(int columnId) throws IOException {
+      this(columnId, null, null, null, null);
+    }
+
+    protected StringDirectTreeReader(int columnId, InStream present, InStream data,
+                                     InStream length, OrcProto.ColumnEncoding.Kind encoding) throws IOException {
+      super(columnId, present);
+      this.scratchlcv = new LongColumnVector();
+      this.stream = data;
+      if (length != null && encoding != null) {
+        this.lengths = createIntegerReader(encoding, length, false, false);
+      }
+    }
+
+    @Override
+    void checkEncoding(OrcProto.ColumnEncoding encoding) throws IOException {
+      if (encoding.getKind() != OrcProto.ColumnEncoding.Kind.DIRECT &&
+          encoding.getKind() != OrcProto.ColumnEncoding.Kind.DIRECT_V2) {
+        throw new IOException("Unknown encoding " + encoding + " in column " +
+            columnId);
+      }
+    }
+
+    @Override
+    void startStripe(Map<org.apache.orc.impl.StreamName, InStream> streams,
+                     OrcProto.StripeFooter stripeFooter
+    ) throws IOException {
+      super.startStripe(streams, stripeFooter);
+      org.apache.orc.impl.StreamName name = new org.apache.orc.impl.StreamName(columnId,
+          OrcProto.Stream.Kind.DATA);
+      stream = streams.get(name);
+      data = new BasicTextReaderShim(stream);
+
+      lengths = createIntegerReader(stripeFooter.getColumnsList().get(columnId).getKind(),
+          streams.get(new org.apache.orc.impl.StreamName(columnId, OrcProto.Stream.Kind.LENGTH)),
+          false, false);
+    }
+
+    @Override
+    void seek(PositionProvider[] index) throws IOException {
+      seek(index[columnId]);
+    }
+
+    @Override
+    public void seek(PositionProvider index) throws IOException {
+      super.seek(index);
+      stream.seek(index);
+      // don't seek data stream
+      lengths.seek(index);
+    }
+
+    @Override
+    byte[] next() throws IOException {
+      super.next();
+      int len = (int) lengths.next();
+      return valuePresent ? data.read(len) : null;
+    }
+
+    @Override
+    void skipRows(long items) throws IOException {
+      items = countNonNulls(items);
+      long lengthToSkip = 0;
+      for (int i = 0; i < items; ++i) {
+        lengthToSkip += lengths.next();
+      }
+
+      while (lengthToSkip > 0) {
+        lengthToSkip -= stream.skip(lengthToSkip);
+      }
+    }
+
+    public IntegerReader getLengths() {
+      return lengths;
+    }
+
+    public InStream getStream() {
+      return stream;
+    }
+  }
+
+  /**
+   * A reader for string columns that are dictionary encoded in the current
+   * stripe.
+   */
+  public static class StringDictionaryTreeReader extends RawStringTreeReader {
+    private org.apache.orc.impl.DynamicByteArray dictionaryBuffer;
+    private int[] dictionaryOffsets;
+    protected IntegerReader reader;
+
+    private byte[] dictionaryBufferInBytesCache = null;
+    private final LongColumnVector scratchlcv;
+    private final Text result = new Text();
+
+    StringDictionaryTreeReader(int columnId) throws IOException {
+      this(columnId, null, null, null, null, null);
+    }
+
+    protected StringDictionaryTreeReader(int columnId, InStream present, InStream data,
+                                         InStream length, InStream dictionary, OrcProto.ColumnEncoding encoding)
+        throws IOException {
+      super(columnId, present);
+      scratchlcv = new LongColumnVector();
+      if (data != null && encoding != null) {
+        this.reader = createIntegerReader(encoding.getKind(), data, false, false);
+      }
+
+      if (dictionary != null && encoding != null) {
+        readDictionaryStream(dictionary);
+      }
+
+      if (length != null && encoding != null) {
+        readDictionaryLengthStream(length, encoding);
+      }
+    }
+
+    @Override
+    void checkEncoding(OrcProto.ColumnEncoding encoding) throws IOException {
+      if (encoding.getKind() != OrcProto.ColumnEncoding.Kind.DICTIONARY &&
+          encoding.getKind() != OrcProto.ColumnEncoding.Kind.DICTIONARY_V2) {
+        throw new IOException("Unknown encoding " + encoding + " in column " +
+            columnId);
+      }
+    }
+
+    @Override
+    void startStripe(Map<org.apache.orc.impl.StreamName, InStream> streams,
+                     OrcProto.StripeFooter stripeFooter
+    ) throws IOException {
+      super.startStripe(streams, stripeFooter);
+
+      // read the dictionary blob
+      org.apache.orc.impl.StreamName name = new org.apache.orc.impl.StreamName(columnId,
+          OrcProto.Stream.Kind.DICTIONARY_DATA);
+      InStream in = streams.get(name);
+      readDictionaryStream(in);
+
+      // read the lengths
+      name = new org.apache.orc.impl.StreamName(columnId, OrcProto.Stream.Kind.LENGTH);
+      in = streams.get(name);
+      readDictionaryLengthStream(in, stripeFooter.getColumnsList().get(columnId));
+
+      // set up the row reader
+      name = new org.apache.orc.impl.StreamName(columnId, OrcProto.Stream.Kind.DATA);
+      reader = createIntegerReader(stripeFooter.getColumnsList().get(columnId).getKind(),
+          streams.get(name), false, false);
+    }
+
+    private void readDictionaryLengthStream(InStream in, OrcProto.ColumnEncoding encoding)
+        throws IOException {
+      int dictionarySize = encoding.getDictionarySize();
+      if (in != null) { // Guard against empty LENGTH stream.
+        IntegerReader lenReader = createIntegerReader(encoding.getKind(), in, false, false);
+        int offset = 0;
+        if (dictionaryOffsets == null ||
+            dictionaryOffsets.length < dictionarySize + 1) {
+          dictionaryOffsets = new int[dictionarySize + 1];
+        }
+        for (int i = 0; i < dictionarySize; ++i) {
+          dictionaryOffsets[i] = offset;
+          offset += (int) lenReader.next();
+        }
+        dictionaryOffsets[dictionarySize] = offset;
+        in.close();
+      }
+
+    }
+
+    private void readDictionaryStream(InStream in) throws IOException {
+      if (in != null) { // Guard against empty dictionary stream.
+        if (in.available() > 0) {
+          dictionaryBuffer = new DynamicByteArray(64, in.available());
+          dictionaryBuffer.readAll(in);
+          // Since its start of strip invalidate the cache.
+          dictionaryBufferInBytesCache = null;
+        }
+        in.close();
+      } else {
+        dictionaryBuffer = null;
+      }
+    }
+
+    @Override
+    void seek(PositionProvider[] index) throws IOException {
+      seek(index[columnId]);
+    }
+
+    @Override
+    public void seek(PositionProvider index) throws IOException {
+      super.seek(index);
+      reader.seek(index);
+    }
+
+    @Override
+    byte[] next() throws IOException {
+      super.next();
+      if (valuePresent) {
+        int entry = (int) reader.next();
+        int offset = dictionaryOffsets[entry];
+        int length = getDictionaryEntryLength(entry, offset);
+        // If the column is just empty strings, the size will be zero,
+        // so the buffer will be null, in that case just return result
+        // as it will default to empty
+        if (dictionaryBuffer != null) {
+          dictionaryBuffer.setText(result, offset, length);
+        } else {
+          result.clear();
+        }
+        return result.getBytes();
+      } else {
+        return null;
+      }
+    }
+
+    int getDictionaryEntryLength(int entry, int offset) {
+      final int length;
+      // if it isn't the last entry, subtract the offsets otherwise use
+      // the buffer length.
+      if (entry < dictionaryOffsets.length - 1) {
+        length = dictionaryOffsets[entry + 1] - offset;
+      } else {
+        length = dictionaryBuffer.size() - offset;
+      }
+      return length;
+    }
+
+    @Override
+    void skipRows(long items) throws IOException {
+      reader.skip(countNonNulls(items));
+    }
+
+    public IntegerReader getReader() {
+      return reader;
+    }
+  }
+
+  /**
+   * A tree reader that will read string columns. At the start of the
+   * stripe, it creates an internal reader based on whether a direct or
+   * dictionary encoding was used.
+   */
+  public static class CharTreeReader extends DatumTreeReader {
+    protected RawStringTreeReader reader;
+    private final int maxLength;
+
+    CharTreeReader(int columnId, int maxLength) throws IOException {
+      this(columnId, null, null, null, null, null, maxLength);
+    }
+
+    protected CharTreeReader(int columnId, InStream present, InStream data, InStream length,
+                             InStream dictionary, OrcProto.ColumnEncoding encoding, int maxLength) throws IOException {
+      super(columnId, present);
+      this.maxLength = maxLength;
       if (encoding != null) {
         switch (encoding.getKind()) {
           case DIRECT:
@@ -1003,312 +1398,18 @@ public class TreeReaderFactory {
 
     @Override
     Datum next() throws IOException {
-      return reader.next();
+      byte[] bytes = reader.next();
+
+      if (bytes == null) {
+        return NullDatum.get();
+      }
+      // TODO: enforce char length
+      return DatumFactory.createChar(bytes);
     }
 
     @Override
     void skipRows(long items) throws IOException {
       reader.skipRows(items);
-    }
-  }
-
-  private final static class BasicTextReaderShim {
-    private final InputStream in;
-
-    public BasicTextReaderShim(InputStream in) {
-      this.in = in;
-    }
-
-    public byte[] read(int len) throws IOException {
-      int offset = 0;
-      byte[] bytes = new byte[len];
-      while (len > 0) {
-        int written = in.read(bytes, offset, len);
-        if (written < 0) {
-          throw new EOFException("Can't finish read from " + in + " read "
-              + (offset) + " bytes out of " + bytes.length);
-        }
-        len -= written;
-        offset += written;
-      }
-      return bytes;
-    }
-  }
-
-  /**
-   * A reader for string columns that are direct encoded in the current
-   * stripe.
-   */
-  public static class StringDirectTreeReader extends TreeReader {
-    protected InStream stream;
-    protected BasicTextReaderShim data;
-    protected IntegerReader lengths;
-    private final LongColumnVector scratchlcv;
-
-    StringDirectTreeReader(int columnId) throws IOException {
-      this(columnId, null, null, null, null);
-    }
-
-    protected StringDirectTreeReader(int columnId, InStream present, InStream data,
-                                     InStream length, OrcProto.ColumnEncoding.Kind encoding) throws IOException {
-      super(columnId, present);
-      this.scratchlcv = new LongColumnVector();
-      this.stream = data;
-      if (length != null && encoding != null) {
-        this.lengths = createIntegerReader(encoding, length, false, false);
-      }
-    }
-
-    @Override
-    void checkEncoding(OrcProto.ColumnEncoding encoding) throws IOException {
-      if (encoding.getKind() != OrcProto.ColumnEncoding.Kind.DIRECT &&
-          encoding.getKind() != OrcProto.ColumnEncoding.Kind.DIRECT_V2) {
-        throw new IOException("Unknown encoding " + encoding + " in column " +
-            columnId);
-      }
-    }
-
-    @Override
-    void startStripe(Map<StreamName, InStream> streams,
-                     OrcProto.StripeFooter stripeFooter
-    ) throws IOException {
-      super.startStripe(streams, stripeFooter);
-      StreamName name = new StreamName(columnId,
-          OrcProto.Stream.Kind.DATA);
-      stream = streams.get(name);
-      data = new BasicTextReaderShim(stream);
-
-      lengths = createIntegerReader(stripeFooter.getColumnsList().get(columnId).getKind(),
-          streams.get(new StreamName(columnId, OrcProto.Stream.Kind.LENGTH)),
-          false, false);
-    }
-
-    @Override
-    void seek(PositionProvider[] index) throws IOException {
-      seek(index[columnId]);
-    }
-
-    @Override
-    public void seek(PositionProvider index) throws IOException {
-      super.seek(index);
-      stream.seek(index);
-      // don't seek data stream
-      lengths.seek(index);
-    }
-
-    @Override
-    Datum next() throws IOException {
-      super.next();
-      int len = (int) lengths.next();
-      return valuePresent ? DatumFactory.createText(data.read(len)) : NullDatum.get();
-    }
-
-    @Override
-    void skipRows(long items) throws IOException {
-      items = countNonNulls(items);
-      long lengthToSkip = 0;
-      for (int i = 0; i < items; ++i) {
-        lengthToSkip += lengths.next();
-      }
-
-      while (lengthToSkip > 0) {
-        lengthToSkip -= stream.skip(lengthToSkip);
-      }
-    }
-
-    public IntegerReader getLengths() {
-      return lengths;
-    }
-
-    public InStream getStream() {
-      return stream;
-    }
-  }
-
-  /**
-   * A reader for string columns that are dictionary encoded in the current
-   * stripe.
-   */
-  public static class StringDictionaryTreeReader extends TreeReader {
-    private DynamicByteArray dictionaryBuffer;
-    private int[] dictionaryOffsets;
-    protected IntegerReader reader;
-
-    private byte[] dictionaryBufferInBytesCache = null;
-    private final LongColumnVector scratchlcv;
-    private final Text result = new Text();
-
-    StringDictionaryTreeReader(int columnId) throws IOException {
-      this(columnId, null, null, null, null, null);
-    }
-
-    protected StringDictionaryTreeReader(int columnId, InStream present, InStream data,
-                                         InStream length, InStream dictionary, OrcProto.ColumnEncoding encoding)
-        throws IOException {
-      super(columnId, present);
-      scratchlcv = new LongColumnVector();
-      if (data != null && encoding != null) {
-        this.reader = createIntegerReader(encoding.getKind(), data, false, false);
-      }
-
-      if (dictionary != null && encoding != null) {
-        readDictionaryStream(dictionary);
-      }
-
-      if (length != null && encoding != null) {
-        readDictionaryLengthStream(length, encoding);
-      }
-    }
-
-    @Override
-    void checkEncoding(OrcProto.ColumnEncoding encoding) throws IOException {
-      if (encoding.getKind() != OrcProto.ColumnEncoding.Kind.DICTIONARY &&
-          encoding.getKind() != OrcProto.ColumnEncoding.Kind.DICTIONARY_V2) {
-        throw new IOException("Unknown encoding " + encoding + " in column " +
-            columnId);
-      }
-    }
-
-    @Override
-    void startStripe(Map<StreamName, InStream> streams,
-                     OrcProto.StripeFooter stripeFooter
-    ) throws IOException {
-      super.startStripe(streams, stripeFooter);
-
-      // read the dictionary blob
-      StreamName name = new StreamName(columnId,
-          OrcProto.Stream.Kind.DICTIONARY_DATA);
-      InStream in = streams.get(name);
-      readDictionaryStream(in);
-
-      // read the lengths
-      name = new StreamName(columnId, OrcProto.Stream.Kind.LENGTH);
-      in = streams.get(name);
-      readDictionaryLengthStream(in, stripeFooter.getColumnsList().get(columnId));
-
-      // set up the row reader
-      name = new StreamName(columnId, OrcProto.Stream.Kind.DATA);
-      reader = createIntegerReader(stripeFooter.getColumnsList().get(columnId).getKind(),
-          streams.get(name), false, false);
-    }
-
-    private void readDictionaryLengthStream(InStream in, OrcProto.ColumnEncoding encoding)
-        throws IOException {
-      int dictionarySize = encoding.getDictionarySize();
-      if (in != null) { // Guard against empty LENGTH stream.
-        IntegerReader lenReader = createIntegerReader(encoding.getKind(), in, false, false);
-        int offset = 0;
-        if (dictionaryOffsets == null ||
-            dictionaryOffsets.length < dictionarySize + 1) {
-          dictionaryOffsets = new int[dictionarySize + 1];
-        }
-        for (int i = 0; i < dictionarySize; ++i) {
-          dictionaryOffsets[i] = offset;
-          offset += (int) lenReader.next();
-        }
-        dictionaryOffsets[dictionarySize] = offset;
-        in.close();
-      }
-
-    }
-
-    private void readDictionaryStream(InStream in) throws IOException {
-      if (in != null) { // Guard against empty dictionary stream.
-        if (in.available() > 0) {
-          dictionaryBuffer = new DynamicByteArray(64, in.available());
-          dictionaryBuffer.readAll(in);
-          // Since its start of strip invalidate the cache.
-          dictionaryBufferInBytesCache = null;
-        }
-        in.close();
-      } else {
-        dictionaryBuffer = null;
-      }
-    }
-
-    @Override
-    void seek(PositionProvider[] index) throws IOException {
-      seek(index[columnId]);
-    }
-
-    @Override
-    public void seek(PositionProvider index) throws IOException {
-      super.seek(index);
-      reader.seek(index);
-    }
-
-    @Override
-    Datum next() throws IOException {
-      super.next();
-      if (valuePresent) {
-        int entry = (int) reader.next();
-        int offset = dictionaryOffsets[entry];
-        int length = getDictionaryEntryLength(entry, offset);
-        // If the column is just empty strings, the size will be zero,
-        // so the buffer will be null, in that case just return result
-        // as it will default to empty
-        if (dictionaryBuffer != null) {
-          dictionaryBuffer.setText(result, offset, length);
-        } else {
-          result.clear();
-        }
-        return DatumFactory.createText(result.getBytes());
-      } else {
-        return NullDatum.get();
-      }
-    }
-
-    int getDictionaryEntryLength(int entry, int offset) {
-      final int length;
-      // if it isn't the last entry, subtract the offsets otherwise use
-      // the buffer length.
-      if (entry < dictionaryOffsets.length - 1) {
-        length = dictionaryOffsets[entry + 1] - offset;
-      } else {
-        length = dictionaryBuffer.size() - offset;
-      }
-      return length;
-    }
-
-    @Override
-    void skipRows(long items) throws IOException {
-      reader.skip(countNonNulls(items));
-    }
-
-    public IntegerReader getReader() {
-      return reader;
-    }
-  }
-
-  public static class CharTreeReader extends StringTreeReader {
-    int maxLength;
-
-    CharTreeReader(int columnId, int maxLength) throws IOException {
-      this(columnId, maxLength, null, null, null, null, null);
-    }
-
-    protected CharTreeReader(int columnId, int maxLength, InStream present, InStream data,
-                             InStream length, InStream dictionary, OrcProto.ColumnEncoding encoding) throws IOException {
-      super(columnId, present, data, length, dictionary, encoding);
-      this.maxLength = maxLength;
-    }
-
-    @Override
-    Datum next() throws IOException {
-      // Use the string reader implementation to populate the internal Text value
-      Datum textVal = super.next();
-      if (textVal == null) {
-        return NullDatum.get();
-      }
-      // result should now hold the value that was read in.
-      // enforce char length
-      // TODO: improve this
-      if (textVal.isNotNull()) {
-        TextDatum datum = (TextDatum) textVal;
-        return DatumFactory.createChar(datum.asTextBytes());
-      } else {
-        return NullDatum.get();
-      }
     }
   }
 
@@ -1409,41 +1510,6 @@ public class TreeReaderFactory {
 //    }
 //
 //    @Override
-//    public Object nextVector(Object previousVector, long batchSize) throws IOException {
-//      final ColumnVector[] result;
-//      if (previousVector == null) {
-//        result = new ColumnVector[fileColumnCount];
-//      } else {
-//        result = (ColumnVector[]) previousVector;
-//      }
-//
-//      // Read all the members of struct as column vectors
-//      for (int i = 0; i < fileColumnCount; i++) {
-//        if (fields[i] != null) {
-//          if (result[i] == null) {
-//            result[i] = (ColumnVector) fields[i].nextVector(null, batchSize);
-//          } else {
-//            fields[i].nextVector(result[i], batchSize);
-//          }
-//        }
-//      }
-//
-//      // Default additional treeReaderSchema evolution fields to NULL.
-//      if (vectorColumnCount != -1 && vectorColumnCount > fileColumnCount) {
-//        for (int i = fileColumnCount; i < vectorColumnCount; ++i) {
-//          ColumnVector colVector = result[i];
-//          if (colVector != null) {
-//            colVector.isRepeating = true;
-//            colVector.noNulls = false;
-//            colVector.isNull[0] = true;
-//          }
-//        }
-//      }
-//
-//      return result;
-//    }
-//
-//    @Override
 //    void startStripe(Map<StreamName, InStream> streams,
 //                     OrcProto.StripeFooter stripeFooter
 //    ) throws IOException {
@@ -1466,7 +1532,8 @@ public class TreeReaderFactory {
 //    }
 //  }
 
-  public static TreeReader createTreeReader(int columnId,
+  public static DatumTreeReader createTreeReader(TableMeta meta,
+                                            int columnId,
                                             Column column,
                                             boolean skipCorrupt
   ) throws IOException {
@@ -1494,7 +1561,7 @@ public class TreeReaderFactory {
       case BLOB:
         return new BinaryTreeReader(orcColumnId);
       case TIMESTAMP:
-        return new TimestampTreeReader(orcColumnId, skipCorrupt);
+        return new TimestampTreeReader(meta, orcColumnId, skipCorrupt);
       case DATE:
         return new DateTreeReader(orcColumnId);
       case INET4:

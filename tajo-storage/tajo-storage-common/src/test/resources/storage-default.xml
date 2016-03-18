@@ -193,7 +193,7 @@
 
   <property>
     <name>tajo.storage.appender-handler.orc.class</name>
-    <value>org.apache.tajo.storage.orc.ORCAppender</value>
+    <value>org.apache.tajo.storage.orc.OrcAppender</value>
   </property>
 
   <property>

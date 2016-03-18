@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package org.apache.tajo.storage.orc2;
+package org.apache.tajo.storage.orc;
 
 import com.google.common.collect.Lists;
 import com.google.protobuf.CodedInputStream;
@@ -39,6 +39,9 @@ import org.apache.tajo.plan.expr.EvalNode;
 import org.apache.tajo.storage.FileScanner;
 import org.apache.tajo.storage.Tuple;
 import org.apache.tajo.storage.fragment.Fragment;
+import org.apache.tajo.storage.thirdparty.orc.OrcFile;
+import org.apache.tajo.storage.thirdparty.orc.OrcRecordReader;
+import org.apache.tajo.storage.thirdparty.orc.OrcUtils;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -52,30 +55,31 @@ public class OrcScanner extends FileScanner {
   protected final FileSystem fileSystem;
   private final long maxLength;
   protected final Path path;
-  protected final org.apache.orc.CompressionKind compressionKind;
-  protected final CompressionCodec codec;
-  protected final int bufferSize;
-  private final List<OrcProto.StripeStatistics> stripeStats;
-  private final int metadataSize;
-  protected final List<OrcProto.Type> types;
-  private final List<OrcProto.UserMetadataItem> userMetadata;
-  private final List<OrcProto.ColumnStatistics> fileStats;
-  private final List<OrcProto.StripeInformation> stripes;
-  protected final int rowIndexStride;
-  private final long contentLength, numberOfRows;
+  protected org.apache.orc.CompressionKind compressionKind;
+  protected CompressionCodec codec;
+  protected int bufferSize;
+  private List<OrcProto.StripeStatistics> stripeStats;
+  private int metadataSize;
+  protected List<OrcProto.Type> types;
+  private List<OrcProto.UserMetadataItem> userMetadata;
+  private List<OrcProto.ColumnStatistics> fileStats;
+  private List<OrcProto.StripeInformation> stripes;
+  protected int rowIndexStride;
+  private long contentLength, numberOfRows;
 
-  private long deserializedSize = -1;
-  private final List<Integer> versionList;
+  private List<Integer> versionList;
 
   //serialized footer - Keeping this around for use by getFileMetaInfo()
   // will help avoid cpu cycles spend in deserializing at cost of increased
   // memory footprint.
-  private final ByteBuffer footerByteBuffer;
+  private ByteBuffer footerByteBuffer;
   // Same for metastore cache - maintains the same background buffer, but includes postscript.
   // This will only be set if the file footer/metadata was read from disk.
-  private final ByteBuffer footerMetaAndPsBuffer;
+  private ByteBuffer footerMetaAndPsBuffer;
 
   private OrcRecordReader recordReader;
+
+  private long recordCount = 0;
 
   /**
    * Ensure this is an ORC file to prevent users from trying to read text
@@ -158,29 +162,6 @@ public class OrcScanner extends FileScanner {
     this.fileSystem = this.path.getFileSystem(conf);
     this.maxLength = meta.containsOption("max.length") ?
         Integer.parseInt(meta.getOption("max.length")) : Long.MAX_VALUE;
-
-    FileMetaInfo footerMetaData = extractMetaInfoFromFooter(fileSystem, path, maxLength);
-    this.footerMetaAndPsBuffer = footerMetaData.footerMetaAndPsBuffer;
-    MetaInfoObjExtractor rInfo =
-        new MetaInfoObjExtractor(footerMetaData.compressionType,
-            footerMetaData.bufferSize,
-            footerMetaData.metadataSize,
-            footerMetaData.footerBuffer
-        );
-    this.footerByteBuffer = footerMetaData.footerBuffer;
-    this.compressionKind = rInfo.compressionKind;
-    this.codec = rInfo.codec;
-    this.bufferSize = rInfo.bufferSize;
-    this.metadataSize = rInfo.metadataSize;
-    this.stripeStats = rInfo.metadata.getStripeStatsList();
-    this.types = rInfo.footer.getTypesList();
-    this.rowIndexStride = rInfo.footer.getRowIndexStride();
-    this.contentLength = rInfo.footer.getContentLength();
-    this.numberOfRows = rInfo.footer.getNumberOfRows();
-    this.userMetadata = rInfo.footer.getMetadataList();
-    this.fileStats = rInfo.footer.getStatisticsList();
-    this.versionList = footerMetaData.versionList;
-    this.stripes = rInfo.footer.getStripesList();
   }
 
   private static FileMetaInfo extractMetaInfoFromFooter(FileSystem fs,
@@ -256,29 +237,62 @@ public class OrcScanner extends FileScanner {
   public OrcRecordReader getRecordReader() throws IOException {
     boolean skipCorruptRecords = conf.getBoolean("orc.skip.corrupt-records", false);
 
-    return new OrcRecordReader(this.stripes, fileSystem, schema, targets, fragment,
+    return new OrcRecordReader(meta, this.stripes, fileSystem, schema, targets, fragment,
         skipCorruptRecords, types, codec, bufferSize, rowIndexStride, conf);
   }
 
   @Override
   public void init() throws IOException {
+    super.init();
+
+    FileMetaInfo footerMetaData = extractMetaInfoFromFooter(fileSystem, path, maxLength);
+    this.footerMetaAndPsBuffer = footerMetaData.footerMetaAndPsBuffer;
+    MetaInfoObjExtractor rInfo =
+        new MetaInfoObjExtractor(footerMetaData.compressionType,
+            footerMetaData.bufferSize,
+            footerMetaData.metadataSize,
+            footerMetaData.footerBuffer
+        );
+    this.footerByteBuffer = footerMetaData.footerBuffer;
+    this.compressionKind = rInfo.compressionKind;
+    this.codec = rInfo.codec;
+    this.bufferSize = rInfo.bufferSize;
+    this.metadataSize = rInfo.metadataSize;
+    this.stripeStats = rInfo.metadata.getStripeStatsList();
+    this.types = rInfo.footer.getTypesList();
+    this.rowIndexStride = rInfo.footer.getRowIndexStride();
+    this.contentLength = rInfo.footer.getContentLength();
+    this.numberOfRows = rInfo.footer.getNumberOfRows();
+    this.userMetadata = rInfo.footer.getMetadataList();
+    this.fileStats = rInfo.footer.getStatisticsList();
+    this.versionList = footerMetaData.versionList;
+    this.stripes = rInfo.footer.getStripesList();
+
     recordReader = getRecordReader();
   }
 
   @Override
   public Tuple next() throws IOException {
-    return recordReader.next();
+    Tuple next = recordReader.next();
+    if (next != null) {
+      recordCount++;
+    }
+    return next;
   }
 
   @Override
   public void reset() throws IOException {
-    // TODO
+    // TODO: improve this
+    this.close();
+    recordReader = getRecordReader();
   }
 
   @Override
   public void close() throws IOException {
     if (recordReader != null) {
       recordReader.close();
+      tableStats.setNumBytes(recordReader.getNumBytes());
+      tableStats.setNumRows(recordCount);
     }
   }
 
@@ -294,12 +308,12 @@ public class OrcScanner extends FileScanner {
 
   @Override
   public void setFilter(EvalNode filter) {
-    // TODO
+    // TODO: implement this
   }
 
   @Override
   public float getProgress() {
-    return recordReader == null ? 0.f : recordReader.getProgress();
+    return inited ? recordReader.getProgress() : super.getProgress();
   }
 
   @Override

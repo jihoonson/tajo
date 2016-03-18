@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package org.apache.tajo.storage.orc2;
+package org.apache.tajo.storage.thirdparty.orc;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -29,12 +29,14 @@ import org.apache.orc.CompressionCodec;
 import org.apache.orc.DataReader;
 import org.apache.orc.OrcProto;
 import org.apache.orc.impl.*;
+import org.apache.orc.impl.StreamName;
 import org.apache.tajo.catalog.Column;
 import org.apache.tajo.catalog.Schema;
+import org.apache.tajo.catalog.TableMeta;
 import org.apache.tajo.storage.Tuple;
 import org.apache.tajo.storage.VTuple;
 import org.apache.tajo.storage.fragment.FileFragment;
-import org.apache.tajo.storage.orc2.TreeReaderFactory.TreeReader;
+import org.apache.tajo.storage.thirdparty.orc.TreeReaderFactory.DatumTreeReader;
 
 import java.io.Closeable;
 import java.io.IOException;
@@ -61,36 +63,18 @@ public class OrcRecordReader implements Closeable {
   private int currentStripe = -1;
   private long rowBaseInStripe = 0;
   private long rowCountInStripe = 0;
-  private final Map<StreamName, InStream> streams = new HashMap<>();
+  private final Map<org.apache.orc.impl.StreamName, InStream> streams = new HashMap<>();
   DiskRangeList bufferChunks = null;
-  private final TreeReaderFactory.TreeReader[] reader;
+  private final TreeReaderFactory.DatumTreeReader[] reader;
   private final OrcProto.RowIndex[] indexes;
   private final OrcProto.BloomFilterIndex[] bloomFilterIndices;
   private final Configuration conf;
-  private final MetadataReader metadata;
+  private final org.apache.tajo.storage.thirdparty.orc.MetadataReader metadata;
   private final DataReader dataReader;
   private final Tuple result;
 
-  /**
-   * Given a list of column names, find the given column and return the index.
-   *
-   * @param columnNames the list of potential column names
-   * @param columnName  the column name to look for
-   * @param rootColumn  offset the result with the rootColumn
-   * @return the column number or -1 if the column wasn't found
-   */
-  static int findColumns(String[] columnNames,
-                         String columnName,
-                         int rootColumn) {
-    for(int i=0; i < columnNames.length; ++i) {
-      if (columnName.equals(columnNames[i])) {
-        return i + rootColumn;
-      }
-    }
-    return -1;
-  }
-
-  protected OrcRecordReader(List<OrcProto.StripeInformation> stripes,
+  public OrcRecordReader(TableMeta meta,
+                            List<OrcProto.StripeInformation> stripes,
                             FileSystem fileSystem,
                             Schema schema,
                             Column[] target,
@@ -105,13 +89,6 @@ public class OrcRecordReader implements Closeable {
 
     result = new VTuple(target.length);
 
-    // Now that we are creating a record reader for a file, validate that the schema to read
-    // is compatible with the file schema.
-    //
-//    TreeReaderFactory.TreeReaderSchema treeReaderSchema;
-//    List<OrcProto.Type> schemaTypes = OrcUtils.getOrcTypes(target);
-//    treeReaderSchema = SchemaEvolution.validateAndCreate(types, schemaTypes);
-
     this.conf = conf;
     this.path = fragment.getPath();
     this.codec = codec;
@@ -124,7 +101,7 @@ public class OrcRecordReader implements Closeable {
       included[i] = targetSchema.contains(schema.getColumn(i - 1));
     }
     this.rowIndexStride = strideRate;
-    this.metadata = new MetadataReader(fileSystem, path, codec, bufferSize, types.size());
+    this.metadata = new org.apache.tajo.storage.thirdparty.orc.MetadataReader(fileSystem, path, codec, bufferSize, types.size());
 
     long rows = 0;
     long skippedRows = 0;
@@ -148,9 +125,10 @@ public class OrcRecordReader implements Closeable {
     totalRowCount = rows;
     Boolean skipCorrupt = skipCorruptRecords;
 
-    reader = new TreeReader[target.length];
+    reader = new DatumTreeReader[target.length];
     for (int i = 0; i < reader.length; i++) {
-      reader[i] = TreeReaderFactory.createTreeReader(schema.getColumnId(target[i].getQualifiedName()), target[i], skipCorrupt);
+      reader[i] = TreeReaderFactory.createTreeReader(meta, schema.getColumnId(target[i].getQualifiedName()), target[i],
+          skipCorrupt);
     }
 
     indexes = new OrcProto.RowIndex[types.size()];
@@ -163,27 +141,16 @@ public class OrcRecordReader implements Closeable {
    * columns and row groups.
    *
    * @param streamList        the list of streams available
-   * @param indexes           the indexes that have been loaded
    * @param includedColumns   which columns are needed
-   * @param isCompressed      does the file have generic compression
-   * @param encodings         the encodings for each column
-   * @param types             the types of the columns
-   * @param compressionSize   the compression block size
+   * @param doMergeBuffers
    * @return the list of disk ranges that will be loaded
    */
-  // TODO: verify
   static DiskRangeList planReadPartialDataStreams
   (List<OrcProto.Stream> streamList,
-   OrcProto.RowIndex[] indexes,
    boolean[] includedColumns,
-   boolean isCompressed,
-   List<OrcProto.ColumnEncoding> encodings,
-   List<OrcProto.Type> types,
-   int compressionSize,
    boolean doMergeBuffers) {
     long offset = 0;
     // figure out which columns have a present stream
-    boolean[] hasNull = RecordReaderUtils.findPresentStreamsByColumn(streamList, types);
     DiskRangeList.CreateHelper list = new DiskRangeList.CreateHelper();
     for (OrcProto.Stream stream : streamList) {
       long length = stream.getLength();
@@ -191,16 +158,9 @@ public class OrcRecordReader implements Closeable {
       OrcProto.Stream.Kind streamKind = stream.getKind();
       // since stream kind is optional, first check if it exists
       if (stream.hasKind() &&
-          (StreamName.getArea(streamKind) == StreamName.Area.DATA) &&
+          (org.apache.orc.impl.StreamName.getArea(streamKind) == org.apache.orc.impl.StreamName.Area.DATA) &&
           includedColumns[column]) {
-        // if we aren't filtering or it is a dictionary, load it.
-//        if (RecordReaderUtils.isDictionary(streamKind, encodings.get(column))) {
-          RecordReaderUtils.addEntireStreamToRanges(offset, length, list, doMergeBuffers);
-//        } else {
-//          RecordReaderUtils.addRgFilteredStreamToRanges(stream, null,
-//              isCompressed, indexes[column], encodings.get(column), types.get(column),
-//              compressionSize, hasNull[column], offset, length, list, doMergeBuffers);
-//        }
+        RecordReaderUtils.addEntireStreamToRanges(offset, length, list, doMergeBuffers);
       }
       offset += length;
     }
@@ -212,19 +172,19 @@ public class OrcRecordReader implements Closeable {
                      boolean[] includeColumn,
                      CompressionCodec codec,
                      int bufferSize,
-                     Map<StreamName, InStream> streams) throws IOException {
+                     Map<org.apache.orc.impl.StreamName, InStream> streams) throws IOException {
     long streamOffset = 0;
     for (OrcProto.Stream streamDesc : streamDescriptions) {
       int column = streamDesc.getColumn();
       if ((includeColumn != null && !includeColumn[column]) ||
           streamDesc.hasKind() &&
-              (StreamName.getArea(streamDesc.getKind()) != StreamName.Area.DATA)) {
+              (org.apache.orc.impl.StreamName.getArea(streamDesc.getKind()) != org.apache.orc.impl.StreamName.Area.DATA)) {
         streamOffset += streamDesc.getLength();
         continue;
       }
       List<DiskRange> buffers = RecordReaderUtils.getStreamBuffers(
           ranges, streamOffset, streamDesc.getLength());
-      StreamName name = new StreamName(column, streamDesc.getKind());
+      org.apache.orc.impl.StreamName name = new StreamName(column, streamDesc.getKind());
       streams.put(name, InStream.create(name.toString(), buffers,
           streamDesc.getLength(), codec, bufferSize));
       streamOffset += streamDesc.getLength();
@@ -233,9 +193,7 @@ public class OrcRecordReader implements Closeable {
 
   private void readPartialDataStreams(OrcProto.StripeInformation stripe) throws IOException {
     List<OrcProto.Stream> streamList = stripeFooter.getStreamsList();
-    DiskRangeList toRead = planReadPartialDataStreams(streamList,
-        indexes, included, codec != null,
-        stripeFooter.getColumnsList(), types, bufferSize, true);
+    DiskRangeList toRead = planReadPartialDataStreams(streamList, included, true);
     if (LOG.isDebugEnabled()) {
       LOG.debug("chunks = " + RecordReaderUtils.stringifyDiskRanges(toRead));
     }
@@ -303,31 +261,6 @@ public class OrcRecordReader implements Closeable {
     } else {
       return null;
     }
-  }
-
-  private long computeBatchSize(long targetBatchSize) {
-    long batchSize = 0;
-    // In case of PPD, batch size should be aware of row group boundaries. If only a subset of row
-    // groups are selected then marker position is set to the end of range (subset of row groups
-    // within strip). Batch size computed out of marker position makes sure that batch size is
-    // aware of row group boundary and will not cause overflow when reading rows
-    // illustration of this case is here https://issues.apache.org/jira/browse/HIVE-6287
-    if (rowIndexStride != 0 && rowInStripe < rowCountInStripe) {
-      int startRowGroup = (int) (rowInStripe / rowIndexStride);
-      int endRowGroup = startRowGroup;
-
-      final long markerPosition =
-          (endRowGroup * rowIndexStride) < rowCountInStripe ? (endRowGroup * rowIndexStride)
-              : rowCountInStripe;
-      batchSize = Math.min(targetBatchSize, (markerPosition - rowInStripe));
-
-      if (LOG.isDebugEnabled() && batchSize < targetBatchSize) {
-        LOG.debug("markerPosition: " + markerPosition + " batchSize: " + batchSize);
-      }
-    } else {
-      batchSize = Math.min(targetBatchSize, (rowCountInStripe - rowInStripe));
-    }
-    return batchSize;
   }
 
   /**
@@ -430,10 +363,6 @@ public class OrcRecordReader implements Closeable {
     return ((float) rowBaseInStripe + rowInStripe) / totalRowCount;
   }
 
-  MetadataReader getMetadataReader() {
-    return metadata;
-  }
-
   private int findStripe(long rowNumber) {
     for (int i = 0; i < stripes.size(); i++) {
       OrcProto.StripeInformation stripe = stripes.get(i);
@@ -477,28 +406,32 @@ public class OrcRecordReader implements Closeable {
     }
   }
 
-//  public void seekToRow(long rowNumber) throws IOException {
-//    if (rowNumber < 0) {
-//      throw new IllegalArgumentException("Seek to a negative row number " +
-//          rowNumber);
-//    } else if (rowNumber < firstRow) {
-//      throw new IllegalArgumentException("Seek before reader range " +
-//          rowNumber);
-//    }
-//    // convert to our internal form (rows from the beginning of slice)
-//    rowNumber -= firstRow;
-//
-//    // move to the right stripe
-//    int rightStripe = findStripe(rowNumber);
-//    if (rightStripe != currentStripe) {
-//      currentStripe = rightStripe;
-//      readStripe();
-//    }
-//    readRowIndex(currentStripe, included);
-//
-//    // if we aren't to the right row yet, advance in the stripe.
-//    advanceToNextRow(reader, rowNumber, true);
-//  }
+  public void seekToRow(long rowNumber) throws IOException {
+    if (rowNumber < 0) {
+      throw new IllegalArgumentException("Seek to a negative row number " +
+          rowNumber);
+    } else if (rowNumber < firstRow) {
+      throw new IllegalArgumentException("Seek before reader range " +
+          rowNumber);
+    }
+    // convert to our internal form (rows from the beginning of slice)
+    rowNumber -= firstRow;
+
+    // move to the right stripe
+    int rightStripe = findStripe(rowNumber);
+    if (rightStripe != currentStripe) {
+      currentStripe = rightStripe;
+      readStripe();
+    }
+    readRowIndex(currentStripe, included);
+
+    // if we aren't to the right row yet, advance in the stripe.
+    advanceToNextRow(reader, rowNumber, true);
+  }
+
+  public long getNumBytes() {
+    return ((RecordReaderUtils.DefaultDataReader)dataReader).getReadBytes();
+  }
 
   @Override
   public void close() throws IOException {

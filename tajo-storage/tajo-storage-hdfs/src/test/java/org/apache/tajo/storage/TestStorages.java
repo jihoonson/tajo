@@ -150,15 +150,15 @@ public class TestStorages {
   public static Collection<Object[]> generateParameters() {
     return Arrays.asList(new Object[][] {
         //type, splitable, statsable, seekable, internalType
-        {BuiltinStorages.RAW, false, true, true, true},
-        {BuiltinStorages.DRAW, false, true, true, true},
+//        {BuiltinStorages.RAW, false, true, true, true},
+//        {BuiltinStorages.DRAW, false, true, true, true},
 //        {BuiltinStorages.RCFILE, true, true, false, false},
-        {BuiltinStorages.PARQUET, false, false, false, false},
+//        {BuiltinStorages.PARQUET, false, false, false, false},
 //        {BuiltinStorages.ORC, false, true, false, false},
         {BuiltinStorages.ORC2, false, true, false, false},
 //        {BuiltinStorages.SEQUENCE_FILE, true, true, false, false},
 //        {BuiltinStorages.AVRO, false, false, false, false},
-        {BuiltinStorages.TEXT, true, true, true, false},
+//        {BuiltinStorages.TEXT, true, true, true, false},
 //        {BuiltinStorages.JSON, true, true, false, false},
     });
   }
@@ -180,6 +180,7 @@ public class TestStorages {
   private boolean dateTypeSupport() {
     return internalType
         || dataFormat.equalsIgnoreCase(BuiltinStorages.TEXT)
+        || dataFormat.equalsIgnoreCase(BuiltinStorages.ORC)
         || dataFormat.equalsIgnoreCase(BuiltinStorages.ORC2);
   }
 

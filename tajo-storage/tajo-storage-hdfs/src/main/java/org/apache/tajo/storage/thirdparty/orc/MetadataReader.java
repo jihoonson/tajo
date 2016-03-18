@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package org.apache.tajo.storage.orc2;
+package org.apache.tajo.storage.thirdparty.orc;
 
 import com.google.common.collect.Lists;
 import org.apache.hadoop.fs.FSDataInputStream;
