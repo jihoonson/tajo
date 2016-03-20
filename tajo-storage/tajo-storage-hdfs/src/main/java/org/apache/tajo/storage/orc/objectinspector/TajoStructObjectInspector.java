@@ -41,12 +41,14 @@ public class TajoStructObjectInspector extends StructObjectInspector {
     private String name;
     private ObjectInspector oi;
     private String comment;
+    private final int fieldId;
 
-    TajoStructField(String name, ObjectInspector oi) {
-      this(name, oi, null);
+    TajoStructField(int fieldId, String name, ObjectInspector oi) {
+      this(fieldId, name, oi, null);
     }
 
-    TajoStructField(String name, ObjectInspector oi, String comment) {
+    TajoStructField(int fieldId, String name, ObjectInspector oi, String comment) {
+      this.fieldId = fieldId;
       this.name = name;
       this.oi = oi;
       this.comment = comment;
@@ -63,6 +65,11 @@ public class TajoStructObjectInspector extends StructObjectInspector {
     }
 
     @Override
+    public int getFieldID() {
+      return fieldId;
+    }
+
+    @Override
     public String getFieldComment() {
       return comment;
     }
@@ -71,9 +78,10 @@ public class TajoStructObjectInspector extends StructObjectInspector {
   TajoStructObjectInspector(Schema schema) {
     structFields = new ArrayList<TajoStructField>(schema.size());
 
+    int i = 0;
     for (Column c: schema.getRootColumns()) {
       try {
-        TajoStructField field = new TajoStructField(c.getSimpleName(),
+        TajoStructField field = new TajoStructField(i++, c.getSimpleName(),
           ObjectInspectorFactory.buildObjectInspectorByType(c.getDataType().getType()));
         structFields.add(field);
       } catch (UnsupportedException e) {

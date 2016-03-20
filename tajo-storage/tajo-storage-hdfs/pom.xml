@@ -32,7 +32,6 @@
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
-    <parquet.version>1.8.1</parquet.version>
   </properties>
 
   <repositories>
@@ -127,7 +126,6 @@
                 <argument>--proto_path=../../tajo-catalog/tajo-catalog-common/src/main/proto</argument>
                 <argument>--java_out=target/generated-sources/proto</argument>
                 <argument>src/main/proto/StorageFragmentProtos.proto</argument>
-                <argument>src/main/proto/orc_proto.proto</argument>
               </arguments>
             </configuration>
             <goals>
@@ -158,6 +156,26 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-surefire-report-plugin</artifactId>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-dependency-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>copy-dependencies</id>
+            <phase>package</phase>
+            <goals>
+              <goal>copy-dependencies</goal>
+            </goals>
+            <configuration>
+              <includeScope>runtime</includeScope>
+              <outputDirectory>${project.build.directory}/lib</outputDirectory>
+              <overWriteReleases>false</overWriteReleases>
+              <overWriteSnapshots>false</overWriteSnapshots>
+              <overWriteIfNewer>true</overWriteIfNewer>
+            </configuration>
+          </execution>
+        </executions>
       </plugin>
     </plugins>
   </build>
@@ -343,10 +361,52 @@
       <artifactId>netty-buffer</artifactId>
     </dependency>
     <dependency>
-      <groupId>com.facebook.presto</groupId>
-      <artifactId>presto-orc</artifactId>
-      <version>0.86</version>
+      <groupId>org.apache.hive</groupId>
+      <artifactId>hive-orc</artifactId>
+      <version>${hive.version}</version>
     </dependency>
+    <dependency>
+      <groupId>org.apache.hive</groupId>
+      <artifactId>hive-storage-api</artifactId>
+      <version>${hive.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hive</groupId>
+      <artifactId>hive-serde</artifactId>
+      <version>${hive.version}</version>
+      <scope>provided</scope>
+      <exclusions>
+        <exclusion>
+          <artifactId>log4j-slf4j-impl</artifactId>
+          <groupId>org.apache.logging.log4j</groupId>
+        </exclusion>
+        <exclusion>
+          <artifactId>log4j-1.2-api</artifactId>
+          <groupId>org.apache.logging.log4j</groupId>
+        </exclusion>
+        <exclusion>
+          <artifactId>hive-common</artifactId>
+          <groupId>org.apache.hive</groupId>
+        </exclusion>
+        <exclusion>
+          <artifactId>libthrift</artifactId>
+          <groupId>org.apache.thrift</groupId>
+        </exclusion>
+        <exclusion>
+          <artifactId>opencsv</artifactId>
+          <groupId>net.sf.opencsv</groupId>
+        </exclusion>
+        <exclusion>
+          <artifactId>hadoop-yarn-server-resourcemanager</artifactId>
+          <groupId>org.apache.hadoop</groupId>
+        </exclusion>
+        <exclusion>
+          <artifactId>hive-shims-scheduler</artifactId>
+          <groupId>org.apache.hive.shims</groupId>
+        </exclusion>
+      </exclusions>
+  </dependency>
+
   </dependencies>
 
   <profiles>
