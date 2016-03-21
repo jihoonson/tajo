@@ -20,7 +20,6 @@ package org.apache.tajo.storage.orc;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
 import org.apache.orc.CompressionKind;
 import org.apache.orc.OrcConf;
 import org.apache.orc.TypeDescription;
@@ -37,6 +36,7 @@ import org.apache.tajo.storage.thirdparty.orc.OrcFile;
 import org.apache.tajo.storage.thirdparty.orc.OrcFile.EncodingStrategy;
 import org.apache.tajo.storage.thirdparty.orc.OrcUtils;
 import org.apache.tajo.storage.thirdparty.orc.Writer;
+import org.apache.tajo.storage.thirdparty.orc.WriterImpl;
 
 import java.io.IOException;
 import java.util.Properties;
@@ -87,10 +87,9 @@ public class ORCAppender extends FileAppender {
   public void close() throws IOException {
     writer.close();
 
-    // TODO: getOffset is not implemented yet
-//    if (tableStatsEnabled) {
-//      stats.setNumBytes(getOffset());
-//    }
+    if (tableStatsEnabled) {
+      stats.setNumBytes(writer.getRawDataSize());
+    }
   }
 
   @Override
@@ -104,7 +103,7 @@ public class ORCAppender extends FileAppender {
 
   @Override
   public long getEstimatedOutputSize() throws IOException {
-    return writer.getRawDataSize() * writer.getNumberOfRows();
+    return writer.getRawDataSize();
   }
 
   private static OrcFile.WriterOptions buildWriterOptions(Configuration conf, TableMeta meta, Schema schema) {
@@ -130,7 +129,8 @@ public class ORCAppender extends FileAppender {
   }
 
   private static CompressionKind getCompressionKind(TableMeta meta) {
-    String kindstr = meta.getOption(StorageConstants.ORC_COMPRESSION, StorageConstants.DEFAULT_ORC_COMPRESSION_KIND);
+    String kindstr = meta.getOption(OrcConf.COMPRESS.getAttribute(),
+        String.valueOf(OrcConf.COMPRESS.getDefaultValue()));
 
     if (kindstr.equalsIgnoreCase(CompressionKind.ZLIB.name())) {
       return CompressionKind.ZLIB;
@@ -152,7 +152,6 @@ public class ORCAppender extends FileAppender {
     */
   public static class WriterOptions extends OrcFile.WriterOptions {
     private boolean explicitSchema = false;
-    private ObjectInspector inspector = null;
     // Setting the default batch size to 1000 makes the memory check at 5000
     // rows work the same as the row by row writer. (If it was the default 1024,
     // the smallest stripe size would be 5120 rows, which changes the output
@@ -177,10 +176,6 @@ public class ORCAppender extends FileAppender {
     protected WriterOptions batchSize(int maxSize) {
       batchSize = maxSize;
       return this;
-    }
-
-    ObjectInspector getInspector() {
-      return inspector;
     }
 
     int getBatchSize() {
