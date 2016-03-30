@@ -84,7 +84,7 @@ public class TajoWorker extends CompositeService {
   private WorkerContext workerContext;
   private TaskManager taskManager;
   private TaskExecutor taskExecutor;
-  private TajoPullServerService pullService;
+//  private TajoPullServerService pullService;
   private ServiceTracker serviceTracker;
   private NodeResourceManager nodeResourceManager;
   private AtomicBoolean stopped = new AtomicBoolean(false);
@@ -158,10 +158,10 @@ public class TajoWorker extends CompositeService {
     addService(new NodeStatusUpdater(workerContext));
 
     int httpPort = 0;
-    if(!TajoPullServerService.isStandalone()) {
-      pullService = new TajoPullServerService();
-      addIfService(pullService);
-    }
+//    if(!TajoPullServerService.isStandalone()) {
+//      pullService = new TajoPullServerService();
+//      addIfService(pullService);
+//    }
 
     if (!systemConf.getBoolVar(ConfVars.$TEST_MODE)) {
       httpPort = initWebServer();
@@ -169,12 +169,12 @@ public class TajoWorker extends CompositeService {
 
     super.serviceInit(conf);
 
-    int pullServerPort;
-    if(pullService != null){
-      pullServerPort = pullService.getPort();
-    } else {
-      pullServerPort = getStandAlonePullServerPort();
-    }
+    int pullServerPort = systemConf.getIntVar(ConfVars.PULLSERVER_PORT);
+//    if(pullService != null){
+//      pullServerPort = pullService.getPort();
+//    } else {
+//      pullServerPort = getStandAlonePullServerPort();
+//    }
 
     this.connectionInfo = new WorkerConnectionInfo(
         tajoWorkerManagerService.getBindAddr().getHostName(),

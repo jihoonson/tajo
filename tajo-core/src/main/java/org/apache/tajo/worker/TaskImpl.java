@@ -53,6 +53,7 @@ import org.apache.tajo.plan.serder.PlanProto.EnforceProperty;
 import org.apache.tajo.plan.serder.PlanProto.EnforceProperty.EnforceType;
 import org.apache.tajo.plan.serder.PlanProto.ShuffleType;
 import org.apache.tajo.plan.util.PlannerUtil;
+import org.apache.tajo.pullserver.PullServerUtil;
 import org.apache.tajo.pullserver.TajoPullServerService;
 import org.apache.tajo.pullserver.retriever.FileChunk;
 import org.apache.tajo.querymaster.Repartitioner;
@@ -695,7 +696,7 @@ public class TaskImpl implements Task {
           InetAddress address = InetAddress.getByName(uri.getHost());
 
           WorkerConnectionInfo conn = executionBlockContext.getWorkerContext().getConnectionInfo();
-          if (NetUtils.isLocalAddress(address) && conn.getPullServerPort() == uri.getPort()) {
+          if (false && NetUtils.isLocalAddress(address) && conn.getPullServerPort() == uri.getPort()) {
 
             List<FileChunk> localChunkCandidates = getLocalStoredFileChunk(uri, systemConf);
 
@@ -749,7 +750,7 @@ public class TaskImpl implements Task {
     // Parse the URI
 
     // Parsing the URL into key-values
-    final Map<String, List<String>> params = TajoPullServerService.decodeParams(fetchURI.toString());
+    final Map<String, List<String>> params = PullServerUtil.decodeParams(fetchURI.toString());
 
     String partId = params.get("p").get(0);
     String queryId = params.get("qid").get(0);
@@ -769,7 +770,7 @@ public class TaskImpl implements Task {
     }
 
     // The working directory of Tajo worker for each query, including stage
-    Path queryBaseDir = TajoPullServerService.getBaseOutputDir(queryId, sid);
+    Path queryBaseDir = PullServerUtil.getBaseOutputDir(queryId, sid);
 
     List<FileChunk> chunkList = new ArrayList<>();
     // If the stage requires a range shuffle
@@ -778,25 +779,29 @@ public class TaskImpl implements Task {
       final String startKey = params.get("start").get(0);
       final String endKey = params.get("end").get(0);
       final boolean last = params.get("final") != null;
-      final List<String> taskIds = TajoPullServerService.splitMaps(taskIdList);
+      final List<String> taskIds = PullServerUtil.splitMaps(taskIdList);
+//      for (String eachTaskId : taskIds) {
+//        Path outputPath = StorageUtil.concatPath(queryBaseDir, eachTaskId, "output");
+//        if (!executionBlockContext.getLocalDirAllocator().ifExists(outputPath.toString(), conf)) {
+//          LOG.warn("Range shuffle - file not exist. " + outputPath);
+//          continue;
+//        }
+//        Path path = executionBlockContext.getLocalFS().makeQualified(
+//            executionBlockContext.getLocalDirAllocator().getLocalPathToRead(outputPath.toString(), conf));
+//      }
 
       long before = System.currentTimeMillis();
-      for (String eachTaskId : taskIds) {
-        Path outputPath = StorageUtil.concatPath(queryBaseDir, eachTaskId, "output");
-        if (!executionBlockContext.getLocalDirAllocator().ifExists(outputPath.toString(), conf)) {
-          LOG.warn("Range shuffle - file not exist. " + outputPath);
-          continue;
-        }
-        Path path = executionBlockContext.getLocalFS().makeQualified(
-            executionBlockContext.getLocalDirAllocator().getLocalPathToRead(outputPath.toString(), conf));
+      try {
+        // TODO: distinguish external pull server and internal pull server
+        // If an external pull server is running, receive chunk information via HTTP.
 
-        try {
-          FileChunk chunk = TajoPullServerService.getFileChunks(queryId, sid, path, startKey, endKey, last);
-          chunkList.add(chunk);
-        } catch (Throwable t) {
-          LOG.error(t.getMessage(), t);
-          throw new IOException(t.getCause());
-        }
+
+        // TODO: Otherwise
+        // chunkList.addAll(TajoPullServerService.getFileChunks(queryId, sid, startKey, endKey, last, paths));
+
+      } catch (Throwable t) {
+        LOG.error(t.getMessage(), t);
+        throw new IOException(t.getCause());
       }
       long after = System.currentTimeMillis();
       if (LOG.isDebugEnabled()) {
@@ -831,10 +836,25 @@ public class TaskImpl implements Task {
   }
 
   public static Path getTaskAttemptDir(TaskAttemptId quid) {
-    Path workDir =
-        StorageUtil.concatPath(ExecutionBlockContext.getBaseInputDir(quid.getTaskId().getExecutionBlockId()),
-            String.valueOf(quid.getTaskId().getId()),
-            String.valueOf(quid.getId()));
-    return workDir;
+    return StorageUtil.concatPath(ExecutionBlockContext.getBaseInputDir(quid.getTaskId().getExecutionBlockId()),
+        String.valueOf(quid.getTaskId().getId()),
+        String.valueOf(quid.getId()));
+  }
+
+  static URI createGetChunkURL(String pullServerAddr, int pullServerPort, String queryId,
+                               String sid, String startKey, String endKey, boolean last,
+                               List<String> taskIds) {
+    String scheme = "http://";
+    StringBuilder uriBuilder = new StringBuilder(scheme);
+    uriBuilder.append(NetUtils.createSocketAddr(pullServerAddr, pullServerPort)).append("/?")
+        .append("qid=").append(queryId)
+        .append("&sid=").append(sid)
+        .append("&skey=").append(startKey)
+        .append("&ekey=").append(endKey)
+        .append("&last=").append(last).append("&tid=");
+    for (String eachTaskId : taskIds) {
+      uriBuilder.append(eachTaskId).append(",");
+    }
+    return URI.create(uriBuilder.toString());
   }
 }

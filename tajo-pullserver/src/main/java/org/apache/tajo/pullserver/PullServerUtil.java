@@ -18,13 +18,20 @@
 
 package org.apache.tajo.pullserver;
 
+import io.netty.handler.codec.http.QueryStringDecoder;
 import org.apache.commons.lang.reflect.MethodUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.nativeio.NativeIO;
+import org.apache.tajo.storage.StorageUtil;
 
 import java.io.FileDescriptor;
 import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
 
 public class PullServerUtil {
   private static final Log LOG = LogFactory.getLog(PullServerUtil.class);
@@ -86,5 +93,52 @@ public class PullServerUtil {
       loaded = false;
     }
     return loaded;
+  }
+
+  public static Path getBaseOutputDir(String queryId, String executionBlockSequenceId) {
+    Path workDir =
+        StorageUtil.concatPath(
+            queryId,
+            "output",
+            executionBlockSequenceId);
+    return workDir;
+  }
+
+  public static Path getBaseInputDir(String queryId, String executionBlockId) {
+    Path workDir =
+        StorageUtil.concatPath(
+            queryId,
+            "in",
+            executionBlockId);
+    return workDir;
+  }
+
+  public static List<String> splitMaps(List<String> mapq) {
+    if (null == mapq) {
+      return null;
+    }
+    final List<String> ret = new ArrayList<>();
+    for (String s : mapq) {
+      Collections.addAll(ret, s.split(","));
+    }
+    return ret;
+  }
+
+  public static Map<String, List<String>> decodeParams(String uri) {
+    final Map<String, List<String>> params = new QueryStringDecoder(uri).parameters();
+    final List<String> types = params.get("type");
+    final List<String> qids = params.get("qid");
+    final List<String> ebIds = params.get("sid");
+    final List<String> partIds = params.get("p");
+
+    if (types == null || ebIds == null || qids == null || partIds == null) {
+      throw new IllegalArgumentException("invalid params. required :" + params);
+    }
+
+    if (qids.size() != 1 && types.size() != 1 || ebIds.size() != 1) {
+      throw new IllegalArgumentException("invalid params. required :" + params);
+    }
+
+    return params;
   }
 }
