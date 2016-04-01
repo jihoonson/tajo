@@ -216,7 +216,7 @@ public class RemoteFetcher extends AbstractFetcher {
             length = 0;
             return;
           } else if (response.getStatus().code() != HttpResponseStatus.OK.code()) {
-            LOG.error(response.getStatus().reasonPhrase());
+            LOG.error(response.getStatus().reasonPhrase(), response.getDecoderResult().cause());
             state = TajoProtos.FetcherState.FETCH_FAILED;
             return;
           }

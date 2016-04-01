@@ -54,5 +54,5 @@ public interface Task {
 
   TaskHistory createTaskHistory();
 
-  List<RemoteFetcher> getFetchers();
+  List<AbstractFetcher> getFetchers();
 }

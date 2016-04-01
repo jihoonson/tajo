@@ -807,6 +807,7 @@ public class TajoPullServerService extends AbstractService {
       FullHttpResponse response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, status,
           Unpooled.copiedBuffer(message, CharsetUtil.UTF_8));
       response.headers().set(HttpHeaders.Names.CONTENT_TYPE, "text/plain; charset=UTF-8");
+      HttpHeaders.setContentLength(response, Unpooled.copiedBuffer(message, CharsetUtil.UTF_8).writerIndex());
 
       // Close the connection as soon as the error message is sent.
       ctx.writeAndFlush(response).addListener(ChannelFutureListener.CLOSE);

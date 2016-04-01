@@ -270,8 +270,7 @@ public class PullServerUtil {
     private final int maxUrlLength;
 
     public PullServerRequestURIBuilder(String pullServerAddr, int pullServerPort, int maxUrlLength) {
-      builder.append(NetUtils.createSocketAddr(pullServerAddr, pullServerPort)).append("/?");
-      this.maxUrlLength = maxUrlLength;
+      this(pullServerAddr, Integer.toString(pullServerPort), maxUrlLength);
     }
 
     public PullServerRequestURIBuilder(String pullServerAddr, String pullServerPort, int maxUrlLength) {

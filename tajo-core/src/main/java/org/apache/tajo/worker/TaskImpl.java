@@ -85,7 +85,7 @@ public class TaskImpl implements Task {
   private final Path taskDir;
 
   private final TaskAttemptContext context;
-  private List<RemoteFetcher> fetcherRunners;
+  private List<AbstractFetcher> fetcherRunners;
   private LogicalNode plan;
   private PhysicalExec executor;
 
@@ -270,7 +270,7 @@ public class TaskImpl implements Task {
       return taskIdStr1.compareTo(taskIdStr2);
     });
 
-    for (RemoteFetcher f : fetcherRunners) {
+    for (AbstractFetcher f : fetcherRunners) {
       fetcherExecutor.submit(new FetchRunner(context, f));
     }
   }
@@ -517,7 +517,7 @@ public class TaskImpl implements Task {
         taskHistory.setTotalFetchCount(fetcherRunners.size());
         int i = 0;
         FetcherHistoryProto.Builder builder = FetcherHistoryProto.newBuilder();
-        for (RemoteFetcher fetcher : fetcherRunners) {
+        for (AbstractFetcher fetcher : fetcherRunners) {
           builder.setStartTime(fetcher.getStartTime());
           builder.setFinishTime(fetcher.getFinishTime());
           builder.setFileLength(fetcher.getFileLen());
@@ -535,7 +535,7 @@ public class TaskImpl implements Task {
     return taskHistory;
   }
 
-  public List<RemoteFetcher> getFetchers() {
+  public List<AbstractFetcher> getFetchers() {
     return fetcherRunners;
   }
 
@@ -586,10 +586,10 @@ public class TaskImpl implements Task {
 
   private class FetchRunner implements Runnable {
     private final TaskAttemptContext ctx;
-    private final RemoteFetcher fetcher;
+    private final AbstractFetcher fetcher;
     private int maxRetryNum;
 
-    public FetchRunner(TaskAttemptContext ctx, RemoteFetcher fetcher) {
+    public FetchRunner(TaskAttemptContext ctx, AbstractFetcher fetcher) {
       this.ctx = ctx;
       this.fetcher = fetcher;
       this.maxRetryNum = systemConf.getIntVar(TajoConf.ConfVars.SHUFFLE_FETCHER_READ_RETRY_MAX_NUM);
@@ -670,7 +670,7 @@ public class TaskImpl implements Task {
     }
   }
 
-  private List<RemoteFetcher> getFetchRunners(TaskAttemptContext ctx,
+  private List<AbstractFetcher> getFetchRunners(TaskAttemptContext ctx,
                                               List<FetchProto> fetches) throws IOException {
 
     if (fetches.size() > 0) {
@@ -682,7 +682,7 @@ public class TaskImpl implements Task {
       File storeDir;
       File defaultStoreFile;
       List<FileChunk> storeChunkList = new ArrayList<>();
-      List<RemoteFetcher> runnerList = Lists.newArrayList();
+      List<AbstractFetcher> runnerList = Lists.newArrayList();
 
       for (FetchProto f : fetches) {
         storeDir = new File(inputDir.toString(), f.getName());
