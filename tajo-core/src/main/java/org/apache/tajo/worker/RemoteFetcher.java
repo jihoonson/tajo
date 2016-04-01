@@ -52,33 +52,18 @@ import java.util.concurrent.TimeUnit;
  * Fetcher fetches data from a given uri via HTTP protocol and stores them into
  * a specific file. It aims at asynchronous and efficient data transmit.
  */
-public class Fetcher {
+public class RemoteFetcher extends AbstractFetcher {
 
-  private final static Log LOG = LogFactory.getLog(Fetcher.class);
-
-  private final URI uri;
-  private final FileChunk fileChunk;
-  private final TajoConf conf;
+  private final static Log LOG = LogFactory.getLog(RemoteFetcher.class);
 
   private final String host;
   private int port;
-  private final boolean useLocalFile;
 
-  private long startTime;
-  private volatile long finishTime;
-  private long fileLen;
-  private int messageReceiveCount;
-  private TajoProtos.FetcherState state;
+  private final Bootstrap bootstrap;
+  private final List<Long> chunkLengths = new ArrayList<>();
 
-  private Bootstrap bootstrap;
-  private List<Long> chunkLengths = new ArrayList<>();
-
-  public Fetcher(TajoConf conf, URI uri, FileChunk chunk) {
-    this.uri = uri;
-    this.fileChunk = chunk;
-    this.useLocalFile = !chunk.fromRemote();
-    this.state = TajoProtos.FetcherState.FETCH_INIT;
-    this.conf = conf;
+  public RemoteFetcher(TajoConf conf, URI uri, FileChunk chunk) {
+    super(conf, uri, chunk);
 
     String scheme = uri.getScheme() == null ? "http" : uri.getScheme();
     this.host = uri.getHost() == null ? "localhost" : uri.getHost();
@@ -91,50 +76,21 @@ public class Fetcher {
       }
     }
 
-    if (!useLocalFile) {
-      bootstrap = new Bootstrap()
-          .group(
-              NettyUtils.getSharedEventLoopGroup(NettyUtils.GROUP.FETCHER,
-                  conf.getIntVar(TajoConf.ConfVars.SHUFFLE_RPC_CLIENT_WORKER_THREAD_NUM)))
-          .channel(NioSocketChannel.class)
-          .option(ChannelOption.ALLOCATOR, NettyUtils.ALLOCATOR)
-          .option(ChannelOption.CONNECT_TIMEOUT_MILLIS,
-              conf.getIntVar(TajoConf.ConfVars.SHUFFLE_FETCHER_CONNECT_TIMEOUT) * 1000)
-          .option(ChannelOption.SO_RCVBUF, 1048576) // set 1M
-          .option(ChannelOption.TCP_NODELAY, true);
-    }
+    bootstrap = new Bootstrap()
+        .group(
+            NettyUtils.getSharedEventLoopGroup(NettyUtils.GROUP.FETCHER,
+                conf.getIntVar(TajoConf.ConfVars.SHUFFLE_RPC_CLIENT_WORKER_THREAD_NUM)))
+        .channel(NioSocketChannel.class)
+        .option(ChannelOption.ALLOCATOR, NettyUtils.ALLOCATOR)
+        .option(ChannelOption.CONNECT_TIMEOUT_MILLIS,
+            conf.getIntVar(TajoConf.ConfVars.SHUFFLE_FETCHER_CONNECT_TIMEOUT) * 1000)
+        .option(ChannelOption.SO_RCVBUF, 1048576) // set 1M
+        .option(ChannelOption.TCP_NODELAY, true);
   }
 
-  public long getStartTime() {
-    return startTime;
-  }
-
-  public long getFinishTime() {
-    return finishTime;
-  }
-
-  public long getFileLen() {
-    return fileLen;
-  }
-
-  public TajoProtos.FetcherState getState() {
-    return state;
-  }
-
-  public int getMessageReceiveCount() {
-    return messageReceiveCount;
-  }
-
+  @Override
   public List<FileChunk> get() throws IOException {
     List<FileChunk> fileChunks = new ArrayList<>();
-    if (useLocalFile) {
-      startTime = System.currentTimeMillis();
-      finishTime = System.currentTimeMillis();
-      state = TajoProtos.FetcherState.FETCH_FINISHED;
-      fileChunks.add(fileChunk);
-      fileLen = fileChunk.getFile().length();
-      return fileChunks;
-    }
 
     if (state == FetcherState.FETCH_INIT) {
       ChannelInitializer<Channel> initializer = new HttpClientChannelInitializer(fileChunk.getFile());
@@ -206,11 +162,7 @@ public class Fetcher {
     }
   }
 
-  public URI getURI() {
-    return this.uri;
-  }
-
-  class HttpClientHandler extends ChannelInboundHandlerAdapter {
+  public class HttpClientHandler extends ChannelInboundHandlerAdapter {
     private final File file;
     private RandomAccessFile raf;
     private FileChannel fc;
@@ -328,12 +280,12 @@ public class Fetcher {
         state = TajoProtos.FetcherState.FETCH_FAILED;
       }
       IOUtils.cleanup(LOG, fc, raf);
-      
+
       super.channelUnregistered(ctx);
     }
   }
 
-  class HttpClientChannelInitializer extends ChannelInitializer<Channel> {
+  public class HttpClientChannelInitializer extends ChannelInitializer<Channel> {
     private final File file;
 
     public HttpClientChannelInitializer(File file) {

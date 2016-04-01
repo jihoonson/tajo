@@ -46,8 +46,8 @@ public class FileCloseListener implements GenericFutureListener<ChannelFuture> {
       filePart.transferSuccessful();
     }
     filePart.deallocate();
-    if (pullServerService != null) {
-      pullServerService.completeFileChunk(filePart, requestUri, startTime);
-    }
+//    if (pullServerService != null) {
+//      pullServerService.completeFileChunk(filePart, requestUri, startTime);
+//    }
   }
 }

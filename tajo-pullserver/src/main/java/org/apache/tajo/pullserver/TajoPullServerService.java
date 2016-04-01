@@ -23,6 +23,7 @@ import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 import com.google.common.cache.RemovalListener;
 import com.google.common.collect.Lists;
+import com.google.gson.Gson;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.*;
@@ -31,6 +32,8 @@ import io.netty.channel.group.DefaultChannelGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.codec.http.*;
+import io.netty.handler.codec.http.HttpHeaders.Names;
+import io.netty.handler.codec.http.HttpHeaders.Values;
 import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.stream.ChunkedWriteHandler;
 import io.netty.util.CharsetUtil;
@@ -62,6 +65,7 @@ import org.apache.tajo.catalog.Schema;
 import org.apache.tajo.conf.TajoConf;
 import org.apache.tajo.conf.TajoConf.ConfVars;
 import org.apache.tajo.exception.InvalidURLException;
+import org.apache.tajo.pullserver.PullServerUtil.PullServerParams;
 import org.apache.tajo.pullserver.retriever.FileChunk;
 import org.apache.tajo.rpc.NettyUtils;
 import org.apache.tajo.storage.*;
@@ -82,7 +86,6 @@ import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
 
 public class TajoPullServerService extends AbstractService {
 
@@ -128,8 +131,8 @@ public class TajoPullServerService extends AbstractService {
 
   private static final boolean STANDALONE;
 
-  private static final AtomicIntegerFieldUpdater<ProcessingStatus> SLOW_FILE_UPDATER;
-  private static final AtomicIntegerFieldUpdater<ProcessingStatus> REMAIN_FILE_UPDATER;
+//  private static final AtomicIntegerFieldUpdater<ProcessingStatus> SLOW_FILE_UPDATER;
+//  private static final AtomicIntegerFieldUpdater<ProcessingStatus> REMAIN_FILE_UPDATER;
 
   public static final String CHUNK_LENGTH_HEADER_NAME = "c";
 
@@ -163,8 +166,8 @@ public class TajoPullServerService extends AbstractService {
 
   static {
     /* AtomicIntegerFieldUpdater can save the memory usage instead of AtomicInteger instance */
-    SLOW_FILE_UPDATER = AtomicIntegerFieldUpdater.newUpdater(ProcessingStatus.class, "numSlowFile");
-    REMAIN_FILE_UPDATER = AtomicIntegerFieldUpdater.newUpdater(ProcessingStatus.class, "remainFiles");
+//    SLOW_FILE_UPDATER = AtomicIntegerFieldUpdater.newUpdater(ProcessingStatus.class, "numSlowFile");
+//    REMAIN_FILE_UPDATER = AtomicIntegerFieldUpdater.newUpdater(ProcessingStatus.class, "remainFiles");
 
     String standalone = System.getenv("TAJO_PULLSERVER_STANDALONE");
     STANDALONE = !StringUtils.isEmpty(standalone) && standalone.equalsIgnoreCase("true");
@@ -420,64 +423,64 @@ public class TajoPullServerService extends AbstractService {
   }
 
 
-  Map<String, ProcessingStatus> processingStatusMap = new ConcurrentHashMap<>();
+//  Map<String, ProcessingStatus> processingStatusMap = new ConcurrentHashMap<>();
 
-  public void completeFileChunk(FileRegion filePart,
-                                   String requestUri,
-                                   long startTime) {
-    ProcessingStatus status = processingStatusMap.get(requestUri);
-    if (status != null) {
-      status.decrementRemainFiles(filePart, startTime);
-    }
-  }
+//  public void completeFileChunk(FileRegion filePart,
+//                                   String requestUri,
+//                                   long startTime) {
+//    ProcessingStatus status = processingStatusMap.get(requestUri);
+//    if (status != null) {
+//      status.decrementRemainFiles(filePart, startTime);
+//    }
+//  }
 
-  class ProcessingStatus {
-    String requestUri;
-    int numFiles;
-    long startTime;
-    long makeFileListTime;
-    long minTime = Long.MAX_VALUE;
-    long maxTime;
-    volatile int numSlowFile;
-    volatile int remainFiles;
-
-    public ProcessingStatus(String requestUri) {
-      this.requestUri = requestUri;
-      this.startTime = System.currentTimeMillis();
-    }
-
-    public void setNumFiles(int numFiles) {
-      this.numFiles = numFiles;
-      this.remainFiles = numFiles;
-    }
-
-    public void decrementRemainFiles(FileRegion filePart, long fileStartTime) {
-      long fileSendTime = System.currentTimeMillis() - fileStartTime;
-
-      if (fileSendTime > maxTime) {
-        maxTime = fileSendTime;
-      }
-      if (fileSendTime < minTime) {
-        minTime = fileSendTime;
-      }
-
-      if (fileSendTime > 20 * 1000) {
-        LOG.warn("Sending data takes too long. " + fileSendTime + "ms elapsed, " +
-            "length:" + (filePart.count() - filePart.position()) + ", URI:" + requestUri);
-        SLOW_FILE_UPDATER.compareAndSet(this, numSlowFile, numSlowFile + 1);
-      }
-
-      REMAIN_FILE_UPDATER.compareAndSet(this, remainFiles, remainFiles - 1);
-      if (REMAIN_FILE_UPDATER.get(this) <= 0) {
-        processingStatusMap.remove(requestUri);
-        if(LOG.isDebugEnabled()) {
-          LOG.debug("PullServer processing status: totalTime=" + (System.currentTimeMillis() - startTime) + " ms, "
-              + "makeFileListTime=" + makeFileListTime + " ms, minTime=" + minTime + " ms, maxTime=" + maxTime + " ms, "
-              + "numFiles=" + numFiles + ", numSlowFile=" + numSlowFile);
-        }
-      }
-    }
-  }
+//  class ProcessingStatus {
+//    String requestUri;
+//    int numFiles;
+//    long startTime;
+//    long makeFileListTime;
+//    long minTime = Long.MAX_VALUE;
+//    long maxTime;
+//    volatile int numSlowFile;
+//    volatile int remainFiles;
+//
+//    public ProcessingStatus(String requestUri) {
+//      this.requestUri = requestUri;
+//      this.startTime = System.currentTimeMillis();
+//    }
+//
+//    public void setNumFiles(int numFiles) {
+//      this.numFiles = numFiles;
+//      this.remainFiles = numFiles;
+//    }
+//
+//    public void decrementRemainFiles(FileRegion filePart, long fileStartTime) {
+//      long fileSendTime = System.currentTimeMillis() - fileStartTime;
+//
+//      if (fileSendTime > maxTime) {
+//        maxTime = fileSendTime;
+//      }
+//      if (fileSendTime < minTime) {
+//        minTime = fileSendTime;
+//      }
+//
+//      if (fileSendTime > 20 * 1000) {
+//        LOG.warn("Sending data takes too long. " + fileSendTime + "ms elapsed, " +
+//            "length:" + (filePart.count() - filePart.position()) + ", URI:" + requestUri);
+//        SLOW_FILE_UPDATER.compareAndSet(this, numSlowFile, numSlowFile + 1);
+//      }
+//
+//      REMAIN_FILE_UPDATER.compareAndSet(this, remainFiles, remainFiles - 1);
+//      if (REMAIN_FILE_UPDATER.get(this) <= 0) {
+//        processingStatusMap.remove(requestUri);
+//        if(LOG.isDebugEnabled()) {
+//          LOG.debug("PullServer processing status: totalTime=" + (System.currentTimeMillis() - startTime) + " ms, "
+//              + "makeFileListTime=" + makeFileListTime + " ms, minTime=" + minTime + " ms, maxTime=" + maxTime + " ms, "
+//              + "numFiles=" + numFiles + ", numSlowFile=" + numSlowFile);
+//        }
+//      }
+//    }
+//  }
 
   @ChannelHandler.Sharable
   class PullServer extends SimpleChannelInboundHandler<FullHttpRequest> {
@@ -525,49 +528,83 @@ public class TajoPullServerService extends AbstractService {
       }
 
       // Parsing the URL into key-values
-      Map<String, List<String>> params = null;
       try {
-        params = PullServerUtil.decodeParams(request.getUri());
+        final PullServerParams params = new PullServerParams(request.getUri());
+        if (PullServerUtil.isChunkRequest(params.requestType())) {
+          handleChunkRequest(ctx, request, params);
+        } else {
+          handleMetaRequest(ctx, request, params);
+        }
       } catch (Throwable e) {
         LOG.error("Failed to decode uri " + request.getUri());
         sendError(ctx, e.getMessage(), HttpResponseStatus.BAD_REQUEST);
         return;
       }
+    }
 
-      ProcessingStatus processingStatus = new ProcessingStatus(request.getUri());
-      processingStatusMap.put(request.getUri(), processingStatus);
+    private void handleMetaRequest(ChannelHandlerContext ctx, FullHttpRequest request, final PullServerParams params)
+        throws IOException, ExecutionException {
+      final List<String> taskIds = PullServerUtil.splitMaps(params.taskAttemptIds());
+      Path queryBaseDir = PullServerUtil.getBaseOutputDir(params.queryId(), params.ebId());
+      final List<String> jsonMetas = new ArrayList<>();
+      long totalSize = 0;
+      ChannelFuture writeFuture = null;
+      Gson gson = new Gson();
+      for (String eachTaskId : taskIds) {
+        Path outputPath = StorageUtil.concatPath(queryBaseDir, eachTaskId, "output");
+        FileChunkMeta meta = getFileChunkMeta(params.queryId(), params.ebId(), eachTaskId, outputPath, params.startKey(), params.endKey(), params.last());
+        String jsonStr = gson.toJson(meta, FileChunkMeta.class);
+        jsonMetas.add(jsonStr);
+        totalSize += jsonStr.length();
+      }
+      HttpResponse response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK);
+      HttpHeaders.setContentLength(response, totalSize);
+      if (HttpHeaders.isKeepAlive(request)) {
+        response.headers().set(Names.CONNECTION, Values.KEEP_ALIVE);
+      }
+      writeFuture = ctx.write(gson.toJson(jsonMetas));
 
-      String partId = params.get("p").get(0);
-      String queryId = params.get("qid").get(0);
-      String shuffleType = params.get("type").get(0);
-      String sid =  params.get("sid").get(0);
+      if (ctx.pipeline().get(SslHandler.class) == null) {
+        writeFuture = ctx.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT);
+      } else {
+        ctx.flush();
+      }
 
-      final List<String> taskIdList = params.get("ta");
-      final List<String> offsetList = params.get("offset");
-      final List<String> lengthList = params.get("length");
+      // Decide whether to close the connection or not.
+      if (!HttpHeaders.isKeepAlive(request)) {
+        // Close the connection when the whole content is written out.
+        writeFuture.addListener(ChannelFutureListener.CLOSE);
+      }
+    }
 
-      long offset = (offsetList != null && !offsetList.isEmpty()) ? Long.parseLong(offsetList.get(0)) : -1L;
-      long length = (lengthList != null && !lengthList.isEmpty()) ? Long.parseLong(lengthList.get(0)) : -1L;
+    private void handleChunkRequest(ChannelHandlerContext ctx, FullHttpRequest request, final PullServerParams params)
+        throws IOException {
+      final List<FileChunk> chunks = Lists.newArrayList();
 
-      List<String> taskIds = PullServerUtil.splitMaps(taskIdList);
+      final String queryId = params.queryId();
+      final String shuffleType = params.shuffleType();
+      final String sid =  params.ebId();
 
-      Path queryBaseDir = PullServerUtil.getBaseOutputDir(queryId, sid);
+      final long offset = params.offset();
+      final long length = params.length();
+
+      final Path queryBaseDir = PullServerUtil.getBaseOutputDir(queryId, sid);
 
       if (LOG.isDebugEnabled()) {
-        LOG.debug("PullServer request param: shuffleType=" + shuffleType + ", sid=" + sid + ", partId=" + partId
-            + ", taskIds=" + taskIdList);
+        LOG.debug("PullServer request param: shuffleType=" + shuffleType + ", sid=" + sid);
 
         // the working dir of tajo worker for each query
         LOG.debug("PullServer baseDir: " + conf.get(ConfVars.WORKER_TEMPORAL_DIR.varname) + "/" + queryBaseDir);
       }
 
-      final List<FileChunk> chunks = Lists.newArrayList();
-
       // if a stage requires a range shuffle
-      if (shuffleType.equals("r")) {
-        final String startKey = params.get("start").get(0);
-        final String endKey = params.get("end").get(0);
-        final boolean last = params.get("final") != null;
+      if (PullServerUtil.isRangeShuffle(shuffleType)) {
+        final List<String> taskIdList = params.taskAttemptIds();
+        final List<String> taskIds = PullServerUtil.splitMaps(taskIdList);
+
+        final String startKey = params.startKey();
+        final String endKey = params.endKey();
+        final boolean last = params.last();
 
         long before = System.currentTimeMillis();
         for (String eachTaskId : taskIds) {
@@ -594,7 +631,9 @@ public class TajoPullServerService extends AbstractService {
         LOG.info("Index lookup time: " + (after - before) + " ms");
 
         // if a stage requires a hash shuffle or a scattered hash shuffle
-      } else if (shuffleType.equals("h") || shuffleType.equals("s")) {
+      } else if (PullServerUtil.isHashShuffle(shuffleType)) {
+
+        final String partId = params.partId();
         int partParentId = HashShuffleAppenderManager.getPartParentId(Integer.parseInt(partId), conf);
         Path partPath = StorageUtil.concatPath(queryBaseDir, "hash-shuffle", String.valueOf(partParentId), partId);
         if (!lDirAlloc.ifExists(partPath.toString(), conf)) {
@@ -803,6 +842,135 @@ public class TajoPullServerService extends AbstractService {
     }
   };
 
+  private FileChunkMeta getFileChunkMeta(String queryId,
+                                         String ebSeqId,
+                                         String taskId,
+                                         Path outDir,
+                                         String startKey,
+                                         String endKey,
+                                         boolean last) throws IOException, ExecutionException {
+    BSTIndexReader idxReader = indexReaderCache.get(new CacheKey(outDir, queryId, ebSeqId));
+    idxReader.retain();
+
+    File data;
+    long startOffset;
+    long endOffset;
+    try {
+      if (LOG.isDebugEnabled()) {
+        if (indexReaderCache.size() > lowCacheHitCheckThreshold && indexReaderCache.stats().hitRate() < 0.5) {
+          LOG.debug("Too low cache hit rate: " + indexReaderCache.stats());
+        }
+      }
+
+      Tuple indexedFirst = idxReader.getFirstKey();
+      Tuple indexedLast = idxReader.getLastKey();
+
+      if (indexedFirst == null && indexedLast == null) { // if # of rows is zero
+        if (LOG.isDebugEnabled()) {
+          LOG.debug("There is no contents");
+        }
+        return null;
+      }
+
+      byte[] startBytes = Base64.decodeBase64(startKey);
+      byte[] endBytes = Base64.decodeBase64(endKey);
+
+
+      Tuple start;
+      Tuple end;
+      Schema keySchema = idxReader.getKeySchema();
+      RowStoreDecoder decoder = RowStoreUtil.createDecoder(keySchema);
+
+      try {
+        start = decoder.toTuple(startBytes);
+      } catch (Throwable t) {
+        throw new IllegalArgumentException("StartKey: " + startKey
+            + ", decoded byte size: " + startBytes.length, t);
+      }
+
+      try {
+        end = decoder.toTuple(endBytes);
+      } catch (Throwable t) {
+        throw new IllegalArgumentException("EndKey: " + endKey
+            + ", decoded byte size: " + endBytes.length, t);
+      }
+
+      data = new File(URI.create(outDir.toUri() + "/output"));
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("GET Request for " + data.getAbsolutePath() + " (start=" + start + ", end=" + end +
+            (last ? ", last=true" : "") + ")");
+      }
+
+      TupleComparator comparator = idxReader.getComparator();
+
+      if (comparator.compare(end, indexedFirst) < 0 ||
+          comparator.compare(indexedLast, start) < 0) {
+        if (LOG.isDebugEnabled()) {
+          LOG.debug("Out of Scope (indexed data [" + indexedFirst + ", " + indexedLast +
+              "], but request start:" + start + ", end: " + end);
+        }
+        return null;
+      }
+
+      try {
+        idxReader.init();
+        startOffset = idxReader.find(start);
+      } catch (IOException ioe) {
+        LOG.error("State Dump (the requested range: "
+            + "[" + start + ", " + end + ")" + ", idx min: "
+            + idxReader.getFirstKey() + ", idx max: "
+            + idxReader.getLastKey());
+        throw ioe;
+      }
+      try {
+        endOffset = idxReader.find(end);
+        if (endOffset == -1) {
+          endOffset = idxReader.find(end, true);
+        }
+      } catch (IOException ioe) {
+        LOG.error("State Dump (the requested range: "
+            + "[" + start + ", " + end + ")" + ", idx min: "
+            + idxReader.getFirstKey() + ", idx max: "
+            + idxReader.getLastKey());
+        throw ioe;
+      }
+
+      // if startOffset == -1 then case 2-1 or case 3
+      if (startOffset == -1) { // this is a hack
+        // if case 2-1 or case 3
+        try {
+          startOffset = idxReader.find(start, true);
+        } catch (IOException ioe) {
+          LOG.error("State Dump (the requested range: "
+              + "[" + start + ", " + end + ")" + ", idx min: "
+              + idxReader.getFirstKey() + ", idx max: "
+              + idxReader.getLastKey());
+          throw ioe;
+        }
+      }
+
+      if (startOffset == -1) {
+        throw new IllegalStateException("startOffset " + startOffset + " is negative \n" +
+            "State Dump (the requested range: "
+            + "[" + start + ", " + end + ")" + ", idx min: " + idxReader.getFirstKey() + ", idx max: "
+            + idxReader.getLastKey());
+      }
+
+      // if greater than indexed values
+      if (last || (endOffset == -1
+          && comparator.compare(idxReader.getLastKey(), end) < 0)) {
+        endOffset = data.length();
+      }
+    } finally {
+      idxReader.release();
+    }
+
+    FileChunkMeta chunk = new FileChunkMeta(startOffset, endOffset - startOffset, ebSeqId, taskId);
+
+    if (LOG.isDebugEnabled()) LOG.debug("Retrieve File Chunk: " + chunk);
+    return chunk;
+  }
+
   public FileChunk getFileChunks(String queryId,
                                  String ebSeqId,
                                  Path outDir,
@@ -930,5 +1098,35 @@ public class TajoPullServerService extends AbstractService {
 
     if (LOG.isDebugEnabled()) LOG.debug("Retrieve File Chunk: " + chunk);
     return chunk;
+  }
+
+  public static class FileChunkMeta {
+    private final long startOffset;
+    private final long length;
+    private final String ebId;
+    private final String taskId;
+
+    public FileChunkMeta(long startOffset, long length, String ebId, String taskId) {
+      this.startOffset = startOffset;
+      this.length = length;
+      this.ebId = ebId;
+      this.taskId = taskId;
+    }
+
+    public String getTaskId() {
+      return taskId;
+    }
+
+    public long getStartOffset() {
+      return startOffset;
+    }
+
+    public long getLength() {
+      return length;
+    }
+
+    public String getEbId() {
+      return ebId;
+    }
   }
 }

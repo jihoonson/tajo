@@ -305,7 +305,7 @@ public class TestTaskExecutor {
         }
 
         @Override
-        public List<Fetcher> getFetchers() {
+        public List<RemoteFetcher> getFetchers() {
           return null;
         }
       };

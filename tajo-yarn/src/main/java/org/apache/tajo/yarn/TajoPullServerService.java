@@ -51,6 +51,8 @@ import org.apache.tajo.conf.TajoConf;
 import org.apache.tajo.conf.TajoConf.ConfVars;
 import org.apache.tajo.exception.InvalidURLException;
 import org.apache.tajo.pullserver.PullServerUtil;
+import org.apache.tajo.pullserver.PullServerUtil.Param;
+import org.apache.tajo.pullserver.PullServerUtil.PullServerParams;
 import org.apache.tajo.pullserver.retriever.FileChunk;
 import org.apache.tajo.storage.*;
 import org.apache.tajo.storage.RowStoreUtil.RowStoreDecoder;
@@ -502,103 +504,100 @@ public class TajoPullServerService extends AuxiliaryService {
       }
 
       // Parsing the URL into key-values
-      Map<String, List<String>> params = null;
+      final List<FileChunk> chunks = Lists.newArrayList();
       try {
-        params = PullServerUtil.decodeParams(request.getUri());
+        PullServerParams params = new PullServerParams(request.getUri());
+        ProcessingStatus processingStatus = new ProcessingStatus(request.getUri());
+        processingStatusMap.put(request.getUri(), processingStatus);
+
+        String partId = params.partId();
+        String queryId = params.queryId();
+        String shuffleType = params.shuffleType();
+        String sid =  params.ebId();
+
+        final List<String> taskIdList = params.get("ta");
+        final List<String> offsetList = params.get("offset");
+        final List<String> lengthList = params.get("length");
+
+        long offset = (offsetList != null && !offsetList.isEmpty()) ? Long.parseLong(offsetList.get(0)) : -1L;
+        long length = (lengthList != null && !lengthList.isEmpty()) ? Long.parseLong(lengthList.get(0)) : -1L;
+
+        List<String> taskIds = PullServerUtil.splitMaps(taskIdList);
+
+        Path queryBaseDir = PullServerUtil.getBaseOutputDir(queryId, sid);
+
+        if (LOG.isDebugEnabled()) {
+          LOG.debug("PullServer request param: shuffleType=" + shuffleType + ", sid=" + sid + ", partId=" + partId
+              + ", taskIds=" + taskIdList);
+
+          // the working dir of tajo worker for each query
+          LOG.debug("PullServer baseDir: " + conf.get(ConfVars.WORKER_TEMPORAL_DIR.varname) + "/" + queryBaseDir);
+        }
+
+        // if a stage requires a range shuffle
+        if (shuffleType.equals("r")) {
+          final String startKey = params.get("start").get(0);
+          final String endKey = params.get("end").get(0);
+          final boolean last = params.get("final") != null;
+
+          List<String> paths = new ArrayList<>();
+          for (String eachTaskId : taskIds) {
+            Path outputPath = StorageUtil.concatPath(queryBaseDir, eachTaskId, "output");
+            if (!lDirAlloc.ifExists(outputPath.toString(), conf)) {
+              LOG.warn(outputPath + "does not exist.");
+              continue;
+            }
+            Path path = localFS.makeQualified(lDirAlloc.getLocalPathToRead(outputPath.toString(), conf));
+            paths.add(path.toString());
+          }
+
+          long before = System.currentTimeMillis();
+          try {
+            chunks.addAll(getFileChunks(queryId, sid, startKey, endKey, last, paths));
+          } catch (Throwable t) {
+            LOG.error("ERROR Request: " + request.getUri(), t);
+            sendError(ctx, "Cannot get file chunks to be sent", HttpResponseStatus.BAD_REQUEST);
+            return;
+          }
+
+          long after = System.currentTimeMillis();
+          LOG.info("Index lookup time: " + (after - before) + " ms");
+
+          // if a stage requires a hash shuffle or a scattered hash shuffle
+        } else if (shuffleType.equals("h") || shuffleType.equals("s")) {
+          int partParentId = HashShuffleAppenderManager.getPartParentId(Integer.parseInt(partId), conf);
+          Path partPath = StorageUtil.concatPath(queryBaseDir, "hash-shuffle", String.valueOf(partParentId), partId);
+          if (!lDirAlloc.ifExists(partPath.toString(), conf)) {
+            LOG.warn("Partition shuffle file not exists: " + partPath);
+            sendError(ctx, HttpResponseStatus.NO_CONTENT);
+            return;
+          }
+
+          Path path = localFS.makeQualified(lDirAlloc.getLocalPathToRead(partPath.toString(), conf));
+
+          File file = new File(path.toUri());
+          long startPos = (offset >= 0 && length >= 0) ? offset : 0;
+          long readLen = (offset >= 0 && length >= 0) ? length : file.length();
+
+          if (startPos >= file.length()) {
+            String errorMessage = "Start pos[" + startPos + "] great than file length [" + file.length() + "]";
+            LOG.error(errorMessage);
+            sendError(ctx, errorMessage, HttpResponseStatus.BAD_REQUEST);
+            return;
+          }
+          if (LOG.isDebugEnabled()) {
+            LOG.debug("RequestURL: " + request.getUri() + ", fileLen=" + file.length());
+          }
+          FileChunk chunk = new FileChunk(file, startPos, readLen);
+          chunks.add(chunk);
+        } else {
+          LOG.error("Unknown shuffle type: " + shuffleType);
+          sendError(ctx, "Unknown shuffle type:" + shuffleType, HttpResponseStatus.BAD_REQUEST);
+          return;
+        }
       } catch (Throwable e) {
         LOG.error("Failed to decode uri " + request.getUri());
         sendError(ctx, e.getMessage(), HttpResponseStatus.BAD_REQUEST);
-        return;
-      }
-
-      ProcessingStatus processingStatus = new ProcessingStatus(request.getUri());
-      processingStatusMap.put(request.getUri(), processingStatus);
-
-      String partId = params.get("p").get(0);
-      String queryId = params.get("qid").get(0);
-      String shuffleType = params.get("type").get(0);
-      String sid =  params.get("sid").get(0);
-
-      final List<String> taskIdList = params.get("ta");
-      final List<String> offsetList = params.get("offset");
-      final List<String> lengthList = params.get("length");
-
-      long offset = (offsetList != null && !offsetList.isEmpty()) ? Long.parseLong(offsetList.get(0)) : -1L;
-      long length = (lengthList != null && !lengthList.isEmpty()) ? Long.parseLong(lengthList.get(0)) : -1L;
-
-      List<String> taskIds = PullServerUtil.splitMaps(taskIdList);
-
-      Path queryBaseDir = PullServerUtil.getBaseOutputDir(queryId, sid);
-
-      if (LOG.isDebugEnabled()) {
-        LOG.debug("PullServer request param: shuffleType=" + shuffleType + ", sid=" + sid + ", partId=" + partId
-            + ", taskIds=" + taskIdList);
-
-        // the working dir of tajo worker for each query
-        LOG.debug("PullServer baseDir: " + conf.get(ConfVars.WORKER_TEMPORAL_DIR.varname) + "/" + queryBaseDir);
-      }
-
-      final List<FileChunk> chunks = Lists.newArrayList();
-
-      // if a stage requires a range shuffle
-      if (shuffleType.equals("r")) {
-        final String startKey = params.get("start").get(0);
-        final String endKey = params.get("end").get(0);
-        final boolean last = params.get("final") != null;
-
-        List<String> paths = new ArrayList<>();
-        for (String eachTaskId : taskIds) {
-          Path outputPath = StorageUtil.concatPath(queryBaseDir, eachTaskId, "output");
-          if (!lDirAlloc.ifExists(outputPath.toString(), conf)) {
-            LOG.warn(outputPath + "does not exist.");
-            continue;
-          }
-          Path path = localFS.makeQualified(lDirAlloc.getLocalPathToRead(outputPath.toString(), conf));
-          paths.add(path.toString());
-        }
-
-        long before = System.currentTimeMillis();
-        try {
-          chunks.addAll(getFileChunks(queryId, sid, startKey, endKey, last, paths));
-        } catch (Throwable t) {
-          LOG.error("ERROR Request: " + request.getUri(), t);
-          sendError(ctx, "Cannot get file chunks to be sent", HttpResponseStatus.BAD_REQUEST);
-          return;
-        }
-
-        long after = System.currentTimeMillis();
-        LOG.info("Index lookup time: " + (after - before) + " ms");
-
-        // if a stage requires a hash shuffle or a scattered hash shuffle
-      } else if (shuffleType.equals("h") || shuffleType.equals("s")) {
-        int partParentId = HashShuffleAppenderManager.getPartParentId(Integer.parseInt(partId), conf);
-        Path partPath = StorageUtil.concatPath(queryBaseDir, "hash-shuffle", String.valueOf(partParentId), partId);
-        if (!lDirAlloc.ifExists(partPath.toString(), conf)) {
-          LOG.warn("Partition shuffle file not exists: " + partPath);
-          sendError(ctx, HttpResponseStatus.NO_CONTENT);
-          return;
-        }
-
-        Path path = localFS.makeQualified(lDirAlloc.getLocalPathToRead(partPath.toString(), conf));
-
-        File file = new File(path.toUri());
-        long startPos = (offset >= 0 && length >= 0) ? offset : 0;
-        long readLen = (offset >= 0 && length >= 0) ? length : file.length();
-
-        if (startPos >= file.length()) {
-          String errorMessage = "Start pos[" + startPos + "] great than file length [" + file.length() + "]";
-          LOG.error(errorMessage);
-          sendError(ctx, errorMessage, HttpResponseStatus.BAD_REQUEST);
-          return;
-        }
-        if (LOG.isDebugEnabled()) {
-          LOG.debug("RequestURL: " + request.getUri() + ", fileLen=" + file.length());
-        }
-        FileChunk chunk = new FileChunk(file, startPos, readLen);
-        chunks.add(chunk);
-      } else {
-        LOG.error("Unknown shuffle type: " + shuffleType);
-        sendError(ctx, "Unknown shuffle type:" + shuffleType, HttpResponseStatus.BAD_REQUEST);
         return;
       }
 
