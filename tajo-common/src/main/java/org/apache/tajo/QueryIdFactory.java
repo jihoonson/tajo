@@ -80,6 +80,11 @@ public class QueryIdFactory {
     }
   }
 
+  public static QueryId queryIdFromString(String strQueryId) {
+    String[] tokens = strQueryId.split("_");
+    return new QueryId(tokens[1], Integer.parseInt(tokens[2]));
+  }
+
   private static boolean isYarnId(String id) {
     return id.startsWith("application");
   }

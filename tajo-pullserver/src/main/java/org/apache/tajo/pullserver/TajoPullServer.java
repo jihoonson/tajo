@@ -25,6 +25,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.service.CompositeService;
 import org.apache.tajo.TajoConstants;
 import org.apache.tajo.conf.TajoConf;
+import org.apache.tajo.conf.TajoConf.ConfVars;
 import org.apache.tajo.util.StringUtils;
 
 public class TajoPullServer extends CompositeService {
@@ -69,6 +70,7 @@ public class TajoPullServer extends CompositeService {
 
     TajoConf tajoConf = new TajoConf();
     tajoConf.addResource(new Path(TajoConstants.SYSTEM_CONF_FILENAME));
+    tajoConf.setVar(ConfVars.WORKER_TEMPORAL_DIR, "file:///ssd1/tajo-tmp,file:///ssd2/tajo-tmp");
 
     (new TajoPullServer()).startPullServer(tajoConf);
   }

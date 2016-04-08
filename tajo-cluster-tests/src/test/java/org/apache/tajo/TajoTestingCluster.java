@@ -357,7 +357,8 @@ public class TajoTestingCluster {
     c.setVar(ConfVars.TAJO_MASTER_UMBILICAL_RPC_ADDRESS, "localhost:0");
     c.setVar(ConfVars.RESOURCE_TRACKER_RPC_ADDRESS, "localhost:0");
     c.setVar(ConfVars.WORKER_PEER_RPC_ADDRESS, "localhost:0");
-    c.setVar(ConfVars.WORKER_TEMPORAL_DIR, "file://" + testBuildDir.getAbsolutePath() + "/tajo-localdir");
+//    c.setVar(ConfVars.WORKER_TEMPORAL_DIR, "file://" + testBuildDir.getAbsolutePath() + "/tajo-localdir");
+    c.setVar(ConfVars.WORKER_TEMPORAL_DIR, "file:///ssd1/tajo-tmp,file:///ssd2/tajo-tmp");
     c.setVar(ConfVars.REST_SERVICE_ADDRESS, "localhost:0");
 
     if (!local) {

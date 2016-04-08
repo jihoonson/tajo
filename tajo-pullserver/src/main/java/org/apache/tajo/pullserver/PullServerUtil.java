@@ -20,14 +20,14 @@ package org.apache.tajo.pullserver;
 
 import com.google.common.base.Preconditions;
 import io.netty.handler.codec.http.QueryStringDecoder;
-import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.lang.reflect.MethodUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.nativeio.NativeIO;
+import org.apache.tajo.conf.TajoConf;
+import org.apache.tajo.conf.TajoConf.ConfVars;
 import org.apache.tajo.storage.StorageUtil;
-import org.apache.tajo.util.NetUtils;
 import org.apache.tajo.util.Pair;
 
 import java.io.FileDescriptor;
@@ -264,8 +264,8 @@ public class PullServerUtil {
     private List<String> taskAttemptIds;
     private Long offset;
     private Long length;
-    private String startKey;
-    private String endKey;
+    private String startKeyBase64;
+    private String endKeyBase64;
     private boolean last;
     private final int maxUrlLength;
 
@@ -285,12 +285,10 @@ public class PullServerUtil {
           .append(Param.PART_ID, partId)
           .append(Param.SHUFFLE_TYPE, shuffleType);
 
-      if (startKey != null) {
-        String firstKeyBase64 = new String(Base64.encodeBase64(startKey.getBytes()));
-        String endKeyBase64 = new String(Base64.encodeBase64(endKey.getBytes()));
+      if (startKeyBase64 != null) {
 
         try {
-          append(Param.START, URLEncoder.encode(firstKeyBase64, "utf-8"))
+          append(Param.START, URLEncoder.encode(startKeyBase64, "utf-8"))
               .append(Param.END, URLEncoder.encode(endKeyBase64, "utf-8"));
         } catch (UnsupportedEncodingException e) {
           throw new RuntimeException(e);
@@ -310,6 +308,7 @@ public class PullServerUtil {
       if (!includeTasks || isHashShuffle(shuffleType)) {
         results.add(URI.create(builder.toString()));
       } else {
+        builder.append(Param.TASK_ID.key).append("=");
         List<String> taskAttemptIds = this.taskAttemptIds;
         if (taskAttemptIds == null) {
 
@@ -426,13 +425,13 @@ public class PullServerUtil {
       return this;
     }
 
-    public PullServerRequestURIBuilder setStartKey(String startKey) {
-      this.startKey = startKey;
+    public PullServerRequestURIBuilder setStartKeyBase64(String startKeyBase64) {
+      this.startKeyBase64 = startKeyBase64;
       return this;
     }
 
-    public PullServerRequestURIBuilder setEndKey(String endKey) {
-      this.endKey = endKey;
+    public PullServerRequestURIBuilder setEndKeyBase64(String endKeyBase64) {
+      this.endKeyBase64 = endKeyBase64;
       return this;
     }
 
@@ -440,5 +439,11 @@ public class PullServerUtil {
       this.last = last;
       return this;
     }
+  }
+
+  public static boolean useExternalPullServerService(TajoConf conf) {
+    // TODO: remove remove standalone mode from tajo-env
+    return TajoPullServerService.isStandalone()
+        || conf.getBoolVar(ConfVars.YARN_SHUFFLE_SERVICE_ENABLED);
   }
 }

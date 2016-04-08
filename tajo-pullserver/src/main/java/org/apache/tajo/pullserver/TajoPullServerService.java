@@ -121,8 +121,8 @@ public class TajoPullServerService extends AbstractService {
           new ConcurrentHashMap<>();
   private String userName;
 
-  private static LoadingCache<CacheKey, BSTIndexReader> indexReaderCache = null;
-  private static int lowCacheHitCheckThreshold;
+  private LoadingCache<CacheKey, BSTIndexReader> indexReaderCache = null;
+  private int lowCacheHitCheckThreshold;
 
   public static final String SUFFLE_SSL_FILE_BUFFER_SIZE_KEY =
     "tajo.pullserver.ssl.file.buffer.size";
@@ -259,6 +259,7 @@ public class TajoPullServerService extends AbstractService {
 
     ServerBootstrap bootstrap = selector.clone();
     TajoConf tajoConf = (TajoConf)conf;
+    LOG.info("tmp dir is initialized as " + tajoConf.getVar(ConfVars.WORKER_TEMPORAL_DIR));
     try {
       channelInitializer = new HttpChannelInitializer(tajoConf);
     } catch (Exception ex) {
@@ -536,7 +537,7 @@ public class TajoPullServerService extends AbstractService {
           handleMetaRequest(ctx, request, params);
         }
       } catch (Throwable e) {
-        LOG.error("Failed to decode uri " + request.getUri());
+        LOG.error("Failed to handle request " + request.getUri());
         sendError(ctx, e.getMessage(), HttpResponseStatus.BAD_REQUEST);
         return;
       }
@@ -547,33 +548,45 @@ public class TajoPullServerService extends AbstractService {
       final List<String> taskIds = PullServerUtil.splitMaps(params.taskAttemptIds());
       Path queryBaseDir = PullServerUtil.getBaseOutputDir(params.queryId(), params.ebId());
       final List<String> jsonMetas = new ArrayList<>();
-      long totalSize = 0;
       ChannelFuture writeFuture = null;
       Gson gson = new Gson();
       for (String eachTaskId : taskIds) {
         Path outputPath = StorageUtil.concatPath(queryBaseDir, eachTaskId, "output");
-        FileChunkMeta meta = getFileChunkMeta(params.queryId(), params.ebId(), eachTaskId, outputPath, params.startKey(), params.endKey(), params.last());
-        String jsonStr = gson.toJson(meta, FileChunkMeta.class);
-        jsonMetas.add(jsonStr);
-        totalSize += jsonStr.length();
+        if (!lDirAlloc.ifExists(outputPath.toString(), conf)) {
+          LOG.warn("Range shuffle - file not exist. " + outputPath);
+          continue;
+        }
+        Path path = localFS.makeQualified(lDirAlloc.getLocalPathToRead(outputPath.toString(), conf));
+        FileChunkMeta meta = getFileChunkMeta(params.queryId(), params.ebId(), eachTaskId, path, params.startKey(), params.endKey(), params.last());
+        if (meta != null) {
+          String jsonStr = gson.toJson(meta, FileChunkMeta.class);
+          LOG.info(jsonStr);
+          jsonMetas.add(jsonStr);
+        }
       }
-      HttpResponse response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK);
-      HttpHeaders.setContentLength(response, totalSize);
+      FullHttpResponse response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK,
+          Unpooled.copiedBuffer(gson.toJson(jsonMetas), CharsetUtil.UTF_8));
+      response.headers().set(Names.CONTENT_TYPE, "application/json; charset=UTF-8");// TODO: change to json
       if (HttpHeaders.isKeepAlive(request)) {
+        HttpHeaders.setContentLength(response, response.content().readableBytes());
         response.headers().set(Names.CONNECTION, Values.KEEP_ALIVE);
       }
-      writeFuture = ctx.write(gson.toJson(jsonMetas));
+      LOG.info("send");
+      writeFuture = ctx.write(response);
 
-      if (ctx.pipeline().get(SslHandler.class) == null) {
-        writeFuture = ctx.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT);
-      } else {
-        ctx.flush();
-      }
+//      if (ctx.pipeline().get(SslHandler.class) == null) {
+//        LOG.info("3");
+//        writeFuture = ctx.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT);
+//      } else {
+//        LOG.info("4");
+//        ctx.flush();
+//      }
 
       // Decide whether to close the connection or not.
       if (!HttpHeaders.isKeepAlive(request)) {
         // Close the connection when the whole content is written out.
-        writeFuture.addListener(ChannelFutureListener.CLOSE);
+        LOG.info("5");
+        ctx.writeAndFlush(Unpooled.EMPTY_BUFFER).addListener(ChannelFutureListener.CLOSE);
       }
     }
 
@@ -610,7 +623,7 @@ public class TajoPullServerService extends AbstractService {
         for (String eachTaskId : taskIds) {
           Path outputPath = StorageUtil.concatPath(queryBaseDir, eachTaskId, "output");
           if (!lDirAlloc.ifExists(outputPath.toString(), conf)) {
-            LOG.warn(outputPath + "does not exist.");
+            LOG.warn(outputPath + " does not exist.");
             continue;
           }
           Path path = localFS.makeQualified(lDirAlloc.getLocalPathToRead(outputPath.toString(), conf));
@@ -703,11 +716,11 @@ public class TajoPullServerService extends AbstractService {
           }
         }
 
-        if (ctx.pipeline().get(SslHandler.class) == null) {
-          writeFuture = ctx.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT);
-        } else {
-          ctx.flush();
-        }
+        writeFuture = ctx.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT);
+//        if (ctx.pipeline().get(SslHandler.class) == null) {
+//        } else {
+//          ctx.flush();
+//        }
 
         // Decide whether to close the connection or not.
         if (!HttpHeaders.isKeepAlive(request)) {
@@ -1128,6 +1141,10 @@ public class TajoPullServerService extends AbstractService {
 
     public String getEbId() {
       return ebId;
+    }
+
+    public String toString() {
+      return "ebId: " + ebId + ", taskId: " + taskId + " (" + startOffset + ", " + length + ")";
     }
   }
 }

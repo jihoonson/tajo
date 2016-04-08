@@ -30,6 +30,7 @@ import org.apache.tajo.TajoIdProtos;
 import org.apache.tajo.TaskAttemptId;
 import org.apache.tajo.TaskId;
 import org.apache.tajo.ipc.QueryMasterProtocol;
+import org.apache.tajo.pullserver.TajoPullServerService;
 import org.apache.tajo.rpc.AsyncRpcClient;
 import org.apache.tajo.rpc.CallFuture;
 import org.apache.tajo.rpc.RpcClientManager;
@@ -42,6 +43,7 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Properties;
 
 import static org.apache.tajo.ResourceProtos.*;
@@ -57,12 +59,19 @@ public class TaskManager extends AbstractService implements EventHandler<TaskMan
   private final Dispatcher dispatcher;
   private TaskExecutor executor;
   private final Properties rpcParams;
+  private final Optional<TajoPullServerService> pullServerService;
 
-  public TaskManager(Dispatcher dispatcher, TajoWorker.WorkerContext workerContext){
-    this(dispatcher, workerContext, null);
+  public TaskManager(Dispatcher dispatcher, TajoWorker.WorkerContext workerContext) {
+    this(dispatcher, workerContext, null, null);
   }
 
-  public TaskManager(Dispatcher dispatcher, TajoWorker.WorkerContext workerContext, TaskExecutor executor) {
+  public TaskManager(Dispatcher dispatcher, TajoWorker.WorkerContext workerContext,
+                     TajoPullServerService pullServerService) {
+    this(dispatcher, workerContext, null, pullServerService);
+  }
+
+  public TaskManager(Dispatcher dispatcher, TajoWorker.WorkerContext workerContext, TaskExecutor executor,
+                     TajoPullServerService pullServerService) {
     super(TaskManager.class.getName());
 
     this.dispatcher = dispatcher;
@@ -70,6 +79,11 @@ public class TaskManager extends AbstractService implements EventHandler<TaskMan
     this.executionBlockContextMap = Maps.newHashMap();
     this.executor = executor;
     this.rpcParams = RpcParameterFactory.get(this.workerContext.getConf());
+    if (pullServerService != null) {
+      this.pullServerService = Optional.of(pullServerService);
+    } else {
+      this.pullServerService = Optional.empty();
+    }
   }
 
   @Override

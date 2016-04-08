@@ -21,6 +21,7 @@ package org.apache.tajo.querymaster;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import org.apache.commons.codec.binary.*;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.fs.Path;
@@ -72,7 +73,6 @@ import java.net.URLEncoder;
 import java.util.*;
 import java.util.Map.Entry;
 import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 
 import static org.apache.tajo.plan.serder.PlanProto.ShuffleType;
 import static org.apache.tajo.plan.serder.PlanProto.ShuffleType.*;
@@ -1137,6 +1137,9 @@ public class Repartitioner {
       builder.setShuffleType(PullServerUtil.HASH_SHUFFLE_PARAM_STRING);
     } else if (fetch.getType() == RANGE_SHUFFLE) {
       builder.setShuffleType(PullServerUtil.RANGE_SHUFFLE_PARAM_STRING);
+      builder.setStartKeyBase64(new String(org.apache.commons.codec.binary.Base64.encodeBase64(fetch.getRangeStart().toByteArray())));
+      builder.setEndKeyBase64(new String(org.apache.commons.codec.binary.Base64.encodeBase64(fetch.getRangeEnd().toByteArray())));
+      builder.setLast(fetch.getRangeLastInclusive());
     } else if (fetch.getType() == SCATTERED_HASH_SHUFFLE) {
       builder.setShuffleType(PullServerUtil.SCATTERED_HASH_SHUFFLE_PARAM_STRING);
     }

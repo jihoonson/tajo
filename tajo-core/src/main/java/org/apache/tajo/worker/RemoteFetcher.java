@@ -44,6 +44,7 @@ import java.io.RandomAccessFile;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.channels.FileChannel;
+import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -216,6 +217,7 @@ public class RemoteFetcher extends AbstractFetcher {
             length = 0;
             return;
           } else if (response.getStatus().code() != HttpResponseStatus.OK.code()) {
+            finishTime = System.currentTimeMillis();
             LOG.error(response.getStatus().reasonPhrase(), response.getDecoderResult().cause());
             state = TajoProtos.FetcherState.FETCH_FAILED;
             return;
@@ -228,29 +230,32 @@ public class RemoteFetcher extends AbstractFetcher {
       }
 
       if (msg instanceof HttpContent) {
-        try {
-          HttpContent httpContent = (HttpContent) msg;
-          ByteBuf content = httpContent.content();
-          if (content.isReadable()) {
-            content.readBytes(fc, content.readableBytes());
-          }
+        HttpContent httpContent = (HttpContent) msg;
+        ByteBuf content = httpContent.content();
 
-          if (msg instanceof LastHttpContent) {
-            if (raf != null) {
-              fileLen = file.length();
+        if (state != FetcherState.FETCH_FAILED) {
+          try {
+            if (content.isReadable()) {
+              content.readBytes(fc, content.readableBytes());
             }
 
-            finishTime = System.currentTimeMillis();
-            if (state != TajoProtos.FetcherState.FETCH_FAILED) {
+            if (msg instanceof LastHttpContent) {
+              if (raf != null) {
+                fileLen = file.length();
+              }
+
+              finishTime = System.currentTimeMillis();
               state = TajoProtos.FetcherState.FETCH_FINISHED;
+              IOUtils.cleanup(LOG, fc, raf);
             }
-
-            IOUtils.cleanup(LOG, fc, raf);
+          } catch (Exception e) {
+            LOG.error(e.getMessage(), e);
+          } finally {
+            ReferenceCountUtil.release(msg);
           }
-        } catch (Exception e) {
-          LOG.error(e.getMessage(), e);
-        } finally {
-          ReferenceCountUtil.release(msg);
+        } else {
+          // http content contains the reason why the fetch failed.
+          LOG.error(content.toString(Charset.defaultCharset()));
         }
       }
     }

@@ -23,6 +23,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.tajo.ExecutionBlockId;
 import org.apache.tajo.SessionVars;
+import org.apache.tajo.annotation.NotNull;
 import org.apache.tajo.catalog.Schema;
 import org.apache.tajo.engine.codegen.ExecutorPreCompiler;
 import org.apache.tajo.engine.codegen.TajoClassLoader;
@@ -34,8 +35,10 @@ import org.apache.tajo.engine.utils.TableCacheKey;
 import org.apache.tajo.exception.TajoException;
 import org.apache.tajo.plan.expr.EvalNode;
 import org.apache.tajo.plan.logical.LogicalNode;
+import org.apache.tajo.pullserver.TajoPullServerService;
 import org.apache.tajo.util.Pair;
 
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class ExecutionBlockSharedResource {
@@ -52,6 +55,15 @@ public class ExecutionBlockSharedResource {
   private ExecutorPreCompiler.CompilationContext compilationContext;
   private LogicalNode plan;
   private boolean codeGenEnabled = false;
+  private final Optional<TajoPullServerService> pullServerService;
+
+  public ExecutionBlockSharedResource() {
+    pullServerService = Optional.empty();
+  }
+
+  public ExecutionBlockSharedResource(@NotNull TajoPullServerService pullServerService) {
+    this.pullServerService = Optional.of(pullServerService);
+  }
 
   public void initialize(final QueryContext context, final String planJson) {
 
@@ -132,6 +144,14 @@ public class ExecutionBlockSharedResource {
 
   public void releaseBroadcastCache(ExecutionBlockId id) {
     TableCache.getInstance().releaseCache(id);
+  }
+
+  public boolean hasPullServerService() {
+    return pullServerService.isPresent();
+  }
+
+  public TajoPullServerService getPullServerService() {
+    return pullServerService.get();
   }
 
   public void release() {
