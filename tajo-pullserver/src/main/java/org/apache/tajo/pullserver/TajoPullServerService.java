@@ -121,7 +121,7 @@ public class TajoPullServerService extends AbstractService {
           new ConcurrentHashMap<>();
   private String userName;
 
-  private LoadingCache<CacheKey, BSTIndexReader> indexReaderCache = null;
+  private static LoadingCache<CacheKey, BSTIndexReader> indexReaderCache = null;
   private int lowCacheHitCheckThreshold;
 
   public static final String SUFFLE_SSL_FILE_BUFFER_SIZE_KEY =
@@ -240,9 +240,8 @@ public class TajoPullServerService extends AbstractService {
 
       maxUrlLength = conf.getInt(ConfVars.PULLSERVER_FETCH_URL_MAX_LENGTH.name(),
           ConfVars.PULLSERVER_FETCH_URL_MAX_LENGTH.defaultIntVal);
-
-      conf.setInt(TajoConf.ConfVars.PULLSERVER_PORT.varname
-          , conf.getInt(TajoConf.ConfVars.PULLSERVER_PORT.varname, TajoConf.ConfVars.PULLSERVER_PORT.defaultIntVal));
+      conf.setInt(TajoConf.ConfVars.PULLSERVER_PORT.varname,
+          conf.getInt(TajoConf.ConfVars.PULLSERVER_PORT.varname, TajoConf.ConfVars.PULLSERVER_PORT.defaultIntVal));
       super.init(conf);
       LOG.info("Tajo PullServer initialized: readaheadLength=" + readaheadLength);
     } catch (Throwable t) {
@@ -269,7 +268,7 @@ public class TajoPullServerService extends AbstractService {
       .channel(NioServerSocketChannel.class);
 
     port = tajoConf.getIntVar(ConfVars.PULLSERVER_PORT);
-    ChannelFuture future = bootstrap.bind(new InetSocketAddress(port))
+    ChannelFuture future = bootstrap.bind(port)
         .addListener(ChannelFutureListener.FIRE_EXCEPTION_ON_FAILURE)
         .syncUninterruptibly();
 

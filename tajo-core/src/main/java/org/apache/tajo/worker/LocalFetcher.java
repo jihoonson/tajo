@@ -79,11 +79,13 @@ public class LocalFetcher extends AbstractFetcher {
   private final Bootstrap bootstrap;
   private final int maxUrlLength;
   private final List<FileChunkMeta> chunkMetas = new ArrayList<>();
+  private final String tableName;
 
-  public LocalFetcher(TajoConf conf, URI uri, ExecutionBlockContext executionBlockContext) {
+  public LocalFetcher(TajoConf conf, URI uri, ExecutionBlockContext executionBlockContext, String tableName) {
     super(conf, uri);
     this.executionBlockContext = executionBlockContext;
     this.maxUrlLength = conf.getIntVar(ConfVars.PULLSERVER_FETCH_URL_MAX_LENGTH);
+    this.tableName = tableName;
 
     if (executionBlockContext.getSharedResource().hasPullServerService()) {
       // local pull server service
@@ -190,8 +192,9 @@ public class LocalFetcher extends AbstractFetcher {
               executionBlockContext.getLocalDirAllocator().getLocalPathToRead(outputPath.toString(), conf));
           FileChunk chunk = new FileChunk(new File(URI.create(path.toUri() + "/output")),
               eachMeta.getStartOffset(), eachMeta.getLength());
-          chunk.setEbId(QueryIdFactory.newExecutionBlockId(QueryIdFactory.queryIdFromString(params.queryId()),
-              Integer.parseInt(params.ebId())).toString());
+//          chunk.setEbId(QueryIdFactory.newExecutionBlockId(QueryIdFactory.queryIdFromString(params.queryId()),
+//              Integer.parseInt(params.ebId())).toString());
+          chunk.setEbId(tableName);
           fileChunks.add(chunk);
         }
 
@@ -225,9 +228,9 @@ public class LocalFetcher extends AbstractFetcher {
         throw new IOException("Start pos[" + startPos + "] great than file length [" + file.length() + "]");
       }
       FileChunk chunk = new FileChunk(file, startPos, readLen);
-      chunk.setEbId(QueryIdFactory.newExecutionBlockId(QueryIdFactory.queryIdFromString(params.queryId()),
-          Integer.parseInt(params.ebId())).toString());
-
+//      chunk.setEbId(QueryIdFactory.newExecutionBlockId(QueryIdFactory.queryIdFromString(params.queryId()),
+//          Integer.parseInt(params.ebId())).toString());
+      chunk.setEbId(tableName);
       if (chunk.length() > 0) {
         fileChunks.add(chunk);
       }

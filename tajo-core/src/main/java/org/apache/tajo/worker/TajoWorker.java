@@ -169,7 +169,6 @@ public class TajoWorker extends CompositeService {
     super.serviceInit(conf);
 
     int pullServerPort = systemConf.getIntVar(ConfVars.PULLSERVER_PORT);
-    pullServerPort = 40987;
 //    if(pullService != null){
 //      pullServerPort = pullService.getPort();
 //    } else {

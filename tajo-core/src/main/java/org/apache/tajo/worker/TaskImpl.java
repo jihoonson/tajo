@@ -698,7 +698,7 @@ public class TaskImpl implements Task {
           WorkerConnectionInfo conn = executionBlockContext.getWorkerContext().getConnectionInfo();
           if (NetUtils.isLocalAddress(address) && conn.getPullServerPort() == uri.getPort()) {
             localStoreChunkCount++;
-            runnerList.add(new LocalFetcher(systemConf, uri, executionBlockContext));
+            runnerList.add(new LocalFetcher(systemConf, uri, executionBlockContext, f.getName()));
 
 //            List<FileChunk> localChunkCandidates = getLocalStoredFileChunk(uri, systemConf);
 //
