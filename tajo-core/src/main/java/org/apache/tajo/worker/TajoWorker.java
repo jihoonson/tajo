@@ -176,6 +176,8 @@ public class TajoWorker extends CompositeService {
     int pullServerPort = systemConf.getIntVar(ConfVars.PULLSERVER_PORT);
     if(pullService != null){
       pullServerPort = pullService.getPort();
+    } else if (TajoPullServerService.isStandalone()) {
+      pullServerPort = getStandAlonePullServerPort();
     }
 
     this.connectionInfo = new WorkerConnectionInfo(
@@ -480,7 +482,8 @@ public class TajoWorker extends CompositeService {
 
   private static boolean useExternalPullServer(TajoConf conf) {
     // TODO: check for mesos
-    return conf.getBoolVar(ConfVars.YARN_SHUFFLE_SERVICE_ENABLED);
+    return TajoPullServerService.isStandalone()
+        || conf.getBoolVar(ConfVars.YARN_SHUFFLE_SERVICE_ENABLED);
   }
 
   private int getStandAlonePullServerPort() {
