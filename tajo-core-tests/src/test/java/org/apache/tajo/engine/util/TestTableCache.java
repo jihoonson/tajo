@@ -46,7 +46,7 @@ public class TestTableCache {
         QueryIdFactory.newQueryId(System.currentTimeMillis(), 0));
 
     final TableCacheKey key = new TableCacheKey(ebId.toString(), "testBroadcastTableCache", "path");
-    final ExecutionBlockSharedResource resource = new ExecutionBlockSharedResource();
+    final ExecutionBlockSharedResource resource = new ExecutionBlockSharedResource(null);
 
     final int parallelCount = 30;
     ExecutorService executor = Executors.newFixedThreadPool(parallelCount);

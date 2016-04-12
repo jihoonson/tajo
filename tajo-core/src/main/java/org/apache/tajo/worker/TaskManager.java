@@ -59,7 +59,7 @@ public class TaskManager extends AbstractService implements EventHandler<TaskMan
   private final Dispatcher dispatcher;
   private TaskExecutor executor;
   private final Properties rpcParams;
-  private final Optional<TajoPullServerService> pullServerService;
+  private final TajoPullServerService pullServerService;
 
   public TaskManager(Dispatcher dispatcher, TajoWorker.WorkerContext workerContext) {
     this(dispatcher, workerContext, null, null);
@@ -79,11 +79,7 @@ public class TaskManager extends AbstractService implements EventHandler<TaskMan
     this.executionBlockContextMap = Maps.newHashMap();
     this.executor = executor;
     this.rpcParams = RpcParameterFactory.get(this.workerContext.getConf());
-    if (pullServerService != null) {
-      this.pullServerService = Optional.of(pullServerService);
-    } else {
-      this.pullServerService = Optional.empty();
-    }
+    this.pullServerService = pullServerService;
   }
 
   @Override
@@ -138,7 +134,8 @@ public class TaskManager extends AbstractService implements EventHandler<TaskMan
       stub.getExecutionBlockContext(callback.getController(), request.build(), callback);
 
       ExecutionBlockContextResponse contextProto = callback.get();
-      ExecutionBlockContext context = new ExecutionBlockContext(getWorkerContext(), contextProto, client);
+      ExecutionBlockContext context = new ExecutionBlockContext(getWorkerContext(), contextProto, client,
+          pullServerService);
 
       context.init();
       return context;

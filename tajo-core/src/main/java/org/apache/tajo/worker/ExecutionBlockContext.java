@@ -103,8 +103,10 @@ public class ExecutionBlockContext {
 
   private final Map<TaskId, TaskHistory> taskHistories = Maps.newConcurrentMap();
 
+  private final TajoPullServerService pullServerService;
+
   public ExecutionBlockContext(TajoWorker.WorkerContext workerContext, ExecutionBlockContextResponse request,
-                               AsyncRpcClient queryMasterClient)
+                               AsyncRpcClient queryMasterClient, TajoPullServerService pullServerService)
       throws IOException {
     this.executionBlockId = new ExecutionBlockId(request.getExecutionBlockId());
     this.connManager = RpcClientManager.getInstance();
@@ -118,10 +120,11 @@ public class ExecutionBlockContext {
     this.queryEngine = new TajoQueryEngine(systemConf);
     this.queryContext = new QueryContext(workerContext.getConf(), request.getQueryContext());
     this.plan = request.getPlanJson();
-    this.resource = new ExecutionBlockSharedResource();
+    this.resource = new ExecutionBlockSharedResource(pullServerService);
     this.workerContext = workerContext;
     this.shuffleType = request.getShuffleType();
     this.queryMasterClient = queryMasterClient;
+    this.pullServerService = pullServerService;
   }
 
   public void init() throws Throwable {

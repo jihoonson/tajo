@@ -36,7 +36,7 @@ public class FileChunk {
    */
   private String ebId;
 
-  public FileChunk(File file, long startOffset, long length) throws FileNotFoundException {
+  public FileChunk(File file, long startOffset, long length) {
     this.file = file;
     this.startOffset = startOffset;
     this.length = length;

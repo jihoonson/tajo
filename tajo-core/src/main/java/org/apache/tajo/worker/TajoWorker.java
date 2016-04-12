@@ -83,7 +83,7 @@ public class TajoWorker extends CompositeService {
   private WorkerContext workerContext;
   private TaskManager taskManager;
   private TaskExecutor taskExecutor;
-//  private TajoPullServerService pullService;
+  private TajoPullServerService pullService;
   private ServiceTracker serviceTracker;
   private NodeResourceManager nodeResourceManager;
   private AtomicBoolean stopped = new AtomicBoolean(false);
@@ -143,6 +143,11 @@ public class TajoWorker extends CompositeService {
     queryMasterManagerService = new QueryMasterManagerService(workerContext, qmManagerPort);
     addIfService(queryMasterManagerService);
 
+    if (!useExternalPullServer(systemConf)) {
+      pullService = new TajoPullServerService();
+      addIfService(pullService);
+    }
+
 //    if(!TajoPullServerService.isStandalone()) {
 //      pullService = new TajoPullServerService();
 //      addIfService(pullService);
@@ -169,11 +174,9 @@ public class TajoWorker extends CompositeService {
     super.serviceInit(conf);
 
     int pullServerPort = systemConf.getIntVar(ConfVars.PULLSERVER_PORT);
-//    if(pullService != null){
-//      pullServerPort = pullService.getPort();
-//    } else {
-//      pullServerPort = getStandAlonePullServerPort();
-//    }
+    if(pullService != null){
+      pullServerPort = pullService.getPort();
+    }
 
     this.connectionInfo = new WorkerConnectionInfo(
         tajoWorkerManagerService.getBindAddr().getHostName(),
@@ -473,6 +476,11 @@ public class TajoWorker extends CompositeService {
     public HistoryReader getHistoryReader() {
       return historyReader;
     }
+  }
+
+  private static boolean useExternalPullServer(TajoConf conf) {
+    // TODO: check for mesos
+    return conf.getBoolVar(ConfVars.YARN_SHUFFLE_SERVICE_ENABLED);
   }
 
   private int getStandAlonePullServerPort() {

@@ -27,7 +27,7 @@ public class MockExecutionBlock extends ExecutionBlockContext {
 
   public MockExecutionBlock(TajoWorker.WorkerContext workerContext,
                             ExecutionBlockContextResponse request) throws IOException {
-    super(workerContext, request, null);
+    super(workerContext, request, null, null);
   }
 
   @Override

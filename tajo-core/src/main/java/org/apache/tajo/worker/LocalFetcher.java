@@ -24,22 +24,12 @@ import io.netty.buffer.ByteBuf;
 import io.netty.channel.*;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.http.*;
-import io.netty.handler.codec.http.DefaultHttpRequest;
-import io.netty.handler.codec.http.HttpClientCodec;
-import io.netty.handler.codec.http.HttpContentDecompressor;
-import io.netty.handler.codec.http.HttpHeaders;
-import io.netty.handler.codec.http.HttpMethod;
-import io.netty.handler.codec.http.HttpRequest;
-import io.netty.handler.codec.http.HttpResponse;
-import io.netty.handler.codec.http.HttpResponseStatus;
-import io.netty.handler.codec.http.HttpVersion;
 import io.netty.handler.timeout.ReadTimeoutException;
 import io.netty.handler.timeout.ReadTimeoutHandler;
 import io.netty.util.ReferenceCountUtil;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.fs.Path;
-import org.apache.tajo.QueryIdFactory;
 import org.apache.tajo.TajoProtos;
 import org.apache.tajo.TajoProtos.FetcherState;
 import org.apache.tajo.conf.TajoConf;
@@ -50,12 +40,11 @@ import org.apache.tajo.pullserver.PullServerUtil.Param;
 import org.apache.tajo.pullserver.PullServerUtil.PullServerParams;
 import org.apache.tajo.pullserver.PullServerUtil.PullServerRequestURIBuilder;
 import org.apache.tajo.pullserver.TajoPullServerService;
-import org.apache.tajo.pullserver.TajoPullServerService.FileChunkMeta;
 import org.apache.tajo.pullserver.retriever.FileChunk;
+import org.apache.tajo.pullserver.retriever.FileChunkMeta;
 import org.apache.tajo.rpc.NettyUtils;
 import org.apache.tajo.storage.HashShuffleAppenderManager;
 import org.apache.tajo.storage.StorageUtil;
-import org.jboss.netty.handler.codec.http.*;
 
 import java.io.File;
 import java.io.IOException;
@@ -72,7 +61,7 @@ public class LocalFetcher extends AbstractFetcher {
   private final static Log LOG = LogFactory.getLog(LocalFetcher.class);
 
   private final ExecutionBlockContext executionBlockContext;
-  private final Optional<TajoPullServerService> pullServerService;
+  private final TajoPullServerService pullServerService;
 
   private final String host;
   private int port;
@@ -87,14 +76,15 @@ public class LocalFetcher extends AbstractFetcher {
     this.maxUrlLength = conf.getIntVar(ConfVars.PULLSERVER_FETCH_URL_MAX_LENGTH);
     this.tableName = tableName;
 
-    if (executionBlockContext.getSharedResource().hasPullServerService()) {
+    Optional<TajoPullServerService> optional = executionBlockContext.getSharedResource().getPullServerService();
+    if (optional.isPresent()) {
       // local pull server service
-      this.pullServerService = Optional.of(executionBlockContext.getSharedResource().getPullServerService());
+      this.pullServerService = optional.get();
       this.host = null;
       this.bootstrap = null;
     } else if (PullServerUtil.useExternalPullServerService(conf)) {
       // external pull server service
-      pullServerService = Optional.empty();
+      pullServerService = null;
 
       String scheme = uri.getScheme() == null ? "http" : uri.getScheme();
       this.host = uri.getHost() == null ? "localhost" : uri.getHost();
@@ -124,7 +114,7 @@ public class LocalFetcher extends AbstractFetcher {
 
   @Override
   public List<FileChunk> get() throws IOException {
-    return pullServerService.isPresent() ? getFromInternalPullServer() : getFromExternalPullServer();
+    return pullServerService != null ? getFromInternalPullServer() : getFromExternalPullServer();
   }
 
   private List<FileChunk> getFromInternalPullServer() {
@@ -192,8 +182,6 @@ public class LocalFetcher extends AbstractFetcher {
               executionBlockContext.getLocalDirAllocator().getLocalPathToRead(outputPath.toString(), conf));
           FileChunk chunk = new FileChunk(new File(URI.create(path.toUri() + "/output")),
               eachMeta.getStartOffset(), eachMeta.getLength());
-//          chunk.setEbId(QueryIdFactory.newExecutionBlockId(QueryIdFactory.queryIdFromString(params.queryId()),
-//              Integer.parseInt(params.ebId())).toString());
           chunk.setEbId(tableName);
           fileChunks.add(chunk);
         }
@@ -228,8 +216,6 @@ public class LocalFetcher extends AbstractFetcher {
         throw new IOException("Start pos[" + startPos + "] great than file length [" + file.length() + "]");
       }
       FileChunk chunk = new FileChunk(file, startPos, readLen);
-//      chunk.setEbId(QueryIdFactory.newExecutionBlockId(QueryIdFactory.queryIdFromString(params.queryId()),
-//          Integer.parseInt(params.ebId())).toString());
       chunk.setEbId(tableName);
       if (chunk.length() > 0) {
         fileChunks.add(chunk);
@@ -240,7 +226,10 @@ public class LocalFetcher extends AbstractFetcher {
   }
 
   public class HttpClientHandler extends ChannelInboundHandlerAdapter {
-    private long length = -1;
+    private int length = -1;
+    private int totalReceivedContentLength = 0;
+    private byte[] buf;
+    final Gson gson = new Gson();
 
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg)
@@ -263,7 +252,10 @@ public class LocalFetcher extends AbstractFetcher {
                   sb.append(name).append(" = ").append(value);
                 }
                 if (this.length == -1 && name.equals("Content-Length")) {
-                  this.length = Long.parseLong(value);
+                  this.length = Integer.parseInt(value);
+                  if (buf == null || buf.length < this.length) {
+                    buf = new byte[this.length];
+                  }
                 }
               }
             }
@@ -295,18 +287,30 @@ public class LocalFetcher extends AbstractFetcher {
         if (state != FetcherState.FETCH_FAILED) {
           try {
             if (content.isReadable()) {
-              byte[] buf = new byte[content.readableBytes()];
-              content.readBytes(buf);
-              Gson gson = new Gson();
-              List<String> jsonMetas = gson.fromJson(new String(buf), List.class);
-              for (String eachJson : jsonMetas) {
-                FileChunkMeta meta = gson.fromJson(eachJson, FileChunkMeta.class);
-                LOG.info("received file chunk meta: " + meta);
-                chunkMetas.add(meta);
+              int contentLength = content.readableBytes();
+              content.readBytes(buf, totalReceivedContentLength, contentLength);
+              totalReceivedContentLength += contentLength;
+              LOG.info("length: " + length + ", totalReceivedContentLength: " + totalReceivedContentLength);
+              if (totalReceivedContentLength == length) {
+                List<String> jsonMetas = gson.fromJson(new String(buf), List.class);
+                for (String eachJson : jsonMetas) {
+                  FileChunkMeta meta = gson.fromJson(eachJson, FileChunkMeta.class);
+                  LOG.info("received file chunk meta: " + meta);
+                  chunkMetas.add(meta);
+                }
+                totalReceivedContentLength = 0;
+                length = -1;
+              } else if (totalReceivedContentLength > length) {
+                // TODO
+                throw new IOException("Illegal length: " + totalReceivedContentLength + ", length: " + length);
               }
             }
-            finishTime = System.currentTimeMillis();
-            state = FetcherState.FETCH_FINISHED;
+            LOG.info("msg is instance of LastHttpContent: " + (msg instanceof LastHttpContent));
+            if (msg instanceof LastHttpContent) {
+              finishTime = System.currentTimeMillis();
+              state = FetcherState.FETCH_FINISHED;
+            }
+            LOG.info("state: " + state);
           } catch (Exception e) {
             LOG.error(e.getMessage(), e);
           } finally {

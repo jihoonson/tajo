@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -16,29 +16,38 @@
  * limitations under the License.
  */
 
-package org.apache.tajo.yarn;
+package org.apache.tajo.pullserver.retriever;
 
-import org.jboss.netty.channel.ChannelFuture;
-import org.jboss.netty.channel.ChannelFutureListener;
+public class FileChunkMeta {
+  private final long startOffset;
+  private final long length;
+  private final String ebId;
+  private final String taskId;
 
-public class FileCloseListener implements ChannelFutureListener {
-
-  private FadvisedFileRegion filePart;
-
-  public FileCloseListener(FadvisedFileRegion filePart) {
-    this.filePart = filePart;
+  public FileChunkMeta(long startOffset, long length, String ebId, String taskId) {
+    this.startOffset = startOffset;
+    this.length = length;
+    this.ebId = ebId;
+    this.taskId = taskId;
   }
 
-  // TODO error handling; distinguish IO/connection failures,
-  //      attribute to appropriate spill output
-  @Override
-  public void operationComplete(ChannelFuture future) {
-    if(future.isSuccess()){
-      filePart.transferSuccessful();
-    }
-    filePart.releaseExternalResources();
-//    if (pullServerService != null) {
-//      pullServerService.completeFileChunk(filePart, requestUri, startTime);
-//    }
+  public String getTaskId() {
+    return taskId;
+  }
+
+  public long getStartOffset() {
+    return startOffset;
+  }
+
+  public long getLength() {
+    return length;
+  }
+
+  public String getEbId() {
+    return ebId;
+  }
+
+  public String toString() {
+    return "ebId: " + ebId + ", taskId: " + taskId + " (" + startOffset + ", " + length + ")";
   }
 }

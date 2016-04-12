@@ -163,6 +163,7 @@ public class TajoTestingCluster {
     conf.setInt(ConfVars.$EXECUTOR_HASH_SHUFFLE_BUFFER_SIZE.varname, 1);
 
     conf.setIntVar(ConfVars.PULLSERVER_PORT, 39962);
+    conf.setBoolVar(ConfVars.YARN_SHUFFLE_SERVICE_ENABLED, true);
 
     /** decrease Hbase thread and memory cache for testing */
     //server handler
