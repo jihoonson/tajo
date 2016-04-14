@@ -37,6 +37,7 @@ import org.apache.tajo.ExecutionBlockId;
 import org.apache.tajo.TajoProtos;
 import org.apache.tajo.TaskAttemptId;
 import org.apache.tajo.TaskId;
+import org.apache.tajo.annotation.Nullable;
 import org.apache.tajo.conf.TajoConf;
 import org.apache.tajo.engine.query.QueryContext;
 import org.apache.tajo.exception.ErrorUtil;
@@ -103,10 +104,8 @@ public class ExecutionBlockContext {
 
   private final Map<TaskId, TaskHistory> taskHistories = Maps.newConcurrentMap();
 
-  private final TajoPullServerService pullServerService;
-
   public ExecutionBlockContext(TajoWorker.WorkerContext workerContext, ExecutionBlockContextResponse request,
-                               AsyncRpcClient queryMasterClient, TajoPullServerService pullServerService)
+                               AsyncRpcClient queryMasterClient, @Nullable TajoPullServerService pullServerService)
       throws IOException {
     this.executionBlockId = new ExecutionBlockId(request.getExecutionBlockId());
     this.connManager = RpcClientManager.getInstance();
@@ -124,7 +123,6 @@ public class ExecutionBlockContext {
     this.workerContext = workerContext;
     this.shuffleType = request.getShuffleType();
     this.queryMasterClient = queryMasterClient;
-    this.pullServerService = pullServerService;
   }
 
   public void init() throws Throwable {

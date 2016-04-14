@@ -22,7 +22,6 @@ import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 import com.google.common.cache.RemovalListener;
-import com.google.common.collect.Lists;
 import com.google.gson.Gson;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.Unpooled;
@@ -62,14 +61,11 @@ import org.apache.tajo.ExecutionBlockId;
 import org.apache.tajo.conf.TajoConf;
 import org.apache.tajo.conf.TajoConf.ConfVars;
 import org.apache.tajo.exception.InvalidURLException;
-import org.apache.tajo.pullserver.PullServerUtil.GetFileChunksResult;
+import org.apache.tajo.exception.TajoInternalError;
 import org.apache.tajo.pullserver.PullServerUtil.PullServerParams;
 import org.apache.tajo.pullserver.retriever.FileChunk;
-import org.apache.tajo.pullserver.retriever.FileChunkMeta;
 import org.apache.tajo.pullserver.retriever.IndexCacheKey;
 import org.apache.tajo.rpc.NettyUtils;
-import org.apache.tajo.storage.HashShuffleAppenderManager;
-import org.apache.tajo.storage.StorageUtil;
 import org.apache.tajo.storage.index.bst.BSTIndex;
 import org.apache.tajo.storage.index.bst.BSTIndex.BSTIndexReader;
 import org.apache.tajo.util.TajoIdUtils;
@@ -79,7 +75,6 @@ import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map.Entry;
-import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -89,12 +84,6 @@ import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
 public class TajoPullServerService extends AbstractService {
 
   private static final Log LOG = LogFactory.getLog(TajoPullServerService.class);
-
-  public static final String SHUFFLE_MANAGE_OS_CACHE = "tajo.pullserver.manage.os.cache";
-  public static final boolean DEFAULT_SHUFFLE_MANAGE_OS_CACHE = true;
-
-  public static final String SHUFFLE_READAHEAD_BYTES = "tajo.pullserver.readahead.bytes";
-  public static final int DEFAULT_SHUFFLE_READAHEAD_BYTES = 4 * 1024 * 1024;
 
   private int port;
   private ServerBootstrap selector;
@@ -116,18 +105,11 @@ public class TajoPullServerService extends AbstractService {
   private LoadingCache<IndexCacheKey, BSTIndexReader> indexReaderCache = null;
   private int lowCacheHitCheckThreshold;
 
-  public static final String SUFFLE_SSL_FILE_BUFFER_SIZE_KEY =
-    "tajo.pullserver.ssl.file.buffer.size";
-
-  public static final int DEFAULT_SUFFLE_SSL_FILE_BUFFER_SIZE = 60 * 1024;
-
   private static final boolean STANDALONE;
 
-  public static final String CHUNK_LENGTH_HEADER_NAME = "c";
-
   static {
-    String standalone = System.getenv("TAJO_PULLSERVER_STANDALONE");
-    STANDALONE = !StringUtils.isEmpty(standalone) && standalone.equalsIgnoreCase("true");
+    String standalone = System.getenv(PullServerConstants.PULLSERVER_STANDALONE_ENV_KEY);
+    STANDALONE = !StringUtils.isEmpty(standalone) && standalone.equalsIgnoreCase(Boolean.TRUE.toString());
   }
 
   @Metrics(name="PullServerShuffleMetrics", about="PullServer output metrics", context="tajo")
@@ -155,7 +137,7 @@ public class TajoPullServerService extends AbstractService {
   final ShuffleMetrics metrics;
 
   TajoPullServerService(MetricsSystem ms) {
-    super("httpshuffle");
+    super(PullServerConstants.PULLSERVER_SERVICE_NAME);
     metrics = ms.register(new ShuffleMetrics());
   }
 
@@ -164,45 +146,35 @@ public class TajoPullServerService extends AbstractService {
     this(DefaultMetricsSystem.instance());
   }
 
-  @Override
-  public void init(Configuration conf) {
-    try {
-      manageOsCache = conf.getBoolean(SHUFFLE_MANAGE_OS_CACHE,
-          DEFAULT_SHUFFLE_MANAGE_OS_CACHE);
-
-      readaheadLength = conf.getInt(SHUFFLE_READAHEAD_BYTES,
-          DEFAULT_SHUFFLE_READAHEAD_BYTES);
-
-      int workerNum = conf.getInt("tajo.shuffle.rpc.server.worker-thread-num",
-          Runtime.getRuntime().availableProcessors() * 2);
-
-      selector = NettyUtils.createServerBootstrap("TajoPullServerService", workerNum)
-                   .option(ChannelOption.TCP_NODELAY, true)
-                   .childOption(ChannelOption.ALLOCATOR, NettyUtils.ALLOCATOR)
-                   .childOption(ChannelOption.TCP_NODELAY, true);
-
-      localFS = new LocalFileSystem();
-
-      maxUrlLength = conf.getInt(ConfVars.PULLSERVER_FETCH_URL_MAX_LENGTH.name(),
-          ConfVars.PULLSERVER_FETCH_URL_MAX_LENGTH.defaultIntVal);
-      conf.setInt(TajoConf.ConfVars.PULLSERVER_PORT.varname,
-          conf.getInt(TajoConf.ConfVars.PULLSERVER_PORT.varname, TajoConf.ConfVars.PULLSERVER_PORT.defaultIntVal));
-      super.init(conf);
-      LOG.info("Tajo PullServer initialized: readaheadLength=" + readaheadLength);
-    } catch (Throwable t) {
-      LOG.error(t, t);
-    }
-  }
-
   // TODO change AbstractService to throw InterruptedException
   @Override
   public void serviceInit(Configuration conf) throws Exception {
     if (!(conf instanceof TajoConf)) {
       throw new IllegalArgumentException("Configuration must be a TajoConf instance");
     }
+    TajoConf tajoConf = (TajoConf) conf;
+
+    manageOsCache = tajoConf.getBoolean(PullServerConstants.SHUFFLE_MANAGE_OS_CACHE,
+        PullServerConstants.DEFAULT_SHUFFLE_MANAGE_OS_CACHE);
+
+    readaheadLength = tajoConf.getInt(PullServerConstants.SHUFFLE_READAHEAD_BYTES,
+        PullServerConstants.DEFAULT_SHUFFLE_READAHEAD_BYTES);
+
+    int workerNum = tajoConf.getIntVar(ConfVars.SHUFFLE_RPC_SERVER_WORKER_THREAD_NUM);
+
+    selector = NettyUtils.createServerBootstrap("TajoPullServerService", workerNum)
+        .option(ChannelOption.TCP_NODELAY, true)
+        .childOption(ChannelOption.ALLOCATOR, NettyUtils.ALLOCATOR)
+        .childOption(ChannelOption.TCP_NODELAY, true);
+
+    localFS = new LocalFileSystem();
+
+    maxUrlLength = tajoConf.getIntVar(ConfVars.PULLSERVER_FETCH_URL_MAX_LENGTH);
+//    conf.setInt(ConfVars.PULLSERVER_PORT.varname,
+//        conf.getInt(ConfVars.PULLSERVER_PORT.varname, ConfVars.PULLSERVER_PORT.defaultIntVal));
+    LOG.info("Tajo PullServer initialized: readaheadLength=" + readaheadLength);
 
     ServerBootstrap bootstrap = selector.clone();
-    TajoConf tajoConf = (TajoConf)conf;
     try {
       channelInitializer = new HttpChannelInitializer(tajoConf);
     } catch (Exception ex) {
@@ -221,8 +193,8 @@ public class TajoPullServerService extends AbstractService {
     tajoConf.set(ConfVars.PULLSERVER_PORT.varname, Integer.toString(port));
     LOG.info(getName() + " listening on port " + port);
 
-    sslFileBufferSize = conf.getInt(SUFFLE_SSL_FILE_BUFFER_SIZE_KEY,
-                                    DEFAULT_SUFFLE_SSL_FILE_BUFFER_SIZE);
+    sslFileBufferSize = conf.getInt(PullServerConstants.SUFFLE_SSL_FILE_BUFFER_SIZE_KEY,
+        PullServerConstants.DEFAULT_SUFFLE_SSL_FILE_BUFFER_SIZE);
 
     int cacheSize = tajoConf.getIntVar(ConfVars.PULLSERVER_CACHE_SIZE);
     int cacheTimeout = tajoConf.getIntVar(ConfVars.PULLSERVER_CACHE_TIMEOUT);
@@ -302,29 +274,25 @@ public class TajoPullServerService extends AbstractService {
   }
 
   @Override
-  public void stop() {
-    try {
-      accepted.close();
-      if (selector != null) {
-        if (selector.group() != null) {
-          selector.group().shutdownGracefully();
-        }
-        if (selector.childGroup() != null) {
-          selector.childGroup().shutdownGracefully();
-        }
+  public void serviceStop() throws Exception {
+    accepted.close();
+    if (selector != null) {
+      if (selector.group() != null) {
+        selector.group().shutdownGracefully();
       }
-
-      if (channelInitializer != null) {
-        channelInitializer.destroy();
+      if (selector.childGroup() != null) {
+        selector.childGroup().shutdownGracefully();
       }
-
-      localFS.close();
-      indexReaderCache.invalidateAll();
-    } catch (Throwable t) {
-      LOG.error(t, t);
-    } finally {
-      super.stop();
     }
+
+    if (channelInitializer != null) {
+      channelInitializer.destroy();
+    }
+
+    localFS.close();
+    indexReaderCache.invalidateAll();
+
+    super.serviceStop();
   }
 
   class HttpChannelInitializer extends ChannelInitializer<SocketChannel> {
@@ -334,8 +302,7 @@ public class TajoPullServerService extends AbstractService {
 
     public HttpChannelInitializer(TajoConf conf) throws Exception {
       PullServer = new PullServer(conf);
-      if (conf.getBoolean(ConfVars.SHUFFLE_SSL_ENABLED_KEY.varname,
-          ConfVars.SHUFFLE_SSL_ENABLED_KEY.defaultBoolVal)) {
+      if (conf.getBoolVar(ConfVars.SHUFFLE_SSL_ENABLED_KEY)) {
         sslFactory = new SSLFactory(SSLFactory.Mode.SERVER, conf);
         sslFactory.init();
       }
@@ -473,33 +440,6 @@ public class TajoPullServerService extends AbstractService {
 
     private void handleMetaRequest(ChannelHandlerContext ctx, FullHttpRequest request, final PullServerParams params)
         throws IOException, ExecutionException {
-//      final List<String> taskIds = PullServerUtil.splitMaps(params.taskAttemptIds());
-//      final Path queryBaseDir = PullServerUtil.getBaseOutputDir(params.queryId(), params.ebId());
-//      final List<String> jsonMetas = new ArrayList<>();
-//
-//      for (String eachTaskId : taskIds) {
-//        Path outputPath = StorageUtil.concatPath(queryBaseDir, eachTaskId, "output");
-//        if (!lDirAlloc.ifExists(outputPath.toString(), conf)) {
-//          LOG.warn("Range shuffle - file not exist. " + outputPath);
-//          continue;
-//        }
-//        Path path = localFS.makeQualified(lDirAlloc.getLocalPathToRead(outputPath.toString(), conf));
-//        FileChunkMeta meta;
-//        try {
-//          meta = PullServerUtil.getFileChunkMeta(params.queryId(), params.ebId(), eachTaskId, path,
-//              params.startKey(), params.endKey(), params.last(), indexReaderCache, lowCacheHitCheckThreshold);
-//        } catch (Throwable t) {
-//          LOG.error("Cannot find the file chunk meta for task " + eachTaskId);
-//          sendError(ctx, "Cannot get file chunks to be sent", HttpResponseStatus.BAD_REQUEST);
-//          return;
-//        }
-//        if (meta != null) {
-//          String jsonStr = gson.toJson(meta, FileChunkMeta.class);
-//          LOG.info(jsonStr);
-//          jsonMetas.add(jsonStr);
-//        }
-//      }
-
       final List<String> jsonMetas;
       try {
         jsonMetas = PullServerUtil.getJsonMeta(conf, lDirAlloc, localFS, params, gson, indexReaderCache,
@@ -528,115 +468,19 @@ public class TajoPullServerService extends AbstractService {
 
     private void handleChunkRequest(ChannelHandlerContext ctx, FullHttpRequest request, final PullServerParams params)
         throws IOException {
-//      final List<FileChunk> chunks = Lists.newArrayList();
-//
-//      final String queryId = params.queryId();
-//      final String shuffleType = params.shuffleType();
-//      final String sid =  params.ebId();
-//
-//      final long offset = params.offset();
-//      final long length = params.length();
-//
-//      final Path queryBaseDir = PullServerUtil.getBaseOutputDir(queryId, sid);
-//
-//      if (LOG.isDebugEnabled()) {
-//        LOG.debug("PullServer request param: shuffleType=" + shuffleType + ", sid=" + sid);
-//
-//        // the working dir of tajo worker for each query
-//        LOG.debug("PullServer baseDir: " + conf.get(ConfVars.WORKER_TEMPORAL_DIR.varname) + "/" + queryBaseDir);
-//      }
-//
-//      // if a stage requires a range shuffle
-//      if (PullServerUtil.isRangeShuffle(shuffleType)) {
-//        final List<String> taskIdList = params.taskAttemptIds();
-//        final List<String> taskIds = PullServerUtil.splitMaps(taskIdList);
-//
-//        final String startKey = params.startKey();
-//        final String endKey = params.endKey();
-//        final boolean last = params.last();
-//
-//        long before = System.currentTimeMillis();
-//        for (String eachTaskId : taskIds) {
-//          Path outputPath = StorageUtil.concatPath(queryBaseDir, eachTaskId, "output");
-//          if (!lDirAlloc.ifExists(outputPath.toString(), conf)) {
-//            LOG.warn(outputPath + " does not exist.");
-//            continue;
-//          }
-//          Path path = localFS.makeQualified(lDirAlloc.getLocalPathToRead(outputPath.toString(), conf));
-//
-//          FileChunk chunk;
-//          try {
-//            chunk = PullServerUtil.getFileChunks(queryId, sid, path, startKey, endKey, last, indexReaderCache,
-//                lowCacheHitCheckThreshold);
-//          } catch (Throwable t) {
-//            LOG.error("ERROR Request: " + request.getUri(), t);
-//            sendError(ctx, "Cannot get file chunks to be sent", HttpResponseStatus.BAD_REQUEST);
-//            return;
-//          }
-//          if (chunk != null) {
-//            chunks.add(chunk);
-//          }
-//        }
-//        long after = System.currentTimeMillis();
-//        LOG.info("Index lookup time: " + (after - before) + " ms");
-//
-//        // if a stage requires a hash shuffle or a scattered hash shuffle
-//      } else if (PullServerUtil.isHashShuffle(shuffleType)) {
-//
-//        final String partId = params.partId();
-//        int partParentId = HashShuffleAppenderManager.getPartParentId(Integer.parseInt(partId), conf);
-//        Path partPath = StorageUtil.concatPath(queryBaseDir, "hash-shuffle", String.valueOf(partParentId), partId);
-//        if (!lDirAlloc.ifExists(partPath.toString(), conf)) {
-//          LOG.warn("Partition shuffle file not exists: " + partPath);
-//          sendError(ctx, HttpResponseStatus.NO_CONTENT);
-//          return;
-//        }
-//
-//        Path path = localFS.makeQualified(lDirAlloc.getLocalPathToRead(partPath.toString(), conf));
-//
-//        File file = new File(path.toUri());
-//        long startPos = (offset >= 0 && length >= 0) ? offset : 0;
-//        long readLen = (offset >= 0 && length >= 0) ? length : file.length();
-//
-//        if (startPos >= file.length()) {
-//          String errorMessage = "Start pos[" + startPos + "] great than file length [" + file.length() + "]";
-//          LOG.error(errorMessage);
-//          sendError(ctx, errorMessage, HttpResponseStatus.BAD_REQUEST);
-//          return;
-//        }
-//        if (LOG.isDebugEnabled()) {
-//          LOG.debug("RequestURL: " + request.getUri() + ", fileLen=" + file.length());
-//        }
-//        FileChunk chunk = new FileChunk(file, startPos, readLen);
-//        chunks.add(chunk);
-//      } else {
-//        LOG.error("Unknown shuffle type: " + shuffleType);
-//        sendError(ctx, "Unknown shuffle type:" + shuffleType, HttpResponseStatus.BAD_REQUEST);
-//        return;
-//      }
-
       final List<FileChunk> chunks;
-
-      final GetFileChunksResult result = PullServerUtil.getFileChunks(conf, lDirAlloc, localFS, params, indexReaderCache,
-          lowCacheHitCheckThreshold);
-      if (result.isGood()) {
-        chunks = result.getChunks();
-      } else {
-        final Optional<Exception> optional = result.getCause();
-        if (optional.isPresent()) {
-          Exception cause = optional.get();
-          LOG.error(cause);
-          if (cause instanceof FileNotFoundException) {
-            sendError(ctx, cause.getMessage(), HttpResponseStatus.NO_CONTENT);
-            return;
-          } else {
-            sendError(ctx, "request uri: " + request.getUri(), HttpResponseStatus.BAD_REQUEST);
-            return;
-          }
-        } else {
-          sendError(ctx, "request uri: " + request.getUri(), HttpResponseStatus.BAD_REQUEST);
-          return;
-        }
+      try {
+        chunks = PullServerUtil.getFileChunks(conf, lDirAlloc, localFS, params, indexReaderCache,
+            lowCacheHitCheckThreshold);
+      } catch (FileNotFoundException e) {
+        sendError(ctx, e.getMessage(), HttpResponseStatus.NO_CONTENT);
+        return;
+      } catch (IOException | IllegalArgumentException e) { // IOException, EOFException, IllegalArgumentException
+        sendError(ctx, e.getMessage(), HttpResponseStatus.BAD_REQUEST);
+        return;
+      } catch (ExecutionException e) {
+        // There are some problems in index cache
+        throw new TajoInternalError(e.getCause());
       }
 
       // Write the content.
@@ -660,7 +504,7 @@ public class TajoPullServerService extends AbstractService {
           sb.append(Long.toString(chunk.length())).append(",");
         }
         sb.deleteCharAt(sb.length() - 1);
-        HttpHeaders.addHeader(response, CHUNK_LENGTH_HEADER_NAME, sb.toString());
+        HttpHeaders.addHeader(response, PullServerConstants.CHUNK_LENGTH_HEADER_NAME, sb.toString());
         HttpHeaders.setContentLength(response, totalSize);
 
         if (HttpHeaders.isKeepAlive(request)) {

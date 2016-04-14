@@ -136,7 +136,7 @@ public class RemoteFetcher extends AbstractFetcher {
         if (eachChunkLength == 0) continue;
         FileChunk chunk = new FileChunk(fileChunk.getFile(), start, eachChunkLength);
         chunk.setEbId(fileChunk.getEbId());
-        chunk.setFromRemote(fileChunk.fromRemote());
+        chunk.setFromRemote(true);
         fileChunks.add(chunk);
         start += eachChunkLength;
       }

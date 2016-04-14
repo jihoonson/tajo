@@ -50,6 +50,7 @@ import org.apache.tajo.plan.logical.SortNode.SortPurpose;
 import org.apache.tajo.plan.serder.PlanProto.DistinctGroupbyEnforcer.MultipleAggregationStage;
 import org.apache.tajo.plan.serder.PlanProto.EnforceProperty;
 import org.apache.tajo.plan.util.PlannerUtil;
+import org.apache.tajo.pullserver.PullServerConstants;
 import org.apache.tajo.pullserver.PullServerUtil;
 import org.apache.tajo.pullserver.PullServerUtil.PullServerRequestURIBuilder;
 import org.apache.tajo.querymaster.Task.IntermediateEntry;
@@ -1128,19 +1129,20 @@ public class Repartitioner {
     PullServerRequestURIBuilder builder =
         new PullServerRequestURIBuilder(fetch.getHost(), fetch.getPort(), maxUrlLength);
     ExecutionBlockId ebId = new ExecutionBlockId(fetch.getExecutionBlockId());
-    builder.setRequestType(PullServerUtil.CHUNK_REQUEST_PARAM_STRING)
+    builder.setRequestType(PullServerConstants.CHUNK_REQUEST_PARAM_STRING)
         .setQueryId(ebId.getQueryId().toString())
         .setEbId(ebId.getId())
         .setPartId(fetch.getPartitionId());
+
     if (fetch.getType() == HASH_SHUFFLE) {
-      builder.setShuffleType(PullServerUtil.HASH_SHUFFLE_PARAM_STRING);
+      builder.setShuffleType(PullServerConstants.HASH_SHUFFLE_PARAM_STRING);
     } else if (fetch.getType() == RANGE_SHUFFLE) {
-      builder.setShuffleType(PullServerUtil.RANGE_SHUFFLE_PARAM_STRING);
+      builder.setShuffleType(PullServerConstants.RANGE_SHUFFLE_PARAM_STRING);
       builder.setStartKeyBase64(new String(org.apache.commons.codec.binary.Base64.encodeBase64(fetch.getRangeStart().toByteArray())));
       builder.setEndKeyBase64(new String(org.apache.commons.codec.binary.Base64.encodeBase64(fetch.getRangeEnd().toByteArray())));
       builder.setLast(fetch.getRangeLastInclusive());
     } else if (fetch.getType() == SCATTERED_HASH_SHUFFLE) {
-      builder.setShuffleType(PullServerUtil.SCATTERED_HASH_SHUFFLE_PARAM_STRING);
+      builder.setShuffleType(PullServerConstants.SCATTERED_HASH_SHUFFLE_PARAM_STRING);
     }
     if (fetch.getLength() >= 0) {
       builder.setOffset(fetch.getOffset()).setLength(fetch.getLength());

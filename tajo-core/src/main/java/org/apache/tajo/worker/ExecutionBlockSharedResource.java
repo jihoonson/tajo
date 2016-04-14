@@ -57,6 +57,10 @@ public class ExecutionBlockSharedResource {
   private boolean codeGenEnabled = false;
   private final TajoPullServerService pullServerService;
 
+  public ExecutionBlockSharedResource() {
+    this(null);
+  }
+
   public ExecutionBlockSharedResource(@Nullable TajoPullServerService pullServerService) {
     this.pullServerService = pullServerService;
   }

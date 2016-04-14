@@ -35,8 +35,9 @@ import org.apache.tajo.TajoProtos.FetcherState;
 import org.apache.tajo.conf.TajoConf;
 import org.apache.tajo.conf.TajoConf.ConfVars;
 import org.apache.tajo.exception.TajoInternalError;
+import org.apache.tajo.pullserver.PullServerConstants;
+import org.apache.tajo.pullserver.PullServerConstants.Param;
 import org.apache.tajo.pullserver.PullServerUtil;
-import org.apache.tajo.pullserver.PullServerUtil.Param;
 import org.apache.tajo.pullserver.PullServerUtil.PullServerParams;
 import org.apache.tajo.pullserver.PullServerUtil.PullServerRequestURIBuilder;
 import org.apache.tajo.pullserver.TajoPullServerService;
@@ -82,6 +83,7 @@ public class LocalFetcher extends AbstractFetcher {
       this.pullServerService = optional.get();
       this.host = null;
       this.bootstrap = null;
+
     } else if (PullServerUtil.useExternalPullServerService(conf)) {
       // external pull server service
       pullServerService = null;
@@ -100,25 +102,25 @@ public class LocalFetcher extends AbstractFetcher {
       bootstrap = new Bootstrap()
           .group(
               NettyUtils.getSharedEventLoopGroup(NettyUtils.GROUP.FETCHER,
-                  conf.getIntVar(TajoConf.ConfVars.SHUFFLE_RPC_CLIENT_WORKER_THREAD_NUM)))
+                  conf.getIntVar(ConfVars.SHUFFLE_RPC_CLIENT_WORKER_THREAD_NUM)))
           .channel(NioSocketChannel.class)
           .option(ChannelOption.ALLOCATOR, NettyUtils.ALLOCATOR)
           .option(ChannelOption.CONNECT_TIMEOUT_MILLIS,
-              conf.getIntVar(TajoConf.ConfVars.SHUFFLE_FETCHER_CONNECT_TIMEOUT) * 1000)
+              conf.getIntVar(ConfVars.SHUFFLE_FETCHER_CONNECT_TIMEOUT) * 1000)
           .option(ChannelOption.SO_RCVBUF, 1048576) // set 1M
           .option(ChannelOption.TCP_NODELAY, true);
     } else {
-      throw new TajoInternalError("Pull server service is not specified");
+      throw new TajoInternalError("Pull server service is not initialized");
     }
   }
 
   @Override
   public List<FileChunk> get() throws IOException {
-    return pullServerService != null ? getFromInternalPullServer() : getFromExternalPullServer();
+    return pullServerService != null ? getDirect() : getFromFetchURI();
   }
 
-  private List<FileChunk> getFromInternalPullServer() {
-    List<FileChunk> fileChunks = new ArrayList<>();
+  private List<FileChunk> getDirect() {
+    final List<FileChunk> fileChunks = new ArrayList<>();
     startTime = System.currentTimeMillis();
     finishTime = System.currentTimeMillis();
     state = TajoProtos.FetcherState.FETCH_FINISHED;
@@ -127,101 +129,115 @@ public class LocalFetcher extends AbstractFetcher {
     return fileChunks;
   }
 
-  private List<FileChunk> getFromExternalPullServer() throws IOException {
+  private List<FileChunk> getFromFetchURI() throws IOException {
     final PullServerParams params = new PullServerParams(uri.toString());
-    Path queryBaseDir = PullServerUtil.getBaseOutputDir(params.queryId(), params.ebId());
-    List<FileChunk> fileChunks = new ArrayList<>();
+    final Path queryBaseDir = PullServerUtil.getBaseOutputDir(params.queryId(), params.ebId());
 
-    if (params.shuffleType().equals(PullServerUtil.RANGE_SHUFFLE_PARAM_STRING)) {
-      if (state == FetcherState.FETCH_INIT) {
-        ChannelInitializer<Channel> initializer = new HttpClientChannelInitializer();
-        bootstrap.handler(initializer);
-      }
-
-      this.startTime = System.currentTimeMillis();
-      this.state = TajoProtos.FetcherState.FETCH_FETCHING;
-      ChannelFuture future = null;
-      try {
-        future = bootstrap.clone().connect(new InetSocketAddress(host, port))
-            .addListener(ChannelFutureListener.FIRE_EXCEPTION_ON_FAILURE);
-
-        // Wait until the connection attempt succeeds or fails.
-        Channel channel = future.awaitUninterruptibly().channel();
-        if (!future.isSuccess()) {
-          state = TajoProtos.FetcherState.FETCH_FAILED;
-          throw new IOException(future.cause());
-        }
-
-        List<URI> metaRequestURIs = createChunkMetaRequestURL(host, port, params);
-
-        for (URI eachURI : metaRequestURIs) {
-          String query = eachURI.getPath()
-              + (eachURI.getRawQuery() != null ? "?" + eachURI.getRawQuery() : "");
-          LOG.info("meta request query: " + query);
-          HttpRequest request = new DefaultHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, query);
-          request.headers().set(HttpHeaders.Names.HOST, host);
-          request.headers().set(HttpHeaders.Names.CONNECTION, HttpHeaders.Values.CLOSE);
-          request.headers().set(HttpHeaders.Names.ACCEPT_ENCODING, HttpHeaders.Values.GZIP);
-
-          if(LOG.isDebugEnabled()) {
-            LOG.debug("Status: " + getState() + ", URI:" + eachURI);
-          }
-          // Send the HTTP request.
-          channel.writeAndFlush(request);
-        }
-        // Wait for the server to close the connection. throw exception if failed
-        channel.closeFuture().syncUninterruptibly();
-
-        for (FileChunkMeta eachMeta : chunkMetas) {
-          Path outputPath = StorageUtil.concatPath(queryBaseDir, eachMeta.getTaskId(), "output");
-          if (!executionBlockContext.getLocalDirAllocator().ifExists(outputPath.toString(), conf)) {
-            LOG.warn("Range shuffle - file not exist. " + outputPath);
-            continue;
-          }
-          Path path = executionBlockContext.getLocalFS().makeQualified(
-              executionBlockContext.getLocalDirAllocator().getLocalPathToRead(outputPath.toString(), conf));
-          FileChunk chunk = new FileChunk(new File(URI.create(path.toUri() + "/output")),
-              eachMeta.getStartOffset(), eachMeta.getLength());
-          chunk.setEbId(tableName);
-          fileChunks.add(chunk);
-        }
-
-        LOG.info("# of file chunks: " + fileChunks.size());
-        return fileChunks;
-      } finally {
-        if(future != null && future.channel().isOpen()){
-          // Close the channel to exit.
-          future.channel().close().awaitUninterruptibly();
-        }
-
-        this.finishTime = System.currentTimeMillis();
-      }
+    if (PullServerUtil.isRangeShuffle(params.shuffleType())) {
+      return getChunksForRangeShuffle(params, queryBaseDir);
+    } else if (PullServerUtil.isHashShuffle(params.shuffleType())) {
+      return getChunksForHashShuffle(params, queryBaseDir);
     } else {
-      String partId = params.partId();
-      long offset = params.offset();
-      long length = params.length();
-      int partParentId = HashShuffleAppenderManager.getPartParentId(Integer.parseInt(partId), conf);
-      Path partPath = StorageUtil.concatPath(queryBaseDir, "hash-shuffle", String.valueOf(partParentId), partId);
+      throw new IllegalArgumentException("unknown shuffle type: " + params.shuffleType());
+    }
+  }
 
-      if (!executionBlockContext.getLocalDirAllocator().ifExists(partPath.toString(), conf)) {
-        throw new IOException("Hash shuffle or Scattered hash shuffle - file not exist: " + partPath);
-      }
-      Path path = executionBlockContext.getLocalFS().makeQualified(
-          executionBlockContext.getLocalDirAllocator().getLocalPathToRead(partPath.toString(), conf));
-      File file = new File(path.toUri());
-      long startPos = (offset >= 0 && length >= 0) ? offset : 0;
-      long readLen = (offset >= 0 && length >= 0) ? length : file.length();
+  private List<FileChunk> getChunksForHashShuffle(final PullServerParams params, final Path queryBaseDir)
+      throws IOException {
+    final List<FileChunk> fileChunks = new ArrayList<>();
+    final String partId = params.partId();
+    final long offset = params.offset();
+    final long length = params.length();
+    final int partParentId = HashShuffleAppenderManager.getPartParentId(Integer.parseInt(partId), conf);
+    final Path partPath = StorageUtil.concatPath(queryBaseDir, "hash-shuffle", String.valueOf(partParentId), partId);
 
-      if (startPos >= file.length()) {
-        throw new IOException("Start pos[" + startPos + "] great than file length [" + file.length() + "]");
-      }
-      FileChunk chunk = new FileChunk(file, startPos, readLen);
+    if (!executionBlockContext.getLocalDirAllocator().ifExists(partPath.toString(), conf)) {
+      throw new IOException("Hash shuffle or Scattered hash shuffle - file not exist: " + partPath);
+    }
+    final Path path = executionBlockContext.getLocalFS().makeQualified(
+        executionBlockContext.getLocalDirAllocator().getLocalPathToRead(partPath.toString(), conf));
+    final File file = new File(path.toUri());
+    final long startPos = (offset >= 0 && length >= 0) ? offset : 0;
+    final long readLen = (offset >= 0 && length >= 0) ? length : file.length();
+
+    if (startPos >= file.length()) {
+      throw new IOException("Start pos[" + startPos + "] great than file length [" + file.length() + "]");
+    }
+    if (readLen > 0) {
+      final FileChunk chunk = new FileChunk(file, startPos, readLen);
       chunk.setEbId(tableName);
-      if (chunk.length() > 0) {
+      chunk.setFromRemote(false);
+      fileChunks.add(chunk);
+    }
+
+    finishTime = System.currentTimeMillis();
+    state = FetcherState.FETCH_FINISHED;
+    return fileChunks;
+  }
+
+  private List<FileChunk> getChunksForRangeShuffle(final PullServerParams params, final Path queryBaseDir)
+      throws IOException {
+    final List<FileChunk> fileChunks = new ArrayList<>();
+
+    if (state == FetcherState.FETCH_INIT) {
+      final ChannelInitializer<Channel> initializer = new HttpClientChannelInitializer();
+      bootstrap.handler(initializer);
+    }
+
+    this.startTime = System.currentTimeMillis();
+    this.state = TajoProtos.FetcherState.FETCH_FETCHING;
+    ChannelFuture future = null;
+    try {
+      future = bootstrap.clone().connect(new InetSocketAddress(host, port))
+          .addListener(ChannelFutureListener.FIRE_EXCEPTION_ON_FAILURE);
+
+      // Wait until the connection attempt succeeds or fails.
+      Channel channel = future.awaitUninterruptibly().channel();
+      if (!future.isSuccess()) {
+        state = TajoProtos.FetcherState.FETCH_FAILED;
+        throw new IOException(future.cause());
+      }
+
+      for (URI eachURI : createChunkMetaRequestURIs(host, port, params)) {
+        String query = eachURI.getPath()
+            + (eachURI.getRawQuery() != null ? "?" + eachURI.getRawQuery() : "");
+        HttpRequest request = new DefaultHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, query);
+        request.headers().set(HttpHeaders.Names.HOST, host);
+        request.headers().set(HttpHeaders.Names.CONNECTION, HttpHeaders.Values.CLOSE);
+        request.headers().set(HttpHeaders.Names.ACCEPT_ENCODING, HttpHeaders.Values.GZIP);
+
+        if(LOG.isDebugEnabled()) {
+          LOG.debug("Status: " + getState() + ", URI:" + eachURI);
+        }
+        // Send the HTTP request.
+        channel.writeAndFlush(request);
+      }
+      // Wait for the server to close the connection. throw exception if failed
+      channel.closeFuture().syncUninterruptibly();
+
+      for (FileChunkMeta eachMeta : chunkMetas) {
+        Path outputPath = StorageUtil.concatPath(queryBaseDir, eachMeta.getTaskId(), "output");
+        if (!executionBlockContext.getLocalDirAllocator().ifExists(outputPath.toString(), conf)) {
+          LOG.warn("Range shuffle - file not exist. " + outputPath);
+          continue;
+        }
+        Path path = executionBlockContext.getLocalFS().makeQualified(
+            executionBlockContext.getLocalDirAllocator().getLocalPathToRead(outputPath.toString(), conf));
+        FileChunk chunk = new FileChunk(new File(URI.create(path.toUri() + "/output")),
+            eachMeta.getStartOffset(), eachMeta.getLength());
+        chunk.setEbId(tableName);
         fileChunks.add(chunk);
       }
-      state = FetcherState.FETCH_FINISHED;
+
       return fileChunks;
+    } finally {
+      if(future != null && future.channel().isOpen()){
+        // Close the channel to exit.
+        future.channel().close().awaitUninterruptibly();
+      }
+
+      finishTime = System.currentTimeMillis();
+      state = FetcherState.FETCH_FINISHED;
     }
   }
 
@@ -229,7 +245,7 @@ public class LocalFetcher extends AbstractFetcher {
     private int length = -1;
     private int totalReceivedContentLength = 0;
     private byte[] buf;
-    final Gson gson = new Gson();
+    private final Gson gson = new Gson();
 
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg)
@@ -302,15 +318,15 @@ public class LocalFetcher extends AbstractFetcher {
                 length = -1;
               } else if (totalReceivedContentLength > length) {
                 // TODO
-                throw new IOException("Illegal length: " + totalReceivedContentLength + ", length: " + length);
+                throw new IOException("Illegal length: " + totalReceivedContentLength + ", expected length: " + length);
               }
             }
-            LOG.info("msg is instance of LastHttpContent: " + (msg instanceof LastHttpContent));
-            if (msg instanceof LastHttpContent) {
-              finishTime = System.currentTimeMillis();
-              state = FetcherState.FETCH_FINISHED;
-            }
-            LOG.info("state: " + state);
+//            LOG.info("msg is instance of LastHttpContent: " + (msg instanceof LastHttpContent));
+//            if (msg instanceof LastHttpContent) {
+//              finishTime = System.currentTimeMillis();
+//              state = FetcherState.FETCH_FINISHED;
+//            }
+//            LOG.info("state: " + state);
           } catch (Exception e) {
             LOG.error(e.getMessage(), e);
           } finally {
@@ -357,8 +373,8 @@ public class LocalFetcher extends AbstractFetcher {
     protected void initChannel(Channel channel) throws Exception {
       ChannelPipeline pipeline = channel.pipeline();
 
-      int maxChunkSize = conf.getIntVar(TajoConf.ConfVars.SHUFFLE_FETCHER_CHUNK_MAX_SIZE);
-      int readTimeout = conf.getIntVar(TajoConf.ConfVars.SHUFFLE_FETCHER_READ_TIMEOUT);
+      int maxChunkSize = conf.getIntVar(ConfVars.SHUFFLE_FETCHER_CHUNK_MAX_SIZE);
+      int readTimeout = conf.getIntVar(ConfVars.SHUFFLE_FETCHER_READ_TIMEOUT);
 
       pipeline.addLast("codec", new HttpClientCodec(4096, 8192, maxChunkSize));
       pipeline.addLast("inflater", new HttpContentDecompressor());
@@ -367,9 +383,9 @@ public class LocalFetcher extends AbstractFetcher {
     }
   }
 
-  private List<URI> createChunkMetaRequestURL(String pullServerAddr, int pullServerPort, PullServerParams params) {
-    PullServerRequestURIBuilder builder = new PullServerRequestURIBuilder(pullServerAddr, pullServerPort, maxUrlLength);
-    builder.setRequestType(PullServerUtil.META_REQUEST_PARAM_STRING)
+  private List<URI> createChunkMetaRequestURIs(String pullServerAddr, int pullServerPort, PullServerParams params) {
+    final PullServerRequestURIBuilder builder = new PullServerRequestURIBuilder(pullServerAddr, pullServerPort, maxUrlLength);
+    builder.setRequestType(PullServerConstants.META_REQUEST_PARAM_STRING)
         .setQueryId(params.queryId())
         .setShuffleType(params.shuffleType())
         .setEbId(params.ebId())
@@ -379,7 +395,7 @@ public class LocalFetcher extends AbstractFetcher {
       builder.setOffset(params.offset()).setLength(params.length());
     }
 
-    if (params.shuffleType().equals(PullServerUtil.RANGE_SHUFFLE_PARAM_STRING)) {
+    if (PullServerUtil.isRangeShuffle(params.shuffleType())) {
       builder.setStartKeyBase64(params.startKey())
           .setEndKeyBase64(params.endKey())
           .setLast(params.last());

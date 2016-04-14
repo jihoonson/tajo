@@ -37,6 +37,7 @@ import org.apache.tajo.engine.function.FunctionLoader;
 import org.apache.tajo.master.cluster.WorkerConnectionInfo;
 import org.apache.tajo.metrics.Node;
 import org.apache.tajo.plan.function.python.PythonScriptEngine;
+import org.apache.tajo.pullserver.PullServerUtil;
 import org.apache.tajo.pullserver.TajoPullServerService;
 import org.apache.tajo.querymaster.QueryMaster;
 import org.apache.tajo.querymaster.QueryMasterManagerService;
@@ -143,7 +144,7 @@ public class TajoWorker extends CompositeService {
     queryMasterManagerService = new QueryMasterManagerService(workerContext, qmManagerPort);
     addIfService(queryMasterManagerService);
 
-    if (!useExternalPullServer(systemConf)) {
+    if (!PullServerUtil.useExternalPullServerService(systemConf)) {
       pullService = new TajoPullServerService();
       addIfService(pullService);
     }
@@ -153,7 +154,7 @@ public class TajoWorker extends CompositeService {
 //      addIfService(pullService);
 //    }
 
-    this.taskManager = new TaskManager(dispatcher, workerContext);
+    this.taskManager = new TaskManager(dispatcher, workerContext, pullService);
     addService(taskManager);
 
     this.taskExecutor = new TaskExecutor(workerContext);
@@ -478,12 +479,6 @@ public class TajoWorker extends CompositeService {
     public HistoryReader getHistoryReader() {
       return historyReader;
     }
-  }
-
-  private static boolean useExternalPullServer(TajoConf conf) {
-    // TODO: check for mesos
-    return TajoPullServerService.isStandalone()
-        || conf.getBoolVar(ConfVars.YARN_SHUFFLE_SERVICE_ENABLED);
   }
 
   private int getStandAlonePullServerPort() {

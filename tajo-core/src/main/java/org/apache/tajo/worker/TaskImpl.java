@@ -53,8 +53,6 @@ import org.apache.tajo.plan.serder.PlanProto.EnforceProperty;
 import org.apache.tajo.plan.serder.PlanProto.EnforceProperty.EnforceType;
 import org.apache.tajo.plan.serder.PlanProto.ShuffleType;
 import org.apache.tajo.plan.util.PlannerUtil;
-import org.apache.tajo.pullserver.PullServerUtil;
-import org.apache.tajo.pullserver.TajoPullServerService;
 import org.apache.tajo.pullserver.retriever.FileChunk;
 import org.apache.tajo.querymaster.Repartitioner;
 import org.apache.tajo.rpc.NullCallback;
@@ -378,7 +376,7 @@ public class TaskImpl implements Task {
 
   private void waitForFetch() throws InterruptedException, IOException {
     context.getFetchLatch().await();
-    LOG.info(context.getTaskId() + " All fetches are done!" + localChunks.size() + " " + remoteChunks.size());
+    LOG.info(context.getTaskId() + " All fetches are done!");
     Collection<String> inputs = Lists.newArrayList(context.getInputTables());
 
     // Get all broadcasted tables

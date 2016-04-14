@@ -30,11 +30,10 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.LocalDirAllocator;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.nativeio.NativeIO;
-import org.apache.tajo.ExecutionBlockId;
 import org.apache.tajo.catalog.Schema;
 import org.apache.tajo.conf.TajoConf;
 import org.apache.tajo.conf.TajoConf.ConfVars;
-import org.apache.tajo.exception.InvalidURLException;
+import org.apache.tajo.pullserver.PullServerConstants.Param;
 import org.apache.tajo.pullserver.retriever.FileChunk;
 import org.apache.tajo.pullserver.retriever.FileChunkMeta;
 import org.apache.tajo.pullserver.retriever.IndexCacheKey;
@@ -42,15 +41,15 @@ import org.apache.tajo.storage.*;
 import org.apache.tajo.storage.RowStoreUtil.RowStoreDecoder;
 import org.apache.tajo.storage.index.bst.BSTIndex.BSTIndexReader;
 import org.apache.tajo.util.Pair;
-import org.apache.tajo.util.TajoIdUtils;
 
 import java.io.*;
 import java.lang.reflect.Method;
 import java.net.URI;
 import java.net.URLEncoder;
-import java.util.*;
-import java.util.Map.Entry;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -142,55 +141,22 @@ public class PullServerUtil {
     return ret;
   }
 
-  public enum Param {
-    // Common params
-    REQUEST_TYPE("rtype"),  // can be one of 'm' for meta and 'c' for chunk.
-    SHUFFLE_TYPE("stype"),  // can be one of 'r', 'h', and 's'.
-    QUERY_ID("qid"),
-    EB_ID("sid"),
-    PART_ID("p"),
-    TASK_ID("ta"),
-    OFFSET("offset"),
-    LENGTH("length"),
-
-    // Range shuffle params
-    START("start"),
-    END("end"),
-    FINAL("final");
-
-    private String key;
-
-    Param(String key) {
-      this.key = key;
-    }
-
-    public String key() {
-      return key;
-    }
-  }
-
-  public static final String CHUNK_REQUEST_PARAM_STRING = "c";
-  public static final String META_REQUEST_PARAM_STRING = "m";
-
-  public static final String RANGE_SHUFFLE_PARAM_STRING = "r";
-  public static final String HASH_SHUFFLE_PARAM_STRING = "h";
-  public static final String SCATTERED_HASH_SHUFFLE_PARAM_STRING = "s";
 
   public static boolean isChunkRequest(String requestType) {
-    return requestType.equals(CHUNK_REQUEST_PARAM_STRING);
+    return requestType.equals(PullServerConstants.CHUNK_REQUEST_PARAM_STRING);
   }
 
   public static boolean isMetaRequest(String requestType) {
-    return requestType.equals(META_REQUEST_PARAM_STRING);
+    return requestType.equals(PullServerConstants.META_REQUEST_PARAM_STRING);
   }
 
   public static boolean isRangeShuffle(String shuffleType) {
-    return shuffleType.equals(RANGE_SHUFFLE_PARAM_STRING);
+    return shuffleType.equals(PullServerConstants.RANGE_SHUFFLE_PARAM_STRING);
   }
 
   public static boolean isHashShuffle(String shuffleType) {
-    return shuffleType.equals(HASH_SHUFFLE_PARAM_STRING)
-        || shuffleType.equals(SCATTERED_HASH_SHUFFLE_PARAM_STRING);
+    return shuffleType.equals(PullServerConstants.HASH_SHUFFLE_PARAM_STRING)
+        || shuffleType.equals(PullServerConstants.SCATTERED_HASH_SHUFFLE_PARAM_STRING);
   }
 
   public static class PullServerParams extends HashMap<String, List<String>> {
@@ -321,7 +287,7 @@ public class PullServerUtil {
       if (!includeTasks || isHashShuffle(shuffleType)) {
         results.add(URI.create(builder.toString()));
       } else {
-        builder.append(Param.TASK_ID.key).append("=");
+        builder.append(Param.TASK_ID.key()).append("=");
         List<String> taskAttemptIds = this.taskAttemptIds;
         if (taskAttemptIds == null) {
 
@@ -370,7 +336,7 @@ public class PullServerUtil {
     }
 
     private PullServerRequestURIBuilder append(Param key, Object val) {
-      builder.append(key.key)
+      builder.append(key.key())
           .append("=")
           .append(val)
           .append("&");
@@ -460,17 +426,18 @@ public class PullServerUtil {
         || conf.getBoolVar(ConfVars.YARN_SHUFFLE_SERVICE_ENABLED);
   }
 
-  public static FileChunkMeta getFileChunkMeta(String queryId,
-                                               String ebSeqId,
-                                               String taskId,
-                                               Path outDir,
-                                               String startKey,
-                                               String endKey,
-                                               boolean last,
-                                               LoadingCache<IndexCacheKey, BSTIndexReader> indexReaderCache,
-                                               int lowCacheHitCheckThreshold) throws IOException, ExecutionException {
+  private static FileChunkMeta searchFileChunkMeta(String queryId,
+                                                  String ebSeqId,
+                                                  String taskId,
+                                                  Path outDir,
+                                                  String startKey,
+                                                  String endKey,
+                                                  boolean last,
+                                                  LoadingCache<IndexCacheKey, BSTIndexReader> indexReaderCache,
+                                                  int lowCacheHitCheckThreshold) throws IOException, ExecutionException {
     SearchResult result = searchCorrespondPart(queryId, ebSeqId, outDir, startKey, endKey, last,
         indexReaderCache, lowCacheHitCheckThreshold);
+    // Do not send file chunks of 0 length
     if (result != null) {
       long startOffset = result.startOffset;
       long endOffset = result.endOffset;
@@ -484,16 +451,16 @@ public class PullServerUtil {
     }
   }
 
-  private static FileChunk getFileChunks(String queryId,
-                                         String ebSeqId,
-                                         Path outDir,
-                                         String startKey,
-                                         String endKey,
-                                         boolean last,
-                                         LoadingCache<IndexCacheKey, BSTIndexReader> indexReaderCache,
-                                         int lowCacheHitCheckThreshold) throws IOException, ExecutionException {
+  private static FileChunk searchFileChunk(String queryId,
+                                           String ebSeqId,
+                                           Path outDir,
+                                           String startKey,
+                                           String endKey,
+                                           boolean last,
+                                           LoadingCache<IndexCacheKey, BSTIndexReader> indexReaderCache,
+                                           int lowCacheHitCheckThreshold) throws IOException, ExecutionException {
 
-    SearchResult result = searchCorrespondPart(queryId, ebSeqId, outDir, startKey, endKey, last,
+    final SearchResult result = searchCorrespondPart(queryId, ebSeqId, outDir, startKey, endKey, last,
         indexReaderCache, lowCacheHitCheckThreshold);
     if (result != null) {
       long startOffset = result.startOffset;
@@ -646,52 +613,21 @@ public class PullServerUtil {
     return new SearchResult(data, startOffset, endOffset);
   }
 
-//  /**
-//   * Upon a request from TajoWorker, this method clears index cache for fetching data of an execution block.
-//   * It is called whenever an execution block is completed.
-//   *
-//   * @param uri query URI which indicates the execution block id
-//   * @throws IOException
-//   * @throws InvalidURLException
-//   */
-//  public static void clearIndexCache(LoadingCache<IndexCacheKey, BSTIndexReader> indexReaderCache,
-//                                     ConcurrentHashMap<IndexCacheKey, BSTIndexReader> waitForRemove,
-//                                     String uri)
-//      throws IOException, InvalidURLException {
-//    // Simply parse the given uri
-//    String[] tokens = uri.split("=");
-//    if (tokens.length != 2 || !tokens[0].equals("ebid")) {
-//      throw new IllegalArgumentException("invalid params: " + uri);
-//    }
-//    ExecutionBlockId ebId = TajoIdUtils.createExecutionBlockId(tokens[1]);
-//    String queryId = ebId.getQueryId().toString();
-//    String ebSeqId = Integer.toString(ebId.getId());
-//    List<IndexCacheKey> removed = new ArrayList<>();
-//    synchronized (indexReaderCache) {
-//      for (Entry<IndexCacheKey, BSTIndexReader> e : indexReaderCache.asMap().entrySet()) {
-//        IndexCacheKey key = e.getKey();
-//        if (key.getQueryId().equals(queryId) && key.getEbSeqId().equals(ebSeqId)) {
-//          e.getValue().forceClose();
-//          removed.add(e.getKey());
-//        }
-//      }
-//      indexReaderCache.invalidateAll(removed);
-//    }
-//    removed.clear();
-//    synchronized (waitForRemove) {
-//      for (Entry<IndexCacheKey, BSTIndexReader> e : waitForRemove.entrySet()) {
-//        IndexCacheKey key = e.getKey();
-//        if (key.getQueryId().equals(queryId) && key.getEbSeqId().equals(ebSeqId)) {
-//          e.getValue().forceClose();
-//          removed.add(e.getKey());
-//        }
-//      }
-//      for (IndexCacheKey eachKey : removed) {
-//        waitForRemove.remove(eachKey);
-//      }
-//    }
-//  }
-
+  /**
+   * Retrieve meta information of file chunks which correspond to the requested URI.
+   * Only meta information for the file chunks which has non-zero length are retrieved.
+   *
+   * @param conf
+   * @param lDirAlloc
+   * @param localFS
+   * @param params
+   * @param gson
+   * @param indexReaderCache
+   * @param lowCacheHitCheckThreshold
+   * @return
+   * @throws IOException
+   * @throws ExecutionException
+   */
   public static List<String> getJsonMeta(final TajoConf conf,
                                          final LocalDirAllocator lDirAlloc,
                                          final FileSystem localFS,
@@ -712,9 +648,9 @@ public class PullServerUtil {
       }
       Path path = localFS.makeQualified(lDirAlloc.getLocalPathToRead(outputPath.toString(), conf));
       FileChunkMeta meta;
-      meta = PullServerUtil.getFileChunkMeta(params.queryId(), params.ebId(), eachTaskId, path,
+      meta = PullServerUtil.searchFileChunkMeta(params.queryId(), params.ebId(), eachTaskId, path,
           params.startKey(), params.endKey(), params.last(), indexReaderCache, lowCacheHitCheckThreshold);
-      if (meta != null) {
+      if (meta != null && meta.getLength() > 0) {
         String jsonStr = gson.toJson(meta, FileChunkMeta.class);
         LOG.info(jsonStr);
         jsonMetas.add(jsonStr);
@@ -723,41 +659,56 @@ public class PullServerUtil {
     return jsonMetas;
   }
 
-  public static class GetFileChunksResult {
-    private List<FileChunk> chunks;
-    private Exception exception;
+//  public static class GetFileChunksResult {
+//    private List<FileChunk> chunks;
+//    private Exception exception;
+//
+//    public GetFileChunksResult(List<FileChunk> chunks) {
+//      this.chunks = chunks;
+//    }
+//
+//    public GetFileChunksResult(Exception exception) {
+//      this.exception = exception;
+//    }
+//
+//    public boolean isGood() {
+//      return chunks != null;
+//    }
+//
+//    public boolean hasCause() {
+//      return exception != null;
+//    }
+//
+//    public Optional<Exception> getCause() {
+//      return exception == null ? Optional.empty() : Optional.of(exception);
+//    }
+//
+//    public List<FileChunk> getChunks() {
+//      return chunks;
+//    }
+//  }
 
-    public GetFileChunksResult(List<FileChunk> chunks) {
-      this.chunks = chunks;
-    }
-
-    public GetFileChunksResult(Exception exception) {
-      this.exception = exception;
-    }
-
-    public boolean isGood() {
-      return chunks != null;
-    }
-
-    public boolean hasCause() {
-      return exception != null;
-    }
-
-    public Optional<Exception> getCause() {
-      return exception == null ? Optional.empty() : Optional.of(exception);
-    }
-
-    public List<FileChunk> getChunks() {
-      return chunks;
-    }
-  }
-
-  public static GetFileChunksResult getFileChunks(final TajoConf conf,
-                                                  final LocalDirAllocator lDirAlloc,
-                                                  final FileSystem localFS,
-                                                  final PullServerParams params,
-                                                  final LoadingCache<IndexCacheKey, BSTIndexReader> indexReaderCache,
-                                                  final int lowCacheHitCheckThreshold) {
+  /**
+   * Retrieve file chunks which correspond to the requested URI.
+   * Only the file chunks which has non-zero length are retrieved.
+   *
+   * @param conf
+   * @param lDirAlloc
+   * @param localFS
+   * @param params
+   * @param indexReaderCache
+   * @param lowCacheHitCheckThreshold
+   * @return
+   * @throws IOException
+   * @throws ExecutionException
+   */
+  public static List<FileChunk> getFileChunks(final TajoConf conf,
+                                              final LocalDirAllocator lDirAlloc,
+                                              final FileSystem localFS,
+                                              final PullServerParams params,
+                                              final LoadingCache<IndexCacheKey, BSTIndexReader> indexReaderCache,
+                                              final int lowCacheHitCheckThreshold)
+      throws IOException, ExecutionException {
     final List<FileChunk> chunks = new ArrayList<>();
 
     final String queryId = params.queryId();
@@ -793,19 +744,18 @@ public class PullServerUtil {
           continue;
         }
         Path path = null;
-        try {
-          path = localFS.makeQualified(lDirAlloc.getLocalPathToRead(outputPath.toString(), conf));
-        } catch (IOException e) {
-          return new GetFileChunksResult(e);
-        }
+        path = localFS.makeQualified(lDirAlloc.getLocalPathToRead(outputPath.toString(), conf));
+//        try {
+//        } catch (IOException e) {
+//          return new GetFileChunksResult(e);
+//        }
 
-        FileChunk chunk;
-        try {
-          chunk = PullServerUtil.getFileChunks(queryId, sid, path, startKey, endKey, last, indexReaderCache,
-              lowCacheHitCheckThreshold);
-        } catch (Exception e) {
-          return new GetFileChunksResult(e);
-        }
+        FileChunk chunk = PullServerUtil.searchFileChunk(queryId, sid, path, startKey, endKey, last, indexReaderCache,
+            lowCacheHitCheckThreshold);
+//        try {
+//        } catch (Exception e) {
+//          return new GetFileChunksResult(e);
+//        }
         if (chunk != null) {
           chunks.add(chunk);
         }
@@ -820,15 +770,15 @@ public class PullServerUtil {
       int partParentId = HashShuffleAppenderManager.getPartParentId(Integer.parseInt(partId), conf);
       Path partPath = StorageUtil.concatPath(queryBaseDir, "hash-shuffle", String.valueOf(partParentId), partId);
       if (!lDirAlloc.ifExists(partPath.toString(), conf)) {
-        return new GetFileChunksResult(new FileNotFoundException(partPath.toString()));
+//        return new GetFileChunksResult(new FileNotFoundException(partPath.toString()));
+        throw new FileNotFoundException(partPath.toString());
       }
 
-      Path path = null;
-      try {
-        path = localFS.makeQualified(lDirAlloc.getLocalPathToRead(partPath.toString(), conf));
-      } catch (IOException e) {
-        return new GetFileChunksResult(e);
-      }
+      Path path = localFS.makeQualified(lDirAlloc.getLocalPathToRead(partPath.toString(), conf));
+//      try {
+//      } catch (IOException e) {
+//        return new GetFileChunksResult(e);
+//      }
 
       File file = new File(path.toUri());
       long startPos = (offset >= 0 && length >= 0) ? offset : 0;
@@ -836,13 +786,16 @@ public class PullServerUtil {
 
       if (startPos >= file.length()) {
         String errorMessage = "Start pos[" + startPos + "] great than file length [" + file.length() + "]";
-        return new GetFileChunksResult(new EOFException(errorMessage));
+//        return new GetFileChunksResult(new EOFException(errorMessage));
+        throw new EOFException(errorMessage);
       }
       FileChunk chunk = new FileChunk(file, startPos, readLen);
       chunks.add(chunk);
     } else {
-      return new GetFileChunksResult(new IllegalAccessException(shuffleType));
+//      return new GetFileChunksResult(new IllegalAccessException(shuffleType));
+      throw new IllegalArgumentException(shuffleType);
     }
-    return new GetFileChunksResult(chunks);
+//    return new GetFileChunksResult(chunks);
+    return chunks.stream().filter(c -> c.length() > 0).collect(Collectors.toList());
   }
 }
