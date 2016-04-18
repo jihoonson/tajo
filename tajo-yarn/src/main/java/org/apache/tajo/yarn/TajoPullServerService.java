@@ -194,8 +194,6 @@ public class TajoPullServerService extends AuxiliaryService {
 
     maxUrlLength = tajoConf.getIntVar(ConfVars.PULLSERVER_FETCH_URL_MAX_LENGTH);
 
-//    tajoConf.setInt(ConfVars.PULLSERVER_PORT.varname,
-//        tajoConf.getInt(ConfVars.PULLSERVER_PORT.varname, ConfVars.PULLSERVER_PORT.defaultIntVal));
     LOG.info("Tajo PullServer initialized: readaheadLength=" + readaheadLength);
 
     ServerBootstrap bootstrap = new ServerBootstrap(selector);
@@ -204,7 +202,6 @@ public class TajoPullServerService extends AuxiliaryService {
     } catch (Exception ex) {
       throw new RuntimeException(ex);
     }
-//    bootstrap.setOption("child.keepAlive", true);
     bootstrap.setPipelineFactory(channelInitializer);
 
     port = tajoConf.getIntVar(ConfVars.PULLSERVER_PORT);

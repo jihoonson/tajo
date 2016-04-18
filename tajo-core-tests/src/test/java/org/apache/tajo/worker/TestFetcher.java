@@ -19,6 +19,7 @@
 package org.apache.tajo.worker;
 
 import com.google.common.collect.Lists;
+import org.apache.commons.codec.binary.Base64;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
@@ -28,16 +29,26 @@ import org.apache.tajo.QueryIdFactory;
 import org.apache.tajo.TajoProtos;
 import org.apache.tajo.TajoProtos.FetcherState;
 import org.apache.tajo.TajoTestingCluster;
+import org.apache.tajo.catalog.Column;
+import org.apache.tajo.catalog.Schema;
+import org.apache.tajo.catalog.SchemaFactory;
+import org.apache.tajo.catalog.SortSpec;
+import org.apache.tajo.common.TajoDataTypes.Type;
 import org.apache.tajo.conf.TajoConf;
 import org.apache.tajo.conf.TajoConf.ConfVars;
+import org.apache.tajo.datum.Datum;
+import org.apache.tajo.datum.DatumFactory;
 import org.apache.tajo.pullserver.PullServerConstants;
 import org.apache.tajo.pullserver.PullServerUtil;
 import org.apache.tajo.pullserver.PullServerUtil.PullServerRequestURIBuilder;
 import org.apache.tajo.pullserver.TajoPullServerService;
 import org.apache.tajo.pullserver.retriever.FileChunk;
-import org.apache.tajo.storage.HashShuffleAppenderManager;
-import org.apache.tajo.storage.StorageUtil;
+import org.apache.tajo.storage.*;
+import org.apache.tajo.storage.RowStoreUtil.RowStoreEncoder;
+import org.apache.tajo.storage.index.bst.BSTIndex;
+import org.apache.tajo.storage.index.bst.BSTIndex.BSTIndexWriter;
 import org.apache.tajo.util.CommonTestingUtil;
+import org.apache.tajo.worker.FetchImpl.RangeParam;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -48,9 +59,7 @@ import org.junit.runners.Parameterized.Parameters;
 import java.io.File;
 import java.io.IOException;
 import java.net.URI;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Random;
+import java.util.*;
 
 import static org.junit.Assert.*;
 
@@ -79,7 +88,7 @@ public class TestFetcher {
     CommonTestingUtil.getTestDir(INPUT_DIR);
     CommonTestingUtil.getTestDir(OUTPUT_DIR);
     conf.setVar(TajoConf.ConfVars.WORKER_TEMPORAL_DIR, INPUT_DIR);
-    conf.setIntVar(TajoConf.ConfVars.SHUFFLE_FETCHER_READ_TIMEOUT, 1);
+//    conf.setIntVar(TajoConf.ConfVars.SHUFFLE_FETCHER_READ_TIMEOUT, 1);
     conf.setIntVar(TajoConf.ConfVars.SHUFFLE_FETCHER_CHUNK_MAX_SIZE, 127);
 
     pullServerService = new TajoPullServerService();
@@ -101,7 +110,7 @@ public class TestFetcher {
   }
 
   @Test
-  public void testGet() throws IOException {
+  public void testGetHashShuffle() throws IOException {
     Random rnd = new Random();
     QueryId queryId = QueryIdFactory.NULL_QUERY_ID;
     String sid = "1";
@@ -111,7 +120,8 @@ public class TestFetcher {
     final int partParentId = HashShuffleAppenderManager.getPartParentId(Integer.parseInt(partId), conf);
     final Path dataPath = StorageUtil.concatPath(queryBaseDir, "hash-shuffle", String.valueOf(partParentId), partId);
 
-    PullServerRequestURIBuilder builder = new PullServerRequestURIBuilder("127.0.0.1", pullServerService.getPort(), maxUrlLength);
+    PullServerRequestURIBuilder builder = new PullServerRequestURIBuilder("127.0.0.1", pullServerService.getPort(),
+        maxUrlLength);
     builder.setRequestType(PullServerConstants.CHUNK_REQUEST_PARAM_STRING)
         .setQueryId(queryId.toString())
         .setEbId(sid)
@@ -152,6 +162,86 @@ public class TestFetcher {
   }
 
   @Test
+  public void testGetRangeShuffle() throws IOException {
+    Random rnd = new Random();
+    QueryId queryId = QueryIdFactory.NULL_QUERY_ID;
+    String sid = "1";
+    String partId = "1";
+    String taskId = "1";
+    String attemptId = "0";
+
+    Path queryBaseDir = PullServerUtil.getBaseOutputDir(queryId.toString(), sid);
+    Path outDir = StorageUtil.concatPath(queryBaseDir, taskId + "_" + attemptId, "output");
+    Path dataPath = StorageUtil.concatPath(outDir, "output");
+    Path indexPath = StorageUtil.concatPath(outDir, "index");
+
+    List<String> strings = new ArrayList<>(100);
+    for (int i = 0; i < 100; i++) {
+      strings.add("" + rnd.nextInt());
+    }
+    Collections.sort(strings);
+
+    Path inputPath = new Path(INPUT_DIR, dataPath);
+    FileSystem fs = FileSystem.getLocal(conf);
+    if (fs.exists(outDir)) {
+      fs.delete(outDir, true);
+    }
+    final FSDataOutputStream stream = fs.create(inputPath, true);
+    BSTIndex index = new BSTIndex(conf);
+    Schema schema = SchemaFactory.newV1(new Column[] {new Column("rnd", Type.TEXT)});
+    SortSpec[] sortSpecs = new SortSpec[] {new SortSpec(schema.getColumn(0))};
+    BSTIndexWriter writer = index.getIndexWriter(new Path(INPUT_DIR, indexPath), BSTIndex.TWO_LEVEL_INDEX, schema, new BaseTupleComparator(schema, sortSpecs), true);
+    writer.init();
+
+    for (String t : strings) {
+      stream.write(t.getBytes());
+      writer.write(new VTuple(new Datum[] {DatumFactory.createText(t)}), stream.getPos());
+    }
+    stream.flush();
+    writer.flush();
+    stream.close();
+    writer.close();
+
+    RangeParam rangeParam = new RangeParam(new TupleRange(sortSpecs,
+        new VTuple(new Datum[] {DatumFactory.createText(strings.get(0))}),
+        new VTuple(new Datum[] {DatumFactory.createText(strings.get(strings.size() - 1))})), true, RowStoreUtil.createEncoder(schema));
+    PullServerRequestURIBuilder builder = new PullServerRequestURIBuilder("127.0.0.1", pullServerService.getPort(),
+        maxUrlLength);
+    builder.setRequestType(PullServerConstants.CHUNK_REQUEST_PARAM_STRING)
+        .setQueryId(queryId.toString())
+        .setEbId(sid)
+        .setPartId(partId)
+        .setShuffleType(PullServerConstants.RANGE_SHUFFLE_PARAM_STRING)
+        .setTaskIds(Lists.newArrayList(Integer.parseInt(taskId)))
+        .setAttemptIds(Lists.newArrayList(Integer.parseInt(attemptId)))
+        .setStartKeyBase64(new String(Base64.encodeBase64(rangeParam.getStart())))
+        .setEndKeyBase64(new String(Base64.encodeBase64(rangeParam.getEnd())))
+        .setLast(true);
+
+    URI uri = builder.build(true).get(0);
+    File data = new File(OUTPUT_DIR + "data");
+
+    final AbstractFetcher fetcher;
+    if (type.equals(FetchType.LOCAL)) {
+      fetcher = new LocalFetcher(conf, uri, "test");
+    } else {
+      FileChunk storeChunk = new FileChunk(data, 0, data.length());
+      storeChunk.setFromRemote(true);
+      fetcher = new RemoteFetcher(conf, uri, storeChunk);
+    }
+
+    FileChunk chunk = fetcher.get().get(0);
+    assertNotNull(chunk);
+    assertNotNull(chunk.getFile());
+
+    FileStatus inStatus = fs.getFileStatus(inputPath);
+    FileStatus outStatus = fs.getFileStatus(new Path(chunk.getFile().getAbsolutePath()));
+
+    assertEquals(inStatus.getLen(), outStatus.getLen());
+    assertEquals(TajoProtos.FetcherState.FETCH_FINISHED, fetcher.getState());
+  }
+
+  @Test
   public void testAdjustFetchProcess() {
     assertEquals(0.0f, TaskImpl.adjustFetchProcess(0, 0), 0);
     assertEquals(0.0f, TaskImpl.adjustFetchProcess(10, 10), 0);
@@ -174,7 +264,8 @@ public class TestFetcher {
     final int partParentId = HashShuffleAppenderManager.getPartParentId(Integer.parseInt(partId), conf);
     final Path dataPath = StorageUtil.concatPath(queryBaseDir, "hash-shuffle", String.valueOf(partParentId), partId);
 
-    PullServerRequestURIBuilder builder = new PullServerRequestURIBuilder("127.0.0.1", pullServerService.getPort(), maxUrlLength);
+    PullServerRequestURIBuilder builder = new PullServerRequestURIBuilder("127.0.0.1", pullServerService.getPort(),
+        maxUrlLength);
     builder.setRequestType(PullServerConstants.CHUNK_REQUEST_PARAM_STRING)
         .setQueryId(queryId.toString())
         .setEbId(sid)
@@ -218,7 +309,8 @@ public class TestFetcher {
     final int partParentId = HashShuffleAppenderManager.getPartParentId(Integer.parseInt(partId), conf);
     final Path dataPath = StorageUtil.concatPath(queryBaseDir, "hash-shuffle", String.valueOf(partParentId), partId);
 
-    PullServerRequestURIBuilder builder = new PullServerRequestURIBuilder("127.0.0.1", pullServerService.getPort(), maxUrlLength);
+    PullServerRequestURIBuilder builder = new PullServerRequestURIBuilder("127.0.0.1", pullServerService.getPort(),
+        maxUrlLength);
     builder.setRequestType(PullServerConstants.CHUNK_REQUEST_PARAM_STRING)
         .setQueryId(queryId.toString())
         .setEbId(sid)
@@ -257,9 +349,7 @@ public class TestFetcher {
         fail();
       }
     }
-    if (type.equals(FetchType.REMOTE)) {
-      assertEquals(FetcherState.FETCH_FAILED, fetcher.getState());
-    }
+    assertEquals(FetcherState.FETCH_FAILED, fetcher.getState());
   }
 
   @Test
@@ -275,7 +365,8 @@ public class TestFetcher {
     final int partParentId = HashShuffleAppenderManager.getPartParentId(Integer.parseInt(partId), conf);
     final Path dataPath = StorageUtil.concatPath(queryBaseDir, "hash-shuffle", String.valueOf(partParentId), partId);
 
-    PullServerRequestURIBuilder builder = new PullServerRequestURIBuilder("127.0.0.1", pullServerService.getPort(), maxUrlLength);
+    PullServerRequestURIBuilder builder = new PullServerRequestURIBuilder("127.0.0.1", pullServerService.getPort(),
+        maxUrlLength);
     builder.setRequestType(PullServerConstants.CHUNK_REQUEST_PARAM_STRING)
         .setQueryId(queryId.toString())
         .setEbId(sid)
@@ -306,14 +397,15 @@ public class TestFetcher {
 
     try {
       fetcher.get();
+      if (type.equals(FetchType.LOCAL)) {
+        fail();
+      }
     } catch (IllegalArgumentException e) {
       if (!type.equals(FetchType.LOCAL)) {
         fail();
       }
     }
-    if (type.equals(FetchType.REMOTE)) {
-      assertEquals(TajoProtos.FetcherState.FETCH_FAILED, fetcher.getState());
-    }
+    assertEquals(TajoProtos.FetcherState.FETCH_FAILED, fetcher.getState());
   }
 
   @Test
@@ -323,8 +415,8 @@ public class TestFetcher {
     String ta = "1_0";
     String partId = "1";
 
-//    String params = String.format("rtype=%s&qid=%s&sid=%s&p=%s&type=%s&ta=%s", "c", queryId, sid, partId, "h", ta);
-    PullServerRequestURIBuilder builder = new PullServerRequestURIBuilder("127.0.0.1", pullServerService.getPort(), maxUrlLength);
+    PullServerRequestURIBuilder builder = new PullServerRequestURIBuilder("127.0.0.1", pullServerService.getPort(),
+        maxUrlLength);
     builder.setRequestType(PullServerConstants.CHUNK_REQUEST_PARAM_STRING)
         .setQueryId(queryId.toString())
         .setEbId(sid)
@@ -332,7 +424,6 @@ public class TestFetcher {
         .setShuffleType(PullServerConstants.HASH_SHUFFLE_PARAM_STRING)
         .setTaskAttemptIds(Lists.newArrayList(ta));
 
-//    URI uri = URI.create("http://127.0.0.1:" + pullServerService.getPort() + "/?" + params);
     URI uri = builder.build(true).get(0);
     File data = new File(OUTPUT_DIR + "data");
     final AbstractFetcher fetcher;

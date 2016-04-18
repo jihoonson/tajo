@@ -296,6 +296,12 @@ public class TajoPullServerService extends AbstractService {
     super.serviceStop();
   }
 
+  public List<FileChunk> getFileChunks(TajoConf conf, LocalDirAllocator lDirAlloc, PullServerParams params)
+      throws IOException, ExecutionException {
+    return PullServerUtil.getFileChunks(conf, lDirAlloc, localFS, params, indexReaderCache,
+        lowCacheHitCheckThreshold);
+  }
+
   class HttpChannelInitializer extends ChannelInitializer<SocketChannel> {
 
     final PullServer PullServer;
@@ -446,7 +452,7 @@ public class TajoPullServerService extends AbstractService {
         jsonMetas = PullServerUtil.getJsonMeta(conf, lDirAlloc, localFS, params, gson, indexReaderCache,
             lowCacheHitCheckThreshold);
       } catch (Throwable t) {
-        LOG.error("Cannot find the file chunk meta for " + request.getUri());
+        LOG.error("Cannot find the file chunk meta for " + request.getUri(), t);
         sendError(ctx, "Cannot get file chunks to be sent", HttpResponseStatus.BAD_REQUEST);
         return;
       }

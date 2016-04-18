@@ -162,10 +162,7 @@ public class TajoTestingCluster {
     conf.setInt(ConfVars.$EXECUTOR_EXTERNAL_SORT_BUFFER_SIZE.varname, 1);
     conf.setInt(ConfVars.$EXECUTOR_HASH_SHUFFLE_BUFFER_SIZE.varname, 1);
 
-    conf.setIntVar(ConfVars.PULLSERVER_PORT, 39962);
-    conf.setBoolVar(ConfVars.YARN_SHUFFLE_SERVICE_ENABLED, true);
-
-    /** decrease Hbase thread and memory cache for testing */
+    /* decrease Hbase thread and memory cache for testing */
     //server handler
     conf.setInt("hbase.regionserver.handler.count", 5);
     //client handler
@@ -360,8 +357,7 @@ public class TajoTestingCluster {
     c.setVar(ConfVars.TAJO_MASTER_UMBILICAL_RPC_ADDRESS, "localhost:0");
     c.setVar(ConfVars.RESOURCE_TRACKER_RPC_ADDRESS, "localhost:0");
     c.setVar(ConfVars.WORKER_PEER_RPC_ADDRESS, "localhost:0");
-//    c.setVar(ConfVars.WORKER_TEMPORAL_DIR, "file://" + testBuildDir.getAbsolutePath() + "/tajo-localdir");
-    c.setVar(ConfVars.WORKER_TEMPORAL_DIR, "file:///ssd1/tajo-tmp,file:///ssd2/tajo-tmp");
+    c.setVar(ConfVars.WORKER_TEMPORAL_DIR, "file://" + testBuildDir.getAbsolutePath() + "/tajo-localdir");
     c.setVar(ConfVars.REST_SERVICE_ADDRESS, "localhost:0");
 
     if (!local) {

@@ -659,35 +659,6 @@ public class PullServerUtil {
     return jsonMetas;
   }
 
-//  public static class GetFileChunksResult {
-//    private List<FileChunk> chunks;
-//    private Exception exception;
-//
-//    public GetFileChunksResult(List<FileChunk> chunks) {
-//      this.chunks = chunks;
-//    }
-//
-//    public GetFileChunksResult(Exception exception) {
-//      this.exception = exception;
-//    }
-//
-//    public boolean isGood() {
-//      return chunks != null;
-//    }
-//
-//    public boolean hasCause() {
-//      return exception != null;
-//    }
-//
-//    public Optional<Exception> getCause() {
-//      return exception == null ? Optional.empty() : Optional.of(exception);
-//    }
-//
-//    public List<FileChunk> getChunks() {
-//      return chunks;
-//    }
-//  }
-
   /**
    * Retrieve file chunks which correspond to the requested URI.
    * Only the file chunks which has non-zero length are retrieved.
@@ -743,19 +714,10 @@ public class PullServerUtil {
           LOG.warn(outputPath + " does not exist.");
           continue;
         }
-        Path path = null;
-        path = localFS.makeQualified(lDirAlloc.getLocalPathToRead(outputPath.toString(), conf));
-//        try {
-//        } catch (IOException e) {
-//          return new GetFileChunksResult(e);
-//        }
+        Path path = localFS.makeQualified(lDirAlloc.getLocalPathToRead(outputPath.toString(), conf));
 
         FileChunk chunk = PullServerUtil.searchFileChunk(queryId, sid, path, startKey, endKey, last, indexReaderCache,
             lowCacheHitCheckThreshold);
-//        try {
-//        } catch (Exception e) {
-//          return new GetFileChunksResult(e);
-//        }
         if (chunk != null) {
           chunks.add(chunk);
         }
@@ -770,15 +732,10 @@ public class PullServerUtil {
       int partParentId = HashShuffleAppenderManager.getPartParentId(Integer.parseInt(partId), conf);
       Path partPath = StorageUtil.concatPath(queryBaseDir, "hash-shuffle", String.valueOf(partParentId), partId);
       if (!lDirAlloc.ifExists(partPath.toString(), conf)) {
-//        return new GetFileChunksResult(new FileNotFoundException(partPath.toString()));
         throw new FileNotFoundException(partPath.toString());
       }
 
       Path path = localFS.makeQualified(lDirAlloc.getLocalPathToRead(partPath.toString(), conf));
-//      try {
-//      } catch (IOException e) {
-//        return new GetFileChunksResult(e);
-//      }
 
       File file = new File(path.toUri());
       long startPos = (offset >= 0 && length >= 0) ? offset : 0;
@@ -786,16 +743,13 @@ public class PullServerUtil {
 
       if (startPos >= file.length()) {
         String errorMessage = "Start pos[" + startPos + "] great than file length [" + file.length() + "]";
-//        return new GetFileChunksResult(new EOFException(errorMessage));
         throw new EOFException(errorMessage);
       }
       FileChunk chunk = new FileChunk(file, startPos, readLen);
       chunks.add(chunk);
     } else {
-//      return new GetFileChunksResult(new IllegalAccessException(shuffleType));
       throw new IllegalArgumentException(shuffleType);
     }
-//    return new GetFileChunksResult(chunks);
     return chunks.stream().filter(c -> c.length() > 0).collect(Collectors.toList());
   }
 }

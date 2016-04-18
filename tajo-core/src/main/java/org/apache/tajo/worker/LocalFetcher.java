@@ -59,6 +59,7 @@ import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
 public class LocalFetcher extends AbstractFetcher {
@@ -164,13 +165,19 @@ public class LocalFetcher extends AbstractFetcher {
     this.state = state;
   }
 
-  private List<FileChunk> getDirect() {
+  private List<FileChunk> getDirect() throws IOException {
     final List<FileChunk> fileChunks = new ArrayList<>();
     startTime = System.currentTimeMillis();
-    finishTime = System.currentTimeMillis();
-    state = TajoProtos.FetcherState.FETCH_FINISHED;
-    fileChunks.add(fileChunk);
-    fileLen = fileChunk.getFile().length();
+    PullServerParams params = new PullServerParams(uri.toString());
+    try {
+      fileChunks.addAll(pullServerService.getFileChunks(conf, localDirAllocator, params));
+    } catch (ExecutionException e) {
+      finishFetch(FetcherState.FETCH_FAILED);
+      throw new TajoInternalError(e);
+    }
+    fileChunks.stream().forEach(c -> c.setEbId(tableName));
+    finishFetch(FetcherState.FETCH_FINISHED);
+    fileLen = fileChunks.get(0).getFile().length();
     return fileChunks;
   }
 
