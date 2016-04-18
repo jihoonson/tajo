@@ -70,7 +70,6 @@ public class TajoPullServer extends CompositeService {
 
     TajoConf tajoConf = new TajoConf();
     tajoConf.addResource(new Path(TajoConstants.SYSTEM_CONF_FILENAME));
-    tajoConf.setVar(ConfVars.WORKER_TEMPORAL_DIR, "file:///ssd1/tajo-tmp,file:///ssd2/tajo-tmp");
 
     (new TajoPullServer()).startPullServer(tajoConf);
   }
