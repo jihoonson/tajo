@@ -25,7 +25,6 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.service.CompositeService;
 import org.apache.tajo.TajoConstants;
 import org.apache.tajo.conf.TajoConf;
-import org.apache.tajo.conf.TajoConf.ConfVars;
 import org.apache.tajo.util.StringUtils;
 
 public class TajoPullServer extends CompositeService {
@@ -53,11 +52,6 @@ public class TajoPullServer extends CompositeService {
   public void startPullServer(TajoConf systemConf) {
     init(systemConf);
     start();
-  }
-
-  public void start() {
-    super.start();
-
   }
 
   public static void main(String[] args) throws Exception {

@@ -18,6 +18,7 @@
 
   package org.apache.tajo.worker;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.gson.Gson;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.ByteBuf;
@@ -29,6 +30,9 @@ import io.netty.handler.timeout.ReadTimeoutHandler;
 import io.netty.util.ReferenceCountUtil;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.LocalDirAllocator;
+import org.apache.hadoop.fs.LocalFileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.tajo.TajoProtos;
 import org.apache.tajo.TajoProtos.FetcherState;
@@ -61,7 +65,7 @@ public class LocalFetcher extends AbstractFetcher {
 
   private final static Log LOG = LogFactory.getLog(LocalFetcher.class);
 
-  private final ExecutionBlockContext executionBlockContext;
+//  private final ExecutionBlockContext executionBlockContext;
   private final TajoPullServerService pullServerService;
 
   private final String host;
@@ -70,10 +74,45 @@ public class LocalFetcher extends AbstractFetcher {
   private final int maxUrlLength;
   private final List<FileChunkMeta> chunkMetas = new ArrayList<>();
   private final String tableName;
+  private final FileSystem localFileSystem;
+  private final LocalDirAllocator localDirAllocator;
+
+  @VisibleForTesting
+  public LocalFetcher(TajoConf conf, URI uri, String tableName) throws IOException {
+    super(conf, uri);
+    this.maxUrlLength = conf.getIntVar(ConfVars.PULLSERVER_FETCH_URL_MAX_LENGTH);
+    this.tableName = tableName;
+    this.localFileSystem = new LocalFileSystem();
+    this.localDirAllocator = new LocalDirAllocator(ConfVars.WORKER_TEMPORAL_DIR.varname);
+    this.pullServerService = null;
+
+    String scheme = uri.getScheme() == null ? "http" : uri.getScheme();
+    this.host = uri.getHost() == null ? "localhost" : uri.getHost();
+    this.port = uri.getPort();
+    if (port == -1) {
+      if (scheme.equalsIgnoreCase("http")) {
+        this.port = 80;
+      } else if (scheme.equalsIgnoreCase("https")) {
+        this.port = 443;
+      }
+    }
+
+    bootstrap = new Bootstrap()
+        .group(
+            NettyUtils.getSharedEventLoopGroup(NettyUtils.GROUP.FETCHER,
+                conf.getIntVar(ConfVars.SHUFFLE_RPC_CLIENT_WORKER_THREAD_NUM)))
+        .channel(NioSocketChannel.class)
+        .option(ChannelOption.ALLOCATOR, NettyUtils.ALLOCATOR)
+        .option(ChannelOption.CONNECT_TIMEOUT_MILLIS,
+            conf.getIntVar(ConfVars.SHUFFLE_FETCHER_CONNECT_TIMEOUT) * 1000)
+        .option(ChannelOption.SO_RCVBUF, 1048576) // set 1M
+        .option(ChannelOption.TCP_NODELAY, true);
+  }
 
   public LocalFetcher(TajoConf conf, URI uri, ExecutionBlockContext executionBlockContext, String tableName) {
     super(conf, uri);
-    this.executionBlockContext = executionBlockContext;
+    this.localFileSystem = executionBlockContext.getLocalFS();
+    this.localDirAllocator = executionBlockContext.getLocalDirAllocator();
     this.maxUrlLength = conf.getIntVar(ConfVars.PULLSERVER_FETCH_URL_MAX_LENGTH);
     this.tableName = tableName;
 
@@ -110,6 +149,7 @@ public class LocalFetcher extends AbstractFetcher {
           .option(ChannelOption.SO_RCVBUF, 1048576) // set 1M
           .option(ChannelOption.TCP_NODELAY, true);
     } else {
+      finishFetch(FetcherState.FETCH_FAILED);
       throw new TajoInternalError("Pull server service is not initialized");
     }
   }
@@ -117,6 +157,11 @@ public class LocalFetcher extends AbstractFetcher {
   @Override
   public List<FileChunk> get() throws IOException {
     return pullServerService != null ? getDirect() : getFromFetchURI();
+  }
+
+  private void finishFetch(FetcherState state) {
+    this.finishTime = System.currentTimeMillis();
+    this.state = state;
   }
 
   private List<FileChunk> getDirect() {
@@ -138,6 +183,7 @@ public class LocalFetcher extends AbstractFetcher {
     } else if (PullServerUtil.isHashShuffle(params.shuffleType())) {
       return getChunksForHashShuffle(params, queryBaseDir);
     } else {
+      finishFetch(FetcherState.FETCH_FAILED);
       throw new IllegalArgumentException("unknown shuffle type: " + params.shuffleType());
     }
   }
@@ -151,16 +197,17 @@ public class LocalFetcher extends AbstractFetcher {
     final int partParentId = HashShuffleAppenderManager.getPartParentId(Integer.parseInt(partId), conf);
     final Path partPath = StorageUtil.concatPath(queryBaseDir, "hash-shuffle", String.valueOf(partParentId), partId);
 
-    if (!executionBlockContext.getLocalDirAllocator().ifExists(partPath.toString(), conf)) {
+    if (!localDirAllocator.ifExists(partPath.toString(), conf)) {
+      finishFetch(FetcherState.FETCH_FAILED);
       throw new IOException("Hash shuffle or Scattered hash shuffle - file not exist: " + partPath);
     }
-    final Path path = executionBlockContext.getLocalFS().makeQualified(
-        executionBlockContext.getLocalDirAllocator().getLocalPathToRead(partPath.toString(), conf));
+    final Path path = localFileSystem.makeQualified(localDirAllocator.getLocalPathToRead(partPath.toString(), conf));
     final File file = new File(path.toUri());
     final long startPos = (offset >= 0 && length >= 0) ? offset : 0;
     final long readLen = (offset >= 0 && length >= 0) ? length : file.length();
 
     if (startPos >= file.length()) {
+      finishFetch(FetcherState.FETCH_FAILED);
       throw new IOException("Start pos[" + startPos + "] great than file length [" + file.length() + "]");
     }
     if (readLen > 0) {
@@ -170,8 +217,7 @@ public class LocalFetcher extends AbstractFetcher {
       fileChunks.add(chunk);
     }
 
-    finishTime = System.currentTimeMillis();
-    state = FetcherState.FETCH_FINISHED;
+    finishFetch(FetcherState.FETCH_FINISHED);
     return fileChunks;
   }
 
@@ -194,7 +240,7 @@ public class LocalFetcher extends AbstractFetcher {
       // Wait until the connection attempt succeeds or fails.
       Channel channel = future.awaitUninterruptibly().channel();
       if (!future.isSuccess()) {
-        state = TajoProtos.FetcherState.FETCH_FAILED;
+        finishFetch(FetcherState.FETCH_FAILED);
         throw new IOException(future.cause());
       }
 
@@ -217,12 +263,11 @@ public class LocalFetcher extends AbstractFetcher {
 
       for (FileChunkMeta eachMeta : chunkMetas) {
         Path outputPath = StorageUtil.concatPath(queryBaseDir, eachMeta.getTaskId(), "output");
-        if (!executionBlockContext.getLocalDirAllocator().ifExists(outputPath.toString(), conf)) {
+        if (!localDirAllocator.ifExists(outputPath.toString(), conf)) {
           LOG.warn("Range shuffle - file not exist. " + outputPath);
           continue;
         }
-        Path path = executionBlockContext.getLocalFS().makeQualified(
-            executionBlockContext.getLocalDirAllocator().getLocalPathToRead(outputPath.toString(), conf));
+        Path path = localFileSystem.makeQualified(localDirAllocator.getLocalPathToRead(outputPath.toString(), conf));
         FileChunk chunk = new FileChunk(new File(URI.create(path.toUri() + "/output")),
             eachMeta.getStartOffset(), eachMeta.getLength());
         chunk.setEbId(tableName);
@@ -236,8 +281,7 @@ public class LocalFetcher extends AbstractFetcher {
         future.channel().close().awaitUninterruptibly();
       }
 
-      finishTime = System.currentTimeMillis();
-      state = FetcherState.FETCH_FINISHED;
+      finishFetch(FetcherState.FETCH_FINISHED);
     }
   }
 

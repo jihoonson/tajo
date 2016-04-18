@@ -23,10 +23,10 @@ import org.apache.tajo.TaskAttemptId;
 
 import java.io.IOException;
 
-public class MockExecutionBlock extends ExecutionBlockContext {
+public class MockExecutionBlockContext extends ExecutionBlockContext {
 
-  public MockExecutionBlock(TajoWorker.WorkerContext workerContext,
-                            ExecutionBlockContextResponse request) throws IOException {
+  public MockExecutionBlockContext(TajoWorker.WorkerContext workerContext,
+                                   ExecutionBlockContextResponse request) throws IOException {
     super(workerContext, request, null, null);
   }
 
