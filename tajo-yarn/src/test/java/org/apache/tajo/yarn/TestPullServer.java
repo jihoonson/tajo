@@ -16,43 +16,7 @@
  * limitations under the License.
  */
 
-package org.apache.tajo.worker;
+package org.apache.tajo.yarn;
 
-import org.apache.tajo.ResourceProtos.TaskStatusProto;
-
-import java.io.IOException;
-import java.util.List;
-import java.util.concurrent.ExecutorService;
-
-public interface Task {
-
-  void init() throws IOException;
-
-  void fetch(ExecutorService fetcherExecutor);
-
-  void run() throws Exception;
-
-  void kill();
-
-  void abort();
-
-  void cleanup();
-
-  boolean hasFetchPhase();
-
-  boolean isProgressChanged();
-
-  boolean isStopped();
-
-  void updateProgress();
-
-  TaskAttemptContext getTaskContext();
-
-  ExecutionBlockContext getExecutionBlockContext();
-
-  TaskStatusProto getReport();
-
-  TaskHistory createTaskHistory();
-
-  List<AbstractFetcher> getFetchers();
+public class TestPullServer {
 }
