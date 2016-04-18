@@ -306,7 +306,6 @@ public class LocalFetcher extends AbstractFetcher {
               int contentLength = content.readableBytes();
               content.readBytes(buf, totalReceivedContentLength, contentLength);
               totalReceivedContentLength += contentLength;
-              LOG.info("length: " + length + ", totalReceivedContentLength: " + totalReceivedContentLength);
               if (totalReceivedContentLength == length) {
                 List<String> jsonMetas = gson.fromJson(new String(buf), List.class);
                 for (String eachJson : jsonMetas) {
@@ -321,12 +320,6 @@ public class LocalFetcher extends AbstractFetcher {
                 throw new IOException("Illegal length: " + totalReceivedContentLength + ", expected length: " + length);
               }
             }
-//            LOG.info("msg is instance of LastHttpContent: " + (msg instanceof LastHttpContent));
-//            if (msg instanceof LastHttpContent) {
-//              finishTime = System.currentTimeMillis();
-//              state = FetcherState.FETCH_FINISHED;
-//            }
-//            LOG.info("state: " + state);
           } catch (Exception e) {
             LOG.error(e.getMessage(), e);
           } finally {
