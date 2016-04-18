@@ -33,6 +33,7 @@ import org.apache.hadoop.io.IOUtils;
 import org.apache.tajo.TajoProtos;
 import org.apache.tajo.TajoProtos.FetcherState;
 import org.apache.tajo.conf.TajoConf;
+import org.apache.tajo.pullserver.PullServerConstants;
 import org.apache.tajo.pullserver.TajoPullServerService;
 import org.apache.tajo.pullserver.retriever.FileChunk;
 import org.apache.tajo.rpc.NettyUtils;
@@ -200,8 +201,8 @@ public class RemoteFetcher extends AbstractFetcher {
                 }
               }
             }
-            if (response.headers().contains(TajoPullServerService.CHUNK_LENGTH_HEADER_NAME)) {
-              String stringOffset = response.headers().get(TajoPullServerService.CHUNK_LENGTH_HEADER_NAME);
+            if (response.headers().contains(PullServerConstants.CHUNK_LENGTH_HEADER_NAME)) {
+              String stringOffset = response.headers().get(PullServerConstants.CHUNK_LENGTH_HEADER_NAME);
 
               for (String eachSplit : stringOffset.split(",")) {
                 chunkLengths.add(Long.parseLong(eachSplit));

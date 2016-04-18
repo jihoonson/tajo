@@ -87,7 +87,8 @@ public class TestFetcher {
     stream.close();
 
     URI uri = URI.create("http://127.0.0.1:" + pullServerService.getPort() + "/?" + params);
-    FileChunk storeChunk = new FileChunk(new File(OUTPUT_DIR + "data"), 0, 0);
+    File data = new File(OUTPUT_DIR + "data");
+    FileChunk storeChunk = new FileChunk(data, 0, data.length());
     storeChunk.setFromRemote(true);
     final RemoteFetcher fetcher = new RemoteFetcher(conf, uri, storeChunk);
     FileChunk chunk = fetcher.get().get(0);
@@ -133,7 +134,8 @@ public class TestFetcher {
     stream.close();
 
     URI uri = URI.create("http://127.0.0.1:" + pullServerService.getPort() + "/?" + params);
-    FileChunk storeChunk = new FileChunk(new File(OUTPUT_DIR + "data"), 0, 0);
+    File data = new File(OUTPUT_DIR + "data");
+    FileChunk storeChunk = new FileChunk(data, 0, data.length());
     storeChunk.setFromRemote(true);
     final RemoteFetcher fetcher = new RemoteFetcher(conf, uri, storeChunk);
     assertEquals(TajoProtos.FetcherState.FETCH_INIT, fetcher.getState());
@@ -163,7 +165,8 @@ public class TestFetcher {
     stream.close();
 
     URI uri = URI.create("http://127.0.0.1:" + pullServerService.getPort() + "/?" + params);
-    FileChunk storeChunk = new FileChunk(new File(OUTPUT_DIR + "data"), 0, 0);
+    File data = new File(OUTPUT_DIR + "data");
+    FileChunk storeChunk = new FileChunk(data, 0, data.length());
     storeChunk.setFromRemote(true);
     final RemoteFetcher fetcher = new RemoteFetcher(conf, uri, storeChunk);
     assertEquals(TajoProtos.FetcherState.FETCH_INIT, fetcher.getState());
@@ -197,7 +200,8 @@ public class TestFetcher {
     stream.close();
 
     URI uri = URI.create("http://127.0.0.1:" + pullServerService.getPort() + "/?" + params);
-    FileChunk storeChunk = new FileChunk(new File(OUTPUT_DIR + "data"), 0, 0);
+    File data = new File(OUTPUT_DIR + "data");
+    FileChunk storeChunk = new FileChunk(data, 0, data.length());
     storeChunk.setFromRemote(true);
     final RemoteFetcher fetcher = new RemoteFetcher(conf, uri, storeChunk);
     assertEquals(TajoProtos.FetcherState.FETCH_INIT, fetcher.getState());
@@ -213,11 +217,11 @@ public class TestFetcher {
     String ta = "1_0";
     String partId = "1";
 
-    String dataPath = INPUT_DIR + queryId.toString() + "/output"+ "/" + sid + "/" +ta + "/output/" + partId;
     String params = String.format("qid=%s&sid=%s&p=%s&type=%s&ta=%s", queryId, sid, partId, "h", ta);
 
     URI uri = URI.create("http://127.0.0.1:" + pullServerService.getPort() + "/?" + params);
-    FileChunk storeChunk = new FileChunk(new File(OUTPUT_DIR + "data"), 0, 0);
+    File data = new File(OUTPUT_DIR + "data");
+    FileChunk storeChunk = new FileChunk(data, 0, data.length());
     storeChunk.setFromRemote(true);
     final RemoteFetcher fetcher = new RemoteFetcher(conf, uri, storeChunk);
     assertEquals(TajoProtos.FetcherState.FETCH_INIT, fetcher.getState());
@@ -227,7 +231,7 @@ public class TestFetcher {
     boolean failure = false;
     try{
       fetcher.get();
-    } catch (Throwable e){
+    } catch (IOException e){
       failure = true;
     }
     assertTrue(failure);

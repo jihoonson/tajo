@@ -24,6 +24,7 @@ import com.google.common.cache.LoadingCache;
 import com.google.common.cache.RemovalListener;
 import com.google.gson.Gson;
 import io.netty.bootstrap.ServerBootstrap;
+import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.*;
 import io.netty.channel.group.ChannelGroup;
@@ -577,10 +578,10 @@ public class TajoPullServerService extends AbstractService {
 
     private void sendError(ChannelHandlerContext ctx, String message,
         HttpResponseStatus status) {
-      FullHttpResponse response = new DefaultFullHttpResponse(HTTP_1_1, status,
-          Unpooled.copiedBuffer(message, CharsetUtil.UTF_8));
+      ByteBuf content = Unpooled.copiedBuffer(message, CharsetUtil.UTF_8);
+      FullHttpResponse response = new DefaultFullHttpResponse(HTTP_1_1, status, content);
       response.headers().set(HttpHeaders.Names.CONTENT_TYPE, "text/plain; charset=UTF-8");
-      HttpHeaders.setContentLength(response, Unpooled.copiedBuffer(message, CharsetUtil.UTF_8).writerIndex());
+      HttpHeaders.setContentLength(response, content.writerIndex());
 
       // Close the connection as soon as the error message is sent.
       ctx.writeAndFlush(response).addListener(ChannelFutureListener.CLOSE);

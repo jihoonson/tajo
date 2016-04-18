@@ -59,6 +59,7 @@ import org.apache.tajo.storage.index.bst.BSTIndex.BSTIndexReader;
 import org.apache.tajo.util.SizeOf;
 import org.apache.tajo.util.TajoIdUtils;
 import org.jboss.netty.bootstrap.ServerBootstrap;
+import org.jboss.netty.buffer.ChannelBuffer;
 import org.jboss.netty.buffer.ChannelBuffers;
 import org.jboss.netty.channel.*;
 import org.jboss.netty.channel.group.ChannelGroup;
@@ -344,19 +345,13 @@ public class TajoPullServerService extends AuxiliaryService {
     @Override
     public void messageReceived(ChannelHandlerContext ctx, MessageEvent evt)
             throws Exception {
-      // TODO: check bad request
+
       HttpRequest request = (HttpRequest) evt.getMessage();
       Channel ch = evt.getChannel();
 
-//      if (request.getDecoderResult().isFailure()) {
-//        LOG.error("Http decoding failed. ", request.getDecoderResult().cause());
-//        sendError(ctx, request.getDecoderResult().toString(), HttpResponseStatus.BAD_REQUEST);
-//        return;
-//      }
-
       if (request.getMethod() == HttpMethod.DELETE) {
         HttpResponse response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.NO_CONTENT);
-        ch.write(response).sync().addListener(ChannelFutureListener.CLOSE);
+        ch.write(response).addListener(ChannelFutureListener.CLOSE);
 
         clearIndexCache(request.getUri());
         return;
@@ -426,33 +421,7 @@ public class TajoPullServerService extends AuxiliaryService {
 
     private void handleMetaRequest(ChannelHandlerContext ctx, HttpRequest request, final PullServerParams params)
         throws IOException, ExecutionException {
-//      final List<String> taskIds = PullServerUtil.splitMaps(params.taskAttemptIds());
-//      final Path queryBaseDir = PullServerUtil.getBaseOutputDir(params.queryId(), params.ebId());
       final List<String> jsonMetas;
-
-//      for (String eachTaskId : taskIds) {
-//        Path outputPath = StorageUtil.concatPath(queryBaseDir, eachTaskId, "output");
-//        if (!lDirAlloc.ifExists(outputPath.toString(), conf)) {
-//          LOG.warn("Range shuffle - file not exist. " + outputPath);
-//          continue;
-//        }
-//        Path path = localFS.makeQualified(lDirAlloc.getLocalPathToRead(outputPath.toString(), conf));
-//        FileChunkMeta meta;
-//        try {
-//          meta = PullServerUtil.getFileChunkMeta(params.queryId(), params.ebId(), eachTaskId, path,
-//              params.startKey(), params.endKey(), params.last(), indexReaderCache, lowCacheHitCheckThreshold);
-//        } catch (Throwable t) {
-//          LOG.error("Cannot find the file chunk meta for task " + eachTaskId);
-//          sendError(ctx, "Cannot get file chunks to be sent", HttpResponseStatus.BAD_REQUEST);
-//          return;
-//        }
-//        if (meta != null) {
-//          String jsonStr = gson.toJson(meta, FileChunkMeta.class);
-//          LOG.info(jsonStr);
-//          jsonMetas.add(jsonStr);
-//        }
-//      }
-
       try {
         jsonMetas = PullServerUtil.getJsonMeta(conf, lDirAlloc, localFS, params, gson, indexReaderCache,
             lowCacheHitCheckThreshold);
@@ -534,12 +503,6 @@ public class TajoPullServerService extends AuxiliaryService {
           }
         }
 
-//        if (ch.getPipeline().get(SslHandler.class) == null) {
-//          writeFuture = ch.write(LastHttpContent.EMPTY_LAST_CONTENT);
-//        } else {
-//          ctx.flush();
-//        }
-
         // Decide whether to close the connection or not.
         if (!HttpHeaders.isKeepAlive(request)) {
           // Close the connection when the whole content is written out.
@@ -594,8 +557,9 @@ public class TajoPullServerService extends AuxiliaryService {
       HttpResponse response = new DefaultHttpResponse(HTTP_1_1, status);
       response.setHeader(Names.CONTENT_TYPE, "text/plain; charset=UTF-8");
       // Put shuffle version into http header
-      response.setContent(
-          ChannelBuffers.copiedBuffer(message, CharsetUtil.UTF_8));
+      ChannelBuffer content = ChannelBuffers.copiedBuffer(message, CharsetUtil.UTF_8);
+      response.setContent(content);
+      response.setHeader(Names.CONTENT_LENGTH, content.writerIndex());
 
       // Close the connection as soon as the error message is sent.
       ctx.getChannel().write(response).addListener(ChannelFutureListener.CLOSE);
