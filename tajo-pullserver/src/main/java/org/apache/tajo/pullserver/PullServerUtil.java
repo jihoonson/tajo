@@ -414,7 +414,7 @@ public class PullServerUtil {
       return this;
     }
 
-    public PullServerRequestURIBuilder setLast(boolean last) {
+    public PullServerRequestURIBuilder setLastInclude(boolean last) {
       this.last = last;
       return this;
     }
@@ -652,7 +652,6 @@ public class PullServerUtil {
           params.startKey(), params.endKey(), params.last(), indexReaderCache, lowCacheHitCheckThreshold);
       if (meta != null && meta.getLength() > 0) {
         String jsonStr = gson.toJson(meta, FileChunkMeta.class);
-        LOG.info(jsonStr);
         jsonMetas.add(jsonStr);
       }
     }

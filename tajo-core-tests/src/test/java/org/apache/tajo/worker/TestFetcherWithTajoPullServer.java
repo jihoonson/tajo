@@ -24,6 +24,7 @@ import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.service.Service;
 import org.apache.tajo.QueryId;
 import org.apache.tajo.QueryIdFactory;
 import org.apache.tajo.TajoProtos;
@@ -44,12 +45,12 @@ import org.apache.tajo.pullserver.PullServerUtil.PullServerRequestURIBuilder;
 import org.apache.tajo.pullserver.TajoPullServerService;
 import org.apache.tajo.pullserver.retriever.FileChunk;
 import org.apache.tajo.storage.*;
-import org.apache.tajo.storage.RowStoreUtil.RowStoreEncoder;
 import org.apache.tajo.storage.index.bst.BSTIndex;
 import org.apache.tajo.storage.index.bst.BSTIndex.BSTIndexWriter;
 import org.apache.tajo.util.CommonTestingUtil;
 import org.apache.tajo.worker.FetchImpl.RangeParam;
 import org.junit.After;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -64,22 +65,27 @@ import java.util.*;
 import static org.junit.Assert.*;
 
 @RunWith(Parameterized.class)
-public class TestFetcher {
-  enum FetchType {
+public class TestFetcherWithTajoPullServer {
+  private enum FetchType {
     LOCAL,
     REMOTE
   }
 
-  private String TEST_DATA = TajoTestingCluster.DEFAULT_TEST_DIRECTORY + "/TestFetcher";
-  private String INPUT_DIR = TEST_DATA+"/in/";
-  private String OUTPUT_DIR = TEST_DATA+"/out/";
-  private TajoConf conf = new TajoConf();
-  private TajoPullServerService pullServerService;
-  private final FetchType type;
+  private final String TEST_DATA = TajoTestingCluster.DEFAULT_TEST_DIRECTORY + "/" +
+      TestFetcherWithTajoPullServer.class.getSimpleName();
+  private final String INPUT_DIR = TEST_DATA+"/in/";
+  private final String OUTPUT_DIR = TEST_DATA+"/out/";
+  private final TajoConf conf = new TajoConf();
+  private Service pullServerService;
   private final int maxUrlLength = conf.getIntVar(ConfVars.PULLSERVER_FETCH_URL_MAX_LENGTH);
+  private final String TEST_TABLE_NAME = "test";
+  private final FetchType fetchType;
+  private final String pullserverType;
+  private int pullserverPort;
 
-  public TestFetcher(FetchType type) {
-    this.type = type;
+  public TestFetcherWithTajoPullServer(FetchType fetchType, String pullserverType) {
+    this.fetchType = fetchType;
+    this.pullserverType = pullserverType;
   }
 
   @Before
@@ -88,12 +94,22 @@ public class TestFetcher {
     CommonTestingUtil.getTestDir(INPUT_DIR);
     CommonTestingUtil.getTestDir(OUTPUT_DIR);
     conf.setVar(TajoConf.ConfVars.WORKER_TEMPORAL_DIR, INPUT_DIR);
-//    conf.setIntVar(TajoConf.ConfVars.SHUFFLE_FETCHER_READ_TIMEOUT, 1);
+    conf.setIntVar(TajoConf.ConfVars.SHUFFLE_FETCHER_READ_TIMEOUT, 1);
     conf.setIntVar(TajoConf.ConfVars.SHUFFLE_FETCHER_CHUNK_MAX_SIZE, 127);
 
-    pullServerService = new TajoPullServerService();
+    if (pullserverType.equals("Standalone")) {
+      pullServerService = new TajoPullServerService();
+    } else {
+      pullServerService = new org.apache.tajo.yarn.TajoPullServerService();
+    }
     pullServerService.init(conf);
     pullServerService.start();
+
+    if (pullserverType.equals("Standalone")) {
+      pullserverPort = ((TajoPullServerService)pullServerService).getPort();
+    } else {
+      pullserverPort = ((org.apache.tajo.yarn.TajoPullServerService)pullServerService).getPort();
+    }
   }
 
   @After
@@ -104,9 +120,21 @@ public class TestFetcher {
   @Parameters
   public static Collection<Object[]> generateParameters() {
     return Arrays.asList(new Object[][] {
-        {FetchType.LOCAL},
-        {FetchType.REMOTE}
+        {FetchType.LOCAL, "Standalone"},
+        {FetchType.REMOTE, "Standalone"},
+        {FetchType.LOCAL, "Yarn"},
+        {FetchType.REMOTE, "Yarn"}
     });
+  }
+
+  private AbstractFetcher getFetcher(URI uri, File data) throws IOException {
+    if (fetchType.equals(FetchType.LOCAL)) {
+      return new LocalFetcher(conf, uri, TEST_TABLE_NAME);
+    } else {
+      FileChunk storeChunk = new FileChunk(data, 0, data.length());
+      storeChunk.setFromRemote(true);
+      return new RemoteFetcher(conf, uri, storeChunk);
+    }
   }
 
   @Test
@@ -120,7 +148,7 @@ public class TestFetcher {
     final int partParentId = HashShuffleAppenderManager.getPartParentId(Integer.parseInt(partId), conf);
     final Path dataPath = StorageUtil.concatPath(queryBaseDir, "hash-shuffle", String.valueOf(partParentId), partId);
 
-    PullServerRequestURIBuilder builder = new PullServerRequestURIBuilder("127.0.0.1", pullServerService.getPort(),
+    PullServerRequestURIBuilder builder = new PullServerRequestURIBuilder("127.0.0.1", pullserverPort,
         maxUrlLength);
     builder.setRequestType(PullServerConstants.CHUNK_REQUEST_PARAM_STRING)
         .setQueryId(queryId.toString())
@@ -140,14 +168,7 @@ public class TestFetcher {
     URI uri = builder.build(false).get(0);
     File data = new File(OUTPUT_DIR + "data");
 
-    final AbstractFetcher fetcher;
-    if (type.equals(FetchType.LOCAL)) {
-      fetcher = new LocalFetcher(conf, uri, "test");
-    } else {
-      FileChunk storeChunk = new FileChunk(data, 0, data.length());
-      storeChunk.setFromRemote(true);
-      fetcher = new RemoteFetcher(conf, uri, storeChunk);
-    }
+    final AbstractFetcher fetcher = getFetcher(uri, data);
 
     FileChunk chunk = fetcher.get().get(0);
     assertNotNull(chunk);
@@ -158,7 +179,7 @@ public class TestFetcher {
     FileStatus outStatus = fs.getFileStatus(new Path(chunk.getFile().getAbsolutePath()));
 
     assertEquals(inStatus.getLen(), outStatus.getLen());
-    assertEquals(TajoProtos.FetcherState.FETCH_FINISHED, fetcher.getState());
+    assertEquals(FetcherState.FETCH_DATA_FINISHED, fetcher.getState());
   }
 
   @Test
@@ -194,8 +215,8 @@ public class TestFetcher {
     writer.init();
 
     for (String t : strings) {
-      stream.write(t.getBytes());
       writer.write(new VTuple(new Datum[] {DatumFactory.createText(t)}), stream.getPos());
+      stream.write(t.getBytes());
     }
     stream.flush();
     writer.flush();
@@ -205,7 +226,7 @@ public class TestFetcher {
     RangeParam rangeParam = new RangeParam(new TupleRange(sortSpecs,
         new VTuple(new Datum[] {DatumFactory.createText(strings.get(0))}),
         new VTuple(new Datum[] {DatumFactory.createText(strings.get(strings.size() - 1))})), true, RowStoreUtil.createEncoder(schema));
-    PullServerRequestURIBuilder builder = new PullServerRequestURIBuilder("127.0.0.1", pullServerService.getPort(),
+    PullServerRequestURIBuilder builder = new PullServerRequestURIBuilder("127.0.0.1", pullserverPort,
         maxUrlLength);
     builder.setRequestType(PullServerConstants.CHUNK_REQUEST_PARAM_STRING)
         .setQueryId(queryId.toString())
@@ -216,19 +237,12 @@ public class TestFetcher {
         .setAttemptIds(Lists.newArrayList(Integer.parseInt(attemptId)))
         .setStartKeyBase64(new String(Base64.encodeBase64(rangeParam.getStart())))
         .setEndKeyBase64(new String(Base64.encodeBase64(rangeParam.getEnd())))
-        .setLast(true);
+        .setLastInclude(true);
 
     URI uri = builder.build(true).get(0);
     File data = new File(OUTPUT_DIR + "data");
 
-    final AbstractFetcher fetcher;
-    if (type.equals(FetchType.LOCAL)) {
-      fetcher = new LocalFetcher(conf, uri, "test");
-    } else {
-      FileChunk storeChunk = new FileChunk(data, 0, data.length());
-      storeChunk.setFromRemote(true);
-      fetcher = new RemoteFetcher(conf, uri, storeChunk);
-    }
+    final AbstractFetcher fetcher = getFetcher(uri, data);
 
     FileChunk chunk = fetcher.get().get(0);
     assertNotNull(chunk);
@@ -238,12 +252,12 @@ public class TestFetcher {
     FileStatus outStatus = fs.getFileStatus(new Path(chunk.getFile().getAbsolutePath()));
 
     assertEquals(inStatus.getLen(), outStatus.getLen());
-    assertEquals(TajoProtos.FetcherState.FETCH_FINISHED, fetcher.getState());
+    assertEquals(FetcherState.FETCH_DATA_FINISHED, fetcher.getState());
   }
 
   @Test
   public void testAdjustFetchProcess() {
-    assertEquals(0.0f, TaskImpl.adjustFetchProcess(0, 0), 0);
+    Assert.assertEquals(0.0f, TaskImpl.adjustFetchProcess(0, 0), 0);
     assertEquals(0.0f, TaskImpl.adjustFetchProcess(10, 10), 0);
     assertEquals(0.05f, TaskImpl.adjustFetchProcess(10, 9), 0);
     assertEquals(0.1f, TaskImpl.adjustFetchProcess(10, 8), 0);
@@ -264,7 +278,7 @@ public class TestFetcher {
     final int partParentId = HashShuffleAppenderManager.getPartParentId(Integer.parseInt(partId), conf);
     final Path dataPath = StorageUtil.concatPath(queryBaseDir, "hash-shuffle", String.valueOf(partParentId), partId);
 
-    PullServerRequestURIBuilder builder = new PullServerRequestURIBuilder("127.0.0.1", pullServerService.getPort(),
+    PullServerRequestURIBuilder builder = new PullServerRequestURIBuilder("127.0.0.1", pullserverPort,
         maxUrlLength);
     builder.setRequestType(PullServerConstants.CHUNK_REQUEST_PARAM_STRING)
         .setQueryId(queryId.toString())
@@ -283,18 +297,11 @@ public class TestFetcher {
 
     URI uri = builder.build(true).get(0);
     File data = new File(OUTPUT_DIR + "data");
-    final AbstractFetcher fetcher;
-    if (type.equals(FetchType.LOCAL)) {
-      fetcher = new LocalFetcher(conf, uri, "test");
-    } else {
-      FileChunk storeChunk = new FileChunk(data, 0, data.length());
-      storeChunk.setFromRemote(true);
-      fetcher = new RemoteFetcher(conf, uri, storeChunk);
-    }
+    final AbstractFetcher fetcher = getFetcher(uri, data);
     assertEquals(TajoProtos.FetcherState.FETCH_INIT, fetcher.getState());
 
     fetcher.get();
-    assertEquals(TajoProtos.FetcherState.FETCH_FINISHED, fetcher.getState());
+    assertEquals(FetcherState.FETCH_DATA_FINISHED, fetcher.getState());
   }
 
   @Test
@@ -309,7 +316,7 @@ public class TestFetcher {
     final int partParentId = HashShuffleAppenderManager.getPartParentId(Integer.parseInt(partId), conf);
     final Path dataPath = StorageUtil.concatPath(queryBaseDir, "hash-shuffle", String.valueOf(partParentId), partId);
 
-    PullServerRequestURIBuilder builder = new PullServerRequestURIBuilder("127.0.0.1", pullServerService.getPort(),
+    PullServerRequestURIBuilder builder = new PullServerRequestURIBuilder("127.0.0.1", pullserverPort,
         maxUrlLength);
     builder.setRequestType(PullServerConstants.CHUNK_REQUEST_PARAM_STRING)
         .setQueryId(queryId.toString())
@@ -329,23 +336,16 @@ public class TestFetcher {
 
     URI uri = builder.build(true).get(0);
     File data = new File(OUTPUT_DIR + "data");
-    final AbstractFetcher fetcher;
-    if (type.equals(FetchType.LOCAL)) {
-      fetcher = new LocalFetcher(conf, uri, "test");
-    } else {
-      FileChunk storeChunk = new FileChunk(data, 0, data.length());
-      storeChunk.setFromRemote(true);
-      fetcher = new RemoteFetcher(conf, uri, storeChunk);
-    }
+    final AbstractFetcher fetcher = getFetcher(uri, data);
     assertEquals(TajoProtos.FetcherState.FETCH_INIT, fetcher.getState());
 
     try {
       fetcher.get();
-      if (type.equals(FetchType.LOCAL)) {
+      if (fetchType.equals(FetchType.LOCAL)) {
         fail();
       }
     } catch (IOException e) {
-      if (type.equals(FetchType.REMOTE)) {
+      if (fetchType.equals(FetchType.REMOTE)) {
         fail();
       }
     }
@@ -365,7 +365,7 @@ public class TestFetcher {
     final int partParentId = HashShuffleAppenderManager.getPartParentId(Integer.parseInt(partId), conf);
     final Path dataPath = StorageUtil.concatPath(queryBaseDir, "hash-shuffle", String.valueOf(partParentId), partId);
 
-    PullServerRequestURIBuilder builder = new PullServerRequestURIBuilder("127.0.0.1", pullServerService.getPort(),
+    PullServerRequestURIBuilder builder = new PullServerRequestURIBuilder("127.0.0.1", pullserverPort,
         maxUrlLength);
     builder.setRequestType(PullServerConstants.CHUNK_REQUEST_PARAM_STRING)
         .setQueryId(queryId.toString())
@@ -385,23 +385,16 @@ public class TestFetcher {
 
     URI uri = builder.build(true).get(0);
     File data = new File(OUTPUT_DIR + "data");
-    final AbstractFetcher fetcher;
-    if (type.equals(FetchType.LOCAL)) {
-      fetcher = new LocalFetcher(conf, uri, "test");
-    } else {
-      FileChunk storeChunk = new FileChunk(data, 0, data.length());
-      storeChunk.setFromRemote(true);
-      fetcher = new RemoteFetcher(conf, uri, storeChunk);
-    }
+    final AbstractFetcher fetcher = getFetcher(uri, data);
     assertEquals(TajoProtos.FetcherState.FETCH_INIT, fetcher.getState());
 
     try {
       fetcher.get();
-      if (type.equals(FetchType.LOCAL)) {
+      if (fetchType.equals(FetchType.LOCAL)) {
         fail();
       }
     } catch (IllegalArgumentException e) {
-      if (!type.equals(FetchType.LOCAL)) {
+      if (!fetchType.equals(FetchType.LOCAL)) {
         fail();
       }
     }
@@ -415,7 +408,7 @@ public class TestFetcher {
     String ta = "1_0";
     String partId = "1";
 
-    PullServerRequestURIBuilder builder = new PullServerRequestURIBuilder("127.0.0.1", pullServerService.getPort(),
+    PullServerRequestURIBuilder builder = new PullServerRequestURIBuilder("127.0.0.1", pullserverPort,
         maxUrlLength);
     builder.setRequestType(PullServerConstants.CHUNK_REQUEST_PARAM_STRING)
         .setQueryId(queryId.toString())
@@ -426,14 +419,7 @@ public class TestFetcher {
 
     URI uri = builder.build(true).get(0);
     File data = new File(OUTPUT_DIR + "data");
-    final AbstractFetcher fetcher;
-    if (type.equals(FetchType.LOCAL)) {
-      fetcher = new LocalFetcher(conf, uri, "test");
-    } else {
-      FileChunk storeChunk = new FileChunk(data, 0, data.length());
-      storeChunk.setFromRemote(true);
-      fetcher = new RemoteFetcher(conf, uri, storeChunk);
-    }
+    final AbstractFetcher fetcher = getFetcher(uri, data);
     assertEquals(TajoProtos.FetcherState.FETCH_INIT, fetcher.getState());
 
     pullServerService.stop();

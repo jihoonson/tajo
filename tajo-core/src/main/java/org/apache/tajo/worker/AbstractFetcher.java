@@ -19,6 +19,7 @@
 package org.apache.tajo.worker;
 
 import org.apache.tajo.TajoProtos;
+import org.apache.tajo.TajoProtos.FetcherState;
 import org.apache.tajo.conf.TajoConf;
 import org.apache.tajo.pullserver.retriever.FileChunk;
 
@@ -75,4 +76,9 @@ public abstract class AbstractFetcher {
   }
 
   public abstract List<FileChunk> get() throws IOException;
+
+  protected void endFetch(FetcherState state) {
+    this.finishTime = System.currentTimeMillis();
+    this.state = state;
+  }
 }

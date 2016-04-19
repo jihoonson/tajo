@@ -51,7 +51,6 @@ import org.apache.tajo.plan.serder.PlanProto.DistinctGroupbyEnforcer.MultipleAgg
 import org.apache.tajo.plan.serder.PlanProto.EnforceProperty;
 import org.apache.tajo.plan.util.PlannerUtil;
 import org.apache.tajo.pullserver.PullServerConstants;
-import org.apache.tajo.pullserver.PullServerUtil;
 import org.apache.tajo.pullserver.PullServerUtil.PullServerRequestURIBuilder;
 import org.apache.tajo.querymaster.Task.IntermediateEntry;
 import org.apache.tajo.querymaster.Task.PullHost;
@@ -1140,7 +1139,7 @@ public class Repartitioner {
       builder.setShuffleType(PullServerConstants.RANGE_SHUFFLE_PARAM_STRING);
       builder.setStartKeyBase64(new String(org.apache.commons.codec.binary.Base64.encodeBase64(fetch.getRangeStart().toByteArray())));
       builder.setEndKeyBase64(new String(org.apache.commons.codec.binary.Base64.encodeBase64(fetch.getRangeEnd().toByteArray())));
-      builder.setLast(fetch.getRangeLastInclusive());
+      builder.setLastInclude(fetch.getRangeLastInclusive());
     } else if (fetch.getType() == SCATTERED_HASH_SHUFFLE) {
       builder.setShuffleType(PullServerConstants.SCATTERED_HASH_SHUFFLE_PARAM_STRING);
     }

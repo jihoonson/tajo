@@ -34,7 +34,6 @@ import org.apache.tajo.TajoProtos;
 import org.apache.tajo.TajoProtos.FetcherState;
 import org.apache.tajo.conf.TajoConf;
 import org.apache.tajo.pullserver.PullServerConstants;
-import org.apache.tajo.pullserver.TajoPullServerService;
 import org.apache.tajo.pullserver.retriever.FileChunk;
 import org.apache.tajo.rpc.NettyUtils;
 
@@ -100,7 +99,7 @@ public class RemoteFetcher extends AbstractFetcher {
     }
 
     this.startTime = System.currentTimeMillis();
-    this.state = TajoProtos.FetcherState.FETCH_FETCHING;
+    this.state = FetcherState.FETCH_DATA_FETCHING;
     ChannelFuture future = null;
     try {
       future = bootstrap.clone().connect(new InetSocketAddress(host, port))
@@ -169,6 +168,7 @@ public class RemoteFetcher extends AbstractFetcher {
     private RandomAccessFile raf;
     private FileChannel fc;
     private long length = -1;
+    private int totalReceivedContentLength = 0;
 
     public HttpClientHandler(File file) throws FileNotFoundException {
       this.file = file;
@@ -218,9 +218,8 @@ public class RemoteFetcher extends AbstractFetcher {
             length = 0;
             return;
           } else if (response.getStatus().code() != HttpResponseStatus.OK.code()) {
-            finishTime = System.currentTimeMillis();
             LOG.error(response.getStatus().reasonPhrase(), response.getDecoderResult().cause());
-            state = TajoProtos.FetcherState.FETCH_FAILED;
+            endFetch(FetcherState.FETCH_FAILED);
             return;
           }
         } catch (Exception e) {
@@ -237,6 +236,7 @@ public class RemoteFetcher extends AbstractFetcher {
         if (state != FetcherState.FETCH_FAILED) {
           try {
             if (content.isReadable()) {
+              totalReceivedContentLength += content.readableBytes();
               content.readBytes(fc, content.readableBytes());
             }
 
@@ -246,8 +246,12 @@ public class RemoteFetcher extends AbstractFetcher {
                 fileLen = file.length();
               }
 
-              finishTime = System.currentTimeMillis();
-              state = TajoProtos.FetcherState.FETCH_FINISHED;
+              if (totalReceivedContentLength == length) {
+                endFetch(FetcherState.FETCH_DATA_FINISHED);
+              } else {
+                endFetch(FetcherState.FETCH_FAILED);
+                throw new IOException("Invalid fetch length: " + totalReceivedContentLength + ", but expected " + length);
+              }
               IOUtils.cleanup(LOG, fc, raf);
             }
           } catch (Exception e) {
@@ -273,18 +277,16 @@ public class RemoteFetcher extends AbstractFetcher {
 
       // this fetching will be retry
       IOUtils.cleanup(LOG, fc, raf);
-      finishTime = System.currentTimeMillis();
-      state = TajoProtos.FetcherState.FETCH_FAILED;
+      endFetch(FetcherState.FETCH_FAILED);
       ctx.close();
     }
 
     @Override
     public void channelUnregistered(ChannelHandlerContext ctx) throws Exception {
-      if(getState() != TajoProtos.FetcherState.FETCH_FINISHED){
+      if(getState() != FetcherState.FETCH_DATA_FINISHED){
         //channel is closed, but cannot complete fetcher
-        finishTime = System.currentTimeMillis();
+        endFetch(FetcherState.FETCH_FAILED);
         LOG.error("Channel closed by peer: " + ctx.channel());
-        state = TajoProtos.FetcherState.FETCH_FAILED;
       }
       IOUtils.cleanup(LOG, fc, raf);
 

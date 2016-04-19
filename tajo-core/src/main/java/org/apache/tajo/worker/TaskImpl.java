@@ -28,6 +28,7 @@ import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.tajo.TajoProtos;
+import org.apache.tajo.TajoProtos.FetcherState;
 import org.apache.tajo.TajoProtos.TaskAttemptState;
 import org.apache.tajo.TaskAttemptId;
 import org.apache.tajo.catalog.Schema;
@@ -522,7 +523,7 @@ public class TaskImpl implements Task {
           builder.setMessageReceivedCount(fetcher.getMessageReceiveCount());
           builder.setState(fetcher.getState());
           taskHistory.addFetcherHistory(builder.build());
-          if (fetcher.getState() == TajoProtos.FetcherState.FETCH_FINISHED) i++;
+          if (fetcher.getState() == FetcherState.FETCH_DATA_FINISHED) i++;
         }
         taskHistory.setFinishedFetchCount(i);
       }
@@ -611,7 +612,7 @@ public class TaskImpl implements Task {
           }
           try {
             List<FileChunk> fetched = fetcher.get();
-            if (fetcher.getState() == TajoProtos.FetcherState.FETCH_FINISHED) {
+            if (fetcher.getState() == FetcherState.FETCH_DATA_FINISHED) {
               for (FileChunk eachFetch : fetched) {
                 if (eachFetch.getFile() != null) {
                   if (!eachFetch.fromRemote()) {
@@ -629,7 +630,7 @@ public class TaskImpl implements Task {
           retryNum++;
         }
       } finally {
-        if(fetcher.getState() == TajoProtos.FetcherState.FETCH_FINISHED){
+        if(fetcher.getState() == FetcherState.FETCH_DATA_FINISHED){
           fetcherFinished(ctx);
         } else {
           if (retryNum == maxRetryNum) {

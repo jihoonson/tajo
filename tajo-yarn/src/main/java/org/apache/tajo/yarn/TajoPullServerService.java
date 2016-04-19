@@ -18,6 +18,7 @@
 
 package org.apache.tajo.yarn;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
@@ -255,6 +256,11 @@ public class TajoPullServerService extends AuxiliaryService {
     super.serviceStop();
   }
 
+  @VisibleForTesting
+  public int getPort() {
+    return port;
+  }
+
   @Override
   public ByteBuffer getMetaData() {
     try {
@@ -422,10 +428,15 @@ public class TajoPullServerService extends AuxiliaryService {
       try {
         jsonMetas = PullServerUtil.getJsonMeta(conf, lDirAlloc, localFS, params, gson, indexReaderCache,
             lowCacheHitCheckThreshold);
-      } catch (Throwable t) {
-        LOG.error("Cannot find the file chunk meta for " + request.getUri());
-        sendError(ctx, "Cannot get file chunks to be sent", HttpResponseStatus.BAD_REQUEST);
+      } catch (FileNotFoundException e) {
+        sendError(ctx, e.getMessage(), HttpResponseStatus.NO_CONTENT);
         return;
+      } catch (IOException | IllegalArgumentException e) { // IOException, EOFException, IllegalArgumentException
+        sendError(ctx, e.getMessage(), HttpResponseStatus.BAD_REQUEST);
+        return;
+      } catch (ExecutionException e) {
+        // There are some problems in index cache
+        throw new TajoInternalError(e.getCause());
       }
 
       HttpResponse response = new DefaultHttpResponse(HTTP_1_1, HttpResponseStatus.OK);

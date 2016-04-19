@@ -451,10 +451,21 @@ public class TajoPullServerService extends AbstractService {
       try {
         jsonMetas = PullServerUtil.getJsonMeta(conf, lDirAlloc, localFS, params, gson, indexReaderCache,
             lowCacheHitCheckThreshold);
-      } catch (Throwable t) {
-        LOG.error("Cannot find the file chunk meta for " + request.getUri(), t);
-        sendError(ctx, "Cannot get file chunks to be sent", HttpResponseStatus.BAD_REQUEST);
+//      } catch (Throwable t) {
+//        // TODO: error handling
+//        LOG.error("Cannot find the file chunk meta for " + request.getUri(), t);
+//        sendError(ctx, "Cannot get file chunks to be sent", HttpResponseStatus.BAD_REQUEST);
+//        return;
+//      }
+      } catch (FileNotFoundException e) {
+        sendError(ctx, e.getMessage(), HttpResponseStatus.NO_CONTENT);
         return;
+      } catch (IOException | IllegalArgumentException e) { // IOException, EOFException, IllegalArgumentException
+        sendError(ctx, e.getMessage(), HttpResponseStatus.BAD_REQUEST);
+        return;
+      } catch (ExecutionException e) {
+        // There are some problems in index cache
+        throw new TajoInternalError(e.getCause());
       }
 
       FullHttpResponse response = new DefaultFullHttpResponse(HTTP_1_1, HttpResponseStatus.OK,

@@ -150,7 +150,7 @@ public class LocalFetcher extends AbstractFetcher {
           .option(ChannelOption.SO_RCVBUF, 1048576) // set 1M
           .option(ChannelOption.TCP_NODELAY, true);
     } else {
-      finishFetch(FetcherState.FETCH_FAILED);
+      endFetch(FetcherState.FETCH_FAILED);
       throw new TajoInternalError("Pull server service is not initialized");
     }
   }
@@ -160,11 +160,6 @@ public class LocalFetcher extends AbstractFetcher {
     return pullServerService != null ? getDirect() : getFromFetchURI();
   }
 
-  private void finishFetch(FetcherState state) {
-    this.finishTime = System.currentTimeMillis();
-    this.state = state;
-  }
-
   private List<FileChunk> getDirect() throws IOException {
     final List<FileChunk> fileChunks = new ArrayList<>();
     startTime = System.currentTimeMillis();
@@ -172,11 +167,11 @@ public class LocalFetcher extends AbstractFetcher {
     try {
       fileChunks.addAll(pullServerService.getFileChunks(conf, localDirAllocator, params));
     } catch (ExecutionException e) {
-      finishFetch(FetcherState.FETCH_FAILED);
+      endFetch(FetcherState.FETCH_FAILED);
       throw new TajoInternalError(e);
     }
     fileChunks.stream().forEach(c -> c.setEbId(tableName));
-    finishFetch(FetcherState.FETCH_FINISHED);
+    endFetch(FetcherState.FETCH_DATA_FINISHED);
     fileLen = fileChunks.get(0).getFile().length();
     return fileChunks;
   }
@@ -190,7 +185,7 @@ public class LocalFetcher extends AbstractFetcher {
     } else if (PullServerUtil.isHashShuffle(params.shuffleType())) {
       return getChunksForHashShuffle(params, queryBaseDir);
     } else {
-      finishFetch(FetcherState.FETCH_FAILED);
+      endFetch(FetcherState.FETCH_FAILED);
       throw new IllegalArgumentException("unknown shuffle type: " + params.shuffleType());
     }
   }
@@ -205,7 +200,7 @@ public class LocalFetcher extends AbstractFetcher {
     final Path partPath = StorageUtil.concatPath(queryBaseDir, "hash-shuffle", String.valueOf(partParentId), partId);
 
     if (!localDirAllocator.ifExists(partPath.toString(), conf)) {
-      finishFetch(FetcherState.FETCH_FAILED);
+      endFetch(FetcherState.FETCH_FAILED);
       throw new IOException("Hash shuffle or Scattered hash shuffle - file not exist: " + partPath);
     }
     final Path path = localFileSystem.makeQualified(localDirAllocator.getLocalPathToRead(partPath.toString(), conf));
@@ -214,7 +209,7 @@ public class LocalFetcher extends AbstractFetcher {
     final long readLen = (offset >= 0 && length >= 0) ? length : file.length();
 
     if (startPos >= file.length()) {
-      finishFetch(FetcherState.FETCH_FAILED);
+      endFetch(FetcherState.FETCH_FAILED);
       throw new IOException("Start pos[" + startPos + "] great than file length [" + file.length() + "]");
     }
     if (readLen > 0) {
@@ -224,7 +219,7 @@ public class LocalFetcher extends AbstractFetcher {
       fileChunks.add(chunk);
     }
 
-    finishFetch(FetcherState.FETCH_FINISHED);
+    endFetch(FetcherState.FETCH_DATA_FINISHED);
     return fileChunks;
   }
 
@@ -238,7 +233,7 @@ public class LocalFetcher extends AbstractFetcher {
     }
 
     this.startTime = System.currentTimeMillis();
-    this.state = TajoProtos.FetcherState.FETCH_FETCHING;
+    this.state = FetcherState.FETCH_META_FETCHING;
     ChannelFuture future = null;
     try {
       future = bootstrap.clone().connect(new InetSocketAddress(host, port))
@@ -247,7 +242,7 @@ public class LocalFetcher extends AbstractFetcher {
       // Wait until the connection attempt succeeds or fails.
       Channel channel = future.awaitUninterruptibly().channel();
       if (!future.isSuccess()) {
-        finishFetch(FetcherState.FETCH_FAILED);
+        endFetch(FetcherState.FETCH_FAILED);
         throw new IOException(future.cause());
       }
 
@@ -268,6 +263,7 @@ public class LocalFetcher extends AbstractFetcher {
       // Wait for the server to close the connection. throw exception if failed
       channel.closeFuture().syncUninterruptibly();
 
+      state = FetcherState.FETCH_DATA_FETCHING;
       for (FileChunkMeta eachMeta : chunkMetas) {
         Path outputPath = StorageUtil.concatPath(queryBaseDir, eachMeta.getTaskId(), "output");
         if (!localDirAllocator.ifExists(outputPath.toString(), conf)) {
@@ -288,7 +284,7 @@ public class LocalFetcher extends AbstractFetcher {
         future.channel().close().awaitUninterruptibly();
       }
 
-      finishFetch(FetcherState.FETCH_FINISHED);
+      endFetch(FetcherState.FETCH_DATA_FINISHED);
     }
   }
 
@@ -355,13 +351,15 @@ public class LocalFetcher extends AbstractFetcher {
           try {
             if (content.isReadable()) {
               int contentLength = content.readableBytes();
+              if ((totalReceivedContentLength + contentLength) == length) {
+                state = FetcherState.FETCH_META_FINISHED;
+              }
               content.readBytes(buf, totalReceivedContentLength, contentLength);
               totalReceivedContentLength += contentLength;
-              if (totalReceivedContentLength == length) {
+              if (state.equals(FetcherState.FETCH_META_FINISHED)) {
                 List<String> jsonMetas = gson.fromJson(new String(buf), List.class);
                 for (String eachJson : jsonMetas) {
                   FileChunkMeta meta = gson.fromJson(eachJson, FileChunkMeta.class);
-                  LOG.info("received file chunk meta: " + meta);
                   chunkMetas.add(meta);
                 }
                 totalReceivedContentLength = 0;
@@ -400,7 +398,7 @@ public class LocalFetcher extends AbstractFetcher {
 
     @Override
     public void channelUnregistered(ChannelHandlerContext ctx) throws Exception {
-      if(getState() != TajoProtos.FetcherState.FETCH_FINISHED){
+      if(getState() == FetcherState.FETCH_INIT || getState() == FetcherState.FETCH_META_FETCHING){
         //channel is closed, but cannot complete fetcher
         finishTime = System.currentTimeMillis();
         LOG.error("Channel closed by peer: " + ctx.channel());
@@ -442,7 +440,7 @@ public class LocalFetcher extends AbstractFetcher {
     if (PullServerUtil.isRangeShuffle(params.shuffleType())) {
       builder.setStartKeyBase64(params.startKey())
           .setEndKeyBase64(params.endKey())
-          .setLast(params.last());
+          .setLastInclude(params.last());
     }
 
     if (params.contains(Param.TASK_ID)) {
