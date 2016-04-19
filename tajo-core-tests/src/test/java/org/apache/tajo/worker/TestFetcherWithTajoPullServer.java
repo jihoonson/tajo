@@ -70,6 +70,10 @@ public class TestFetcherWithTajoPullServer {
     LOCAL,
     REMOTE
   }
+  private enum PullServerType {
+    TAJO,
+    YARN
+  }
 
   private final String TEST_DATA = TajoTestingCluster.DEFAULT_TEST_DIRECTORY + "/" +
       TestFetcherWithTajoPullServer.class.getSimpleName();
@@ -80,12 +84,12 @@ public class TestFetcherWithTajoPullServer {
   private final int maxUrlLength = conf.getIntVar(ConfVars.PULLSERVER_FETCH_URL_MAX_LENGTH);
   private final String TEST_TABLE_NAME = "test";
   private final FetchType fetchType;
-  private final String pullserverType;
+  private final PullServerType pullServerType;
   private int pullserverPort;
 
-  public TestFetcherWithTajoPullServer(FetchType fetchType, String pullserverType) {
+  public TestFetcherWithTajoPullServer(FetchType fetchType, PullServerType pullServerType) {
     this.fetchType = fetchType;
-    this.pullserverType = pullserverType;
+    this.pullServerType = pullServerType;
   }
 
   @Before
@@ -97,7 +101,7 @@ public class TestFetcherWithTajoPullServer {
     conf.setIntVar(TajoConf.ConfVars.SHUFFLE_FETCHER_READ_TIMEOUT, 1);
     conf.setIntVar(TajoConf.ConfVars.SHUFFLE_FETCHER_CHUNK_MAX_SIZE, 127);
 
-    if (pullserverType.equals("Standalone")) {
+    if (pullServerType.equals(PullServerType.TAJO)) {
       pullServerService = new TajoPullServerService();
     } else {
       pullServerService = new org.apache.tajo.yarn.TajoPullServerService();
@@ -105,7 +109,7 @@ public class TestFetcherWithTajoPullServer {
     pullServerService.init(conf);
     pullServerService.start();
 
-    if (pullserverType.equals("Standalone")) {
+    if (pullServerType.equals(PullServerType.TAJO)) {
       pullserverPort = ((TajoPullServerService)pullServerService).getPort();
     } else {
       pullserverPort = ((org.apache.tajo.yarn.TajoPullServerService)pullServerService).getPort();
@@ -117,13 +121,13 @@ public class TestFetcherWithTajoPullServer {
     pullServerService.stop();
   }
 
-  @Parameters
+  @Parameters(name = "{index}: {0}, {1}")
   public static Collection<Object[]> generateParameters() {
     return Arrays.asList(new Object[][] {
-        {FetchType.LOCAL, "Standalone"},
-        {FetchType.REMOTE, "Standalone"},
-        {FetchType.LOCAL, "Yarn"},
-        {FetchType.REMOTE, "Yarn"}
+        {FetchType.LOCAL, PullServerType.TAJO},
+        {FetchType.REMOTE, PullServerType.TAJO},
+        {FetchType.LOCAL, PullServerType.YARN},
+        {FetchType.REMOTE, PullServerType.YARN}
     });
   }
 
