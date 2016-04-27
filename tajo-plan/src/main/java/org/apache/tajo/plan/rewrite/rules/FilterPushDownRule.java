@@ -422,10 +422,10 @@ public class FilterPushDownRule extends BasicLogicalPlanVisitor<FilterPushDownCo
     return nonEquiThetaJoinQuals;
   }
 
-  private Map<EvalNode, EvalNode> transformEvalsWidthByPassNode(
-      Collection<EvalNode> originEvals, LogicalPlan plan,
-      LogicalPlan.QueryBlock block,
-      LogicalNode node, LogicalNode childNode) throws TajoException {
+  public static Map<EvalNode, EvalNode> transformEvalsWidthByPassNode(Collection<EvalNode> originEvals,
+                                                                       LogicalNode node,
+                                                                       LogicalNode childNode)
+      throws TajoException {
     // transformed -> pushingDownFilters
     Map<EvalNode, EvalNode> transformedMap = new HashMap<>();
 
@@ -545,7 +545,7 @@ public class FilterPushDownRule extends BasicLogicalPlanVisitor<FilterPushDownCo
 
     // transformed -> pushingDownFilters
     Map<EvalNode, EvalNode> transformedMap =
-        transformEvalsWidthByPassNode(matched, plan, block, node, node.getSubQuery());
+        transformEvalsWidthByPassNode(matched, node, node.getSubQuery());
     context.setFiltersTobePushed(transformedMap.keySet());
     visit(context, plan, plan.getBlock(node.getSubQuery()));
     context.setToOrigin(transformedMap);
@@ -564,7 +564,7 @@ public class FilterPushDownRule extends BasicLogicalPlanVisitor<FilterPushDownCo
     origins.addAll(context.pushingDownFilters);
 
     // transformed -> pushingDownFilters
-    Map<EvalNode, EvalNode> transformedMap = transformEvalsWidthByPassNode(origins, plan, block, unionNode, leftNode);
+    Map<EvalNode, EvalNode> transformedMap = transformEvalsWidthByPassNode(origins, unionNode, leftNode);
     context.setFiltersTobePushed(transformedMap.keySet());
     visit(context, plan, plan.getBlock(leftNode));
 
@@ -573,7 +573,7 @@ public class FilterPushDownRule extends BasicLogicalPlanVisitor<FilterPushDownCo
     }
 
     LogicalNode rightNode = unionNode.getRightChild();
-    transformedMap = transformEvalsWidthByPassNode(origins, plan, block, unionNode, rightNode);
+    transformedMap = transformEvalsWidthByPassNode(origins, unionNode, rightNode);
     context.setFiltersTobePushed(transformedMap.keySet());
     visit(context, plan, plan.getBlock(rightNode), rightNode, stack);
 

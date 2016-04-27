@@ -2338,8 +2338,6 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
 
   public static boolean checkIfBeEvaluatedAtJoin(QueryBlock block, EvalNode evalNode, JoinNode node,
                                                  boolean isTopMostJoin) {
-    Set<Column> columnRefs = EvalTreeUtil.findUniqueColumns(evalNode);
-
     if (EvalTreeUtil.findDistinctAggFunction(evalNode).size() > 0) {
       return false;
     }
@@ -2348,6 +2346,7 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
       return false;
     }
 
+    Set<Column> columnRefs = EvalTreeUtil.findUniqueColumns(evalNode);
     if (columnRefs.size() > 0 && !node.getInSchema().containsAll(columnRefs)) {
       return false;
     }
@@ -2377,8 +2376,6 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
    * It checks if evalNode can be evaluated at this @{link RelationNode}.
    */
   public static boolean checkIfBeEvaluatedAtRelation(QueryBlock block, EvalNode evalNode, RelationNode node) {
-    Set<Column> columnRefs = EvalTreeUtil.findUniqueColumns(evalNode);
-
     // aggregation functions cannot be evaluated in scan node
     if (EvalTreeUtil.findDistinctAggFunction(evalNode).size() > 0) {
       return false;
@@ -2389,8 +2386,37 @@ public class LogicalPlanner extends BaseAlgebraVisitor<LogicalPlanner.PlanContex
       return false;
     }
 
-    if (columnRefs.size() > 0 && !node.getLogicalSchema().containsAll(columnRefs)) {
-      return false;
+    Set<Column> columnRefs = EvalTreeUtil.findUniqueColumns(evalNode);
+    Set<Column> qualifiedColumnRefs = new HashSet<>();
+    Set<Column> simpleColumnRefs = new HashSet<>();
+    for (Column column : columnRefs) {
+      if (CatalogUtil.isSimpleIdentifier(column.getQualifiedName())) {
+        simpleColumnRefs.add(column);
+      } else {
+        qualifiedColumnRefs.add(column);
+      }
+    }
+
+//    if (columnRefs.size() > 0 && !node.getLogicalSchema().containsAll(columnRefs)) {
+//      return false;
+//    }
+
+    if (columnRefs.size() > 0) {
+      if (!node.getInSchema().containsAll(qualifiedColumnRefs)) {
+        return false;
+      }
+      for (Column simpleColumn : simpleColumnRefs) {
+        boolean found = false;
+        for (Column eachColumn : node.getInSchema().getAllColumns()) {
+          if (eachColumn.getSimpleName().equals(simpleColumn.getSimpleName())) {
+            found = true;
+            break;
+          }
+        }
+        if (!found) {
+          return false;
+        }
+      }
     }
 
     // Why? - When a {case when} is used with outer join, case when must be evaluated at topmost outer join.

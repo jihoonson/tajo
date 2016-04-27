@@ -19,16 +19,12 @@
 package org.apache.tajo.plan.rewrite.rules;
 
 import com.google.common.collect.*;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.tajo.annotation.Nullable;
 import org.apache.tajo.catalog.Column;
 import org.apache.tajo.catalog.Schema;
 import org.apache.tajo.catalog.SchemaUtil;
 import org.apache.tajo.catalog.SortSpec;
-import org.apache.tajo.exception.DuplicateColumnException;
-import org.apache.tajo.exception.TajoException;
-import org.apache.tajo.exception.TajoInternalError;
+import org.apache.tajo.exception.*;
 import org.apache.tajo.plan.LogicalPlan;
 import org.apache.tajo.plan.LogicalPlan.QueryBlock;
 import org.apache.tajo.plan.LogicalPlanner;
@@ -42,6 +38,7 @@ import org.apache.tajo.plan.visitor.BasicLogicalPlanVisitor;
 import org.apache.tajo.util.TUtil;
 
 import java.util.*;
+import java.util.Map.Entry;
 
 /**
  * ProjectionPushDownRule deploys expressions in a selection list to proper
@@ -51,8 +48,6 @@ import java.util.*;
  */
 public class ProjectionPushDownRule extends
     BasicLogicalPlanVisitor<ProjectionPushDownRule.Context, LogicalNode> implements LogicalPlanRewriteRule {
-  /** Class Logger */
-  private final Log LOG = LogFactory.getLog(ProjectionPushDownRule.class);
   private static final String name = "ProjectionPushDown";
 
   @Override
@@ -115,17 +110,17 @@ public class ProjectionPushDownRule extends
    * <code>$1</code> is a simple arithmetic operation, and $2 is an aggregation function.
    * <code>$1</code> is evaluated in ScanNode because it's just a simple arithmetic operation.
    * So, the evaluation state of l_orderkey + 1 initially
-   * is false, but the state will be true after ScanNode.
+   * is false, but the state will be true after visiting the corresponding ScanNode.
    *
    * In contrast, sum($1) is evaluated at GroupbyNode. So, its evaluation state is changed
-   * after GroupByNode.
+   * after visiting the corresponding GroupByNode.
    *
    * <h2>Why is TargetListManager necessary?</h2>
    *
    * Expressions used in a query block can be divided into various categories according to
    * the possible {@link Projectable} nodes. Their references become available depending on
    * the Projectable node at which expressions are evaluated. It manages the expressions and
-   * references for optimized places of expressions. It performs duplicated removal and enables
+   * references for optimized places of expressions. It performs duplication removal and enables
    * common expressions to be shared with two or more Projectable nodes. It also helps Projectable
    * nodes to find correct column references.
    */
@@ -140,7 +135,7 @@ public class ProjectionPushDownRule extends
      * The projection node removal occurs only when the projection node's output
      * schema and its child's output schema are equivalent to each other.
      *
-     * If we keep the inserted order of all expressions. It would make the possibility
+     * If we keep the inserted order of all expressions, it would make the probability
      * of projection node removal higher.
      **/
 
@@ -171,7 +166,7 @@ public class ProjectionPushDownRule extends
     }
 
     /**
-     * If some expression is duplicated, we call an alias indicating the duplicated expression 'native alias'.
+     * If some expressions are duplicated, we call an alias indicating the duplicated expression 'native alias'.
      * This method checks whether a reference is native alias or not.
      *
      * @param name The reference name
@@ -363,10 +358,10 @@ public class ProjectionPushDownRule extends
     }
 
     class FilteredTargetIterator implements Iterator<Target> {
-      List<Target> filtered = new ArrayList<>();
-      Iterator<Target> iterator;
+      final Iterator<Target> iterator;
 
       public FilteredTargetIterator(Set<String> required) {
+        final List<Target> filtered = new ArrayList<>();
         for (String name : nameToIdBiMap.keySet()) {
           if (required.contains(name)) {
             filtered.add(getTarget(name));
@@ -387,6 +382,7 @@ public class ProjectionPushDownRule extends
 
       @Override
       public void remove() {
+        throw new TajoRuntimeException(new NotImplementedException());
       }
     }
 
@@ -402,8 +398,8 @@ public class ProjectionPushDownRule extends
   }
 
   static class Context {
-    TargetListManager targetListMgr;
-    Set<String> requiredSet;
+    TargetListManager targetListMgr;  // target list manager
+    Set<String> requiredSet;          // set of column names which are not marked as evaluated yet
 
     public Context(LogicalPlan plan) {
       requiredSet = new LinkedHashSet<>();
@@ -423,6 +419,7 @@ public class ProjectionPushDownRule extends
     public String addExpr(Target target) throws DuplicateColumnException {
       String reference = targetListMgr.add(target);
       addNecessaryReferences(target.getEvalTree());
+      requiredSet.add(target.getCanonicalName());
       return reference;
     }
 
@@ -994,18 +991,22 @@ public class ProjectionPushDownRule extends
     }
   }
 
-  static Iterator<Target> getFilteredTarget(List<Target> targets, Set<String> required) {
+  static Iterator<Target> getFilteredTarget(final List<Target> targets, final Set<String> required) {
     return new FilteredIterator(targets, required);
   }
 
-  static class FilteredIterator implements Iterator<Target> {
-    Iterator<Target> iterator;
+  /**
+   * Get targets which are contained in required references.
+   */
+  private static class FilteredIterator implements Iterator<Target> {
+    final Iterator<Target> iterator;
 
-    FilteredIterator(List<Target> targets, Set<String> requiredReferences) {
-      List<Target> filtered = new ArrayList<>();
-      Map<String, Target> targetSet = new HashMap<>();
+    FilteredIterator(final List<Target> targets, final Set<String> requiredReferences) {
+      final List<Target> filtered = new ArrayList<>();
+      final Map<String, Target> targetSet = new HashMap<>();
       for (Target t : targets) {
         // Only should keep an raw target instead of field reference.
+        // TODO: What is the meaning of the below codes?
         if (targetSet.containsKey(t.getCanonicalName())) {
           Target targetInSet = targetSet.get(t.getCanonicalName());
           EvalNode evalNode = targetInSet.getEvalTree();
@@ -1037,6 +1038,7 @@ public class ProjectionPushDownRule extends
 
     @Override
     public void remove() {
+      throw new TajoRuntimeException(new NotImplementedException());
     }
   }
 
@@ -1134,12 +1136,10 @@ public class ProjectionPushDownRule extends
   @Override
   public LogicalNode visitTableSubQuery(Context upperContext, LogicalPlan plan, LogicalPlan.QueryBlock block,
                                         TableSubQueryNode node, Stack<LogicalNode> stack) throws TajoException {
-    Context childContext = new Context(plan, upperContext.requiredSet);
-    stack.push(node);
-    LogicalNode child = super.visitTableSubQuery(childContext, plan, block, node, stack);
-    node.setSubQuery(child);
-    stack.pop();
+//    Context childContext = new Context(plan, upperContext.requiredSet);
+    Context childContext = new Context(plan);
 
+    // TODO: add upperContext.requiredSet and node.targets
     List<Target> targets;
     if (node.hasTargets()) {
       targets = node.getTargets();
@@ -1147,12 +1147,39 @@ public class ProjectionPushDownRule extends
       targets = PlannerUtil.schemaToTargets(node.getOutSchema());
     }
 
-    LinkedHashSet<Target> projectedTargets = Sets.newLinkedHashSet();
+    List<Target> filteredTargets = new ArrayList<>();
     for (Iterator<Target> it = getFilteredTarget(targets, upperContext.requiredSet); it.hasNext();) {
-      Target target = it.next();
-      upperContext.addExpr(target);
+      filteredTargets.add(it.next());
     }
 
+    Map<Target, Target> transformMap = transformEvalsWidthByPassNode(filteredTargets,
+        node, node.getSubQuery());
+    for (Entry<Target, Target> e : transformMap.entrySet()) {
+      // original alias, transformed expression
+      Target newTarget = new Target(e.getValue().getEvalTree(), e.getKey().getAlias());
+      childContext.addExpr(newTarget);
+      targets.add(newTarget);
+      targets.remove(e.getKey());
+//      upperContext.addExpr(new FieldEval(e.getKey().getNamedColumn()));
+    }
+
+    LogicalNode child = super.visitTableSubQuery(childContext, plan, block, node, stack);
+    node.setSubQuery(child);
+
+    node.setTargets(targets);
+
+//    for (Iterator<Target> it = getFilteredTarget(targets, upperContext.requiredSet); it.hasNext();) {
+//      Target target = it.next();
+//      upperContext.addExpr(target);
+//    }
+
+//    upperContext.requiredSet.clear();
+//    for (Iterator<Target> it = getFilteredTarget(targets, childContext.requiredSet); it.hasNext();) {
+//      Target target = it.next();
+//      upperContext.addExpr(transformMap.get(target));
+//    }
+
+    LinkedHashSet<Target> projectedTargets = Sets.newLinkedHashSet();
     for (Iterator<Target> it = upperContext.targetListMgr.getFilteredTargets(upperContext.requiredSet); it.hasNext();) {
       Target target = it.next();
 
@@ -1174,5 +1201,113 @@ public class ProjectionPushDownRule extends
     visit(context, plan, block, node.getChild(), stack);
     stack.pop();
     return node;
+  }
+
+  public static Map<Target, Target> transformEvalsWidthByPassNode(Collection<Target> originTargets,
+                                                                  LogicalNode node,
+                                                                  LogicalNode childNode)
+      throws TajoException {
+    // original -> transformed
+    Map<Target, Target> transformedMap = new HashMap<>();
+
+    if (originTargets.isEmpty()) {
+      return transformedMap;
+    }
+
+    if (node.getType() == NodeType.UNION) {
+      // If node is union, All eval's columns are simple name and matched with child's output schema.
+      Schema childOutSchema = childNode.getOutSchema();
+      for (Target target : originTargets) {
+        Target copy;
+        try {
+          copy = (Target) target.clone();
+        } catch (CloneNotSupportedException e) {
+          throw new TajoInternalError(e);
+        }
+
+        Set<Column> columns = EvalTreeUtil.findUniqueColumns(copy.getEvalTree());
+        for (Column c : columns) {
+          Column column = childOutSchema.getColumn(c.getSimpleName());
+          if (column == null) {
+            throw new TajoInternalError(
+                "Invalid Filter PushDown on SubQuery: No such a corresponding column '"
+                    + c.getQualifiedName() + " for FilterPushDown(" + target + "), " +
+                    "(PID=" + node.getPID() + ", Child=" + childNode.getPID() + ")");
+          }
+          EvalTreeUtil.changeColumnRef(target.getEvalTree(), c.getSimpleName(), column.getQualifiedName());
+        }
+
+        transformedMap.put(target, copy);
+      }
+      return transformedMap;
+    }
+
+    if (childNode.getType() == NodeType.UNION) {
+      // If child is union, remove qualifier from eval's column
+      for (Target target : originTargets) {
+        Target copy;
+        try {
+          copy = (Target) target.clone();
+        } catch (CloneNotSupportedException e) {
+          throw new TajoInternalError(e);
+        }
+
+        Set<Column> columns = EvalTreeUtil.findUniqueColumns(copy.getEvalTree());
+        for (Column c : columns) {
+          if (c.hasQualifier()) {
+            EvalTreeUtil.changeColumnRef(copy.getEvalTree(), c.getQualifiedName(), c.getSimpleName());
+          }
+        }
+
+        transformedMap.put(target, copy);
+      }
+
+      return transformedMap;
+    }
+
+    // node in column -> child out column
+    Map<String, String> columnMap = new HashMap<>();
+
+    for (int i = 0; i < node.getInSchema().size(); i++) {
+      String inColumnName = node.getInSchema().getColumn(i).getQualifiedName();
+      Column childOutColumn = childNode.getOutSchema().getColumn(i);
+      columnMap.put(inColumnName, childOutColumn.getQualifiedName());
+    }
+
+    // Rename from upper block's one to lower block's one
+    for (Target target : originTargets) {
+      Target copy;
+      try {
+        copy = (Target) target.clone();
+      } catch (CloneNotSupportedException e) {
+        throw new TajoInternalError(e);
+      }
+
+      Set<Column> columns = EvalTreeUtil.findUniqueColumns(copy.getEvalTree());
+      boolean allMatched = true;
+      for (Column c : columns) {
+        if (columnMap.containsKey(c.getQualifiedName())) {
+          EvalTreeUtil.changeColumnRef(copy.getEvalTree(), c.getQualifiedName(), columnMap.get(c.getQualifiedName()));
+        } else {
+          if (childNode.getType() == NodeType.GROUP_BY) {
+            if (((GroupbyNode) childNode).isAggregationColumn(c.getSimpleName())) {
+              allMatched = false;
+              break;
+            }
+          } else {
+            throw new TajoInternalError(
+                "Invalid Filter PushDown on SubQuery: No such a corresponding column '"
+                    + c.getQualifiedName() + " for FilterPushDown(" + target + "), " +
+                    "(PID=" + node.getPID() + ", Child=" + childNode.getPID() + ")"
+            );
+          }
+        }
+      }
+      if (allMatched) {
+        transformedMap.put(target, copy);
+      }
+    }
+
+    return transformedMap;
   }
 }
