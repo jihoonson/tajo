@@ -117,7 +117,7 @@ public final class HashShuffleFileWriteExec extends UnaryPhysicalExec {
   }
 
   @Override
-  public Tuple next() throws IOException {
+  public void next() throws IOException {
     try {
       Tuple tuple;
       int partId;

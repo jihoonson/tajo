@@ -166,71 +166,71 @@ public class DistinctGroupbySecondAggregationExec extends UnaryPhysicalExec {
     }
   }
 
-  @Override
-  public Tuple next() throws IOException {
-    if (finished) {
-      return null;
-    }
-
-    while (!context.isStopped()) {
-      Tuple tuple = child.next();
-      if (tuple == null) {
-        finished = true;
-
-        if (prevTuple == null) {
-          // Empty case
-          return null;
-        }
-        if (prevSeq == 0 && nonDistinctAggrFunctions != null) {
-          terminatedNonDistinctAggr(prevTuple);
-        }
-        outTuple.put(prevTuple.getValues());
-        return outTuple;
-      }
-
-      int distinctSeq = tuple.getInt2(0);
-      Tuple keyTuple = getKeyTuple(distinctSeq, tuple);
-
-      if (prevKeyTuple == null) {
-        // First
-        if (distinctSeq == 0 && nonDistinctAggrFunctions != null) {
-          initNonDistinctAggrContext();
-          mergeNonDistinctAggr(tuple);
-        }
-        prevKeyTuple = getKeyTuple(prevKeyTupleMap, keyTuple.getValues());
-        prevTuple = new VTuple(tuple.getValues());
-        prevSeq = distinctSeq;
-        continue;
-      }
-
-      if (!prevKeyTuple.equals(keyTuple)) {
-        // new grouping key
-        if (prevSeq == 0 && nonDistinctAggrFunctions != null) {
-          terminatedNonDistinctAggr(prevTuple);
-        }
-        outTuple.put(prevTuple.getValues());
-
-        prevKeyTuple = getKeyTuple(prevKeyTupleMap, keyTuple.getValues());
-        prevTuple.put(tuple.getValues());
-        prevSeq = distinctSeq;
-
-        if (distinctSeq == 0 && nonDistinctAggrFunctions != null) {
-          initNonDistinctAggrContext();
-          mergeNonDistinctAggr(tuple);
-        }
-        return outTuple;
-      } else {
-        prevKeyTuple = getKeyTuple(prevKeyTupleMap, keyTuple.getValues());
-        prevTuple.put(tuple.getValues());
-        prevSeq = distinctSeq;
-        if (distinctSeq == 0 && nonDistinctAggrFunctions != null) {
-          mergeNonDistinctAggr(tuple);
-        }
-      }
-    }
-
-    return null;
-  }
+//  @Override
+//  public Tuple next() throws IOException {
+//    if (finished) {
+//      return null;
+//    }
+//
+//    while (!context.isStopped()) {
+//      Tuple tuple = child.next();
+//      if (tuple == null) {
+//        finished = true;
+//
+//        if (prevTuple == null) {
+//          // Empty case
+//          return null;
+//        }
+//        if (prevSeq == 0 && nonDistinctAggrFunctions != null) {
+//          terminatedNonDistinctAggr(prevTuple);
+//        }
+//        outTuple.put(prevTuple.getValues());
+//        return outTuple;
+//      }
+//
+//      int distinctSeq = tuple.getInt2(0);
+//      Tuple keyTuple = getKeyTuple(distinctSeq, tuple);
+//
+//      if (prevKeyTuple == null) {
+//        // First
+//        if (distinctSeq == 0 && nonDistinctAggrFunctions != null) {
+//          initNonDistinctAggrContext();
+//          mergeNonDistinctAggr(tuple);
+//        }
+//        prevKeyTuple = getKeyTuple(prevKeyTupleMap, keyTuple.getValues());
+//        prevTuple = new VTuple(tuple.getValues());
+//        prevSeq = distinctSeq;
+//        continue;
+//      }
+//
+//      if (!prevKeyTuple.equals(keyTuple)) {
+//        // new grouping key
+//        if (prevSeq == 0 && nonDistinctAggrFunctions != null) {
+//          terminatedNonDistinctAggr(prevTuple);
+//        }
+//        outTuple.put(prevTuple.getValues());
+//
+//        prevKeyTuple = getKeyTuple(prevKeyTupleMap, keyTuple.getValues());
+//        prevTuple.put(tuple.getValues());
+//        prevSeq = distinctSeq;
+//
+//        if (distinctSeq == 0 && nonDistinctAggrFunctions != null) {
+//          initNonDistinctAggrContext();
+//          mergeNonDistinctAggr(tuple);
+//        }
+//        return outTuple;
+//      } else {
+//        prevKeyTuple = getKeyTuple(prevKeyTupleMap, keyTuple.getValues());
+//        prevTuple.put(tuple.getValues());
+//        prevSeq = distinctSeq;
+//        if (distinctSeq == 0 && nonDistinctAggrFunctions != null) {
+//          mergeNonDistinctAggr(tuple);
+//        }
+//      }
+//    }
+//
+//    return null;
+//  }
 
   private void initNonDistinctAggrContext() {
     if (nonDistinctAggrFunctions != null) {

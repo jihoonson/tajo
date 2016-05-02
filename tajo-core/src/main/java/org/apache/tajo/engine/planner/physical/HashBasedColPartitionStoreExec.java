@@ -73,26 +73,26 @@ public class HashBasedColPartitionStoreExec extends ColPartitionStoreExec {
   /* (non-Javadoc)
    * @see PhysicalExec#next()
    */
-  @Override
-  public Tuple next() throws IOException {
-    Tuple tuple;
-    while(!context.isStopped() && (tuple = child.next()) != null) {
-      partKey.set(tuple);
-      // add tuple
-      getAppender(partKey, tuple).addTuple(tuple);
-    }
-
-    List<TableStats> statSet = new ArrayList<>();
-    for (Appender app : appenderMap.values()) {
-      app.flush();
-      app.close();
-      statSet.add(app.getStats());
-    }
-
-    // Collect and aggregated statistics data
-    TableStats aggregated = StatisticsUtil.aggregateTableStat(statSet);
-    context.setResultStats(aggregated);
-
-    return null;
-  }
+//  @Override
+//  public Tuple next() throws IOException {
+//    Tuple tuple;
+//    while(!context.isStopped() && (tuple = child.next()) != null) {
+//      partKey.set(tuple);
+//      // add tuple
+//      getAppender(partKey, tuple).addTuple(tuple);
+//    }
+//
+//    List<TableStats> statSet = new ArrayList<>();
+//    for (Appender app : appenderMap.values()) {
+//      app.flush();
+//      app.close();
+//      statSet.add(app.getStats());
+//    }
+//
+//    // Collect and aggregated statistics data
+//    TableStats aggregated = StatisticsUtil.aggregateTableStat(statSet);
+//    context.setResultStats(aggregated);
+//
+//    return null;
+//  }
 }

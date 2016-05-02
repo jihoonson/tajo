@@ -46,21 +46,21 @@ public class EvalExprExec extends PhysicalExec {
     }
   }
 
-  @Override
-  public Tuple next() throws IOException {
-    if (!executedOnce) {
-      List<Target> targets = plan.getTargets();
-      Tuple t = new VTuple(targets.size());
-      for (int i = 0; i < targets.size(); i++) {
-        t.put(i, targets.get(i).getEvalTree().eval(null));
-      }
-
-      executedOnce = true;
-      return t;
-    } else {
-      return null;
-    }
-  }
+//  @Override
+//  public Tuple next() throws IOException {
+//    if (!executedOnce) {
+//      List<Target> targets = plan.getTargets();
+//      Tuple t = new VTuple(targets.size());
+//      for (int i = 0; i < targets.size(); i++) {
+//        t.put(i, targets.get(i).getEvalTree().eval(null));
+//      }
+//
+//      executedOnce = true;
+//      return t;
+//    } else {
+//      return null;
+//    }
+//  }
 
   @Override
   public void rescan() throws IOException {

@@ -55,6 +55,6 @@ public abstract class SortExec extends UnaryPhysicalExec {
     return comparator;
   }
 
-  @Override
-  abstract public Tuple next() throws IOException;
+//  @Override
+//  abstract public Tuple next() throws IOException;
 }

@@ -176,57 +176,58 @@ public class BSTIndexScanExec extends ScanExec {
     }
   }
 
-  @Override
-  public Tuple next() throws IOException {
-    if(initialize) {
-      //TODO : more complicated condition
-      long offset = reader.find(indexLookupKey);
-      if (offset == -1) {
-        reader.close();
-        fileScanner.close();
-        return null;
-      }else {
-        fileScanner.seek(offset);
-      }
-      initialize = false;
-    } else {
-      if(!reader.isCurInMemory()) {
-        return null;
-      }
-      long offset = reader.next();
-      if(offset == -1 ) {
-        reader.close();
-        fileScanner.close();
-        return null;
-      } else { 
-      fileScanner.seek(offset);
-      }
-    }
+//  @Override
+//  public Tuple next() throws IOException {
+//    if(initialize) {
+//      //TODO : more complicated condition
+//      long offset = reader.find(indexLookupKey);
+//      if (offset == -1) {
+//        reader.close();
+//        fileScanner.close();
+//        return null;
+//      }else {
+//        fileScanner.seek(offset);
+//      }
+//      initialize = false;
+//    } else {
+//      if(!reader.isCurInMemory()) {
+//        return null;
+//      }
+//      long offset = reader.next();
+//      if(offset == -1 ) {
+//        reader.close();
+//        fileScanner.close();
+//        return null;
+//      } else {
+//      fileScanner.seek(offset);
+//      }
+//    }
+//
+//    Tuple tuple;
+//    if (!plan.hasQual()) {
+//      if ((tuple = fileScanner.next()) != null) {
+//        return projector.eval(tuple);
+//      } else {
+//        return null;
+//      }
+//    } else {
+//       while(reader.isCurInMemory() && (tuple = fileScanner.next()) != null) {
+//         if (qual.eval(tuple).isTrue()) {
+//           return projector.eval(tuple);
+//         } else {
+//           long offset = reader.next();
+//           if (offset == -1) {
+//             return null;
+//           }
+//           else fileScanner.seek(offset);
+//           return null;
+//         }
+//       }
+//     }
+//
+//    return null;
+//  }
 
-    Tuple tuple;
-    if (!plan.hasQual()) {
-      if ((tuple = fileScanner.next()) != null) {
-        return projector.eval(tuple);
-      } else {
-        return null;
-      }
-    } else {
-       while(reader.isCurInMemory() && (tuple = fileScanner.next()) != null) {
-         if (qual.eval(tuple).isTrue()) {
-           return projector.eval(tuple);
-         } else {
-           long offset = reader.next();
-           if (offset == -1) {
-             return null;
-           }
-           else fileScanner.seek(offset);
-           return null;
-         }
-       }
-     }
-
-    return null;
-  }
   @Override
   public void rescan() throws IOException {
     fileScanner.reset();

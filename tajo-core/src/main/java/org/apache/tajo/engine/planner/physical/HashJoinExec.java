@@ -18,6 +18,8 @@
 
 package org.apache.tajo.engine.planner.physical;
 
+import org.apache.tajo.engine.planner.physical.PhysicalPlanExecutor.ExecEvent;
+import org.apache.tajo.engine.planner.physical.PhysicalPlanExecutor.ExecEventType;
 import org.apache.tajo.plan.logical.JoinNode;
 import org.apache.tajo.storage.Tuple;
 import org.apache.tajo.worker.TaskAttemptContext;
@@ -39,21 +41,28 @@ public class HashJoinExec extends CommonHashJoinExec<TupleList> {
   }
 
   @Override
-  public Tuple next() throws IOException {
+  public void next() throws IOException {
+    super.next();
+
     if (first) {
       loadRightToHashTable();
     }
 
-    while (!context.isStopped() && !finished) {
-      if (iterator != null && iterator.hasNext()) {
-        frameTuple.setRight(iterator.next());
-        return projector.eval(frameTuple);
-      }
+//    while (!context.isStopped() && !finished) {
+    if (iterator != null && iterator.hasNext()) {
+      frameTuple.setRight(iterator.next());
+      returnResult(ExecEventType.VALID_RESULT_FOUND, frameTuple);
+      return;
+//      return projector.eval(frameTuple);
+    }
 
-      Tuple leftTuple = leftChild.next(); // it comes from a disk
-      if (leftTuple == null || leftFiltered(leftTuple)) { // if no more tuples in left tuples on disk, a join is completed.
-        finished = leftTuple == null;
-        continue;
+//      Tuple leftTuple = leftChild.next(); // it comes from a disk
+    ExecEvent event = context.getDispatcher().getNextResultFrom(leftChild);
+    if (hasNextInput(event)) {
+      Tuple leftTuple = event.result;
+      if (leftFiltered(leftTuple)) {
+        returnResult(ExecEventType.MORE_RESULT_AVAILABLE, null);
+        return;
       }
 
       frameTuple.setLeft(leftTuple);
@@ -69,8 +78,14 @@ public class HashJoinExec extends CommonHashJoinExec<TupleList> {
       if (rightTuples.hasNext()) {
         iterator = rightTuples;
       }
+      if (iterator.hasNext()) {
+        frameTuple.setRight(iterator.next());
+        returnResult(ExecEventType.VALID_RESULT_FOUND, frameTuple);
+      } else {
+        returnResult(ExecEventType.MORE_RESULT_AVAILABLE, null);
+      }
+    } else {
+      returnResult(ExecEventType.NO_MORE_RESULT, null);
     }
-
-    return null;
   }
 }

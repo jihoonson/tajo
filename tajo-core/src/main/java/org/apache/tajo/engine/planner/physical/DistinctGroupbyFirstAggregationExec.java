@@ -135,50 +135,50 @@ public class DistinctGroupbyFirstAggregationExec extends UnaryPhysicalExec {
 
   private int currentAggregatorIndex = 0;
 
-  @Override
-  public Tuple next() throws IOException {
-    if (!preparedData) {
-      prepareInputData();
-    }
-
-    int prevIndex = currentAggregatorIndex;
-    while (!context.isStopped()) {
-      DistinctHashAggregator aggregator = nodeSeqToDistinctAggregators.get(currentAggregatorIndex);
-      Tuple result = aggregator.next();
-      if (result != null) {
-        return result;
-      }
-      currentAggregatorIndex++;
-      currentAggregatorIndex = currentAggregatorIndex % nodeSeqToDistinctAggregators.size();
-      if (currentAggregatorIndex == prevIndex) {
-        finished = true;
-        return null;
-      }
-    }
-
-    return null;
-  }
-
-  private void prepareInputData() throws IOException {
-    Tuple tuple;
-
-    while(!context.isStopped() && (tuple = child.next()) != null) {
-
-      KeyTuple groupingKey = nonDistinctGroupingKeyProjector.project(tuple);
-      for (int i = 0; i < nodeSeqToDistinctAggregators.size(); i++) {
-        nodeSeqToDistinctAggregators.get(i).compute(groupingKey, tuple);
-      }
-      if (nonDistinctHashAggregator != null) {
-        nonDistinctHashAggregator.compute(groupingKey, tuple);
-      }
-    }
-    for (int i = 0; i < nodeSeqToDistinctAggregators.size(); i++) {
-      nodeSeqToDistinctAggregators.get(i).rescan();
-    }
-
-    totalNumRows = nodeSeqToDistinctAggregators.get(0).distinctAggrDatas.size();
-    preparedData = true;
-  }
+//  @Override
+//  public Tuple next() throws IOException {
+//    if (!preparedData) {
+//      prepareInputData();
+//    }
+//
+//    int prevIndex = currentAggregatorIndex;
+//    while (!context.isStopped()) {
+//      DistinctHashAggregator aggregator = nodeSeqToDistinctAggregators.get(currentAggregatorIndex);
+//      Tuple result = aggregator.next();
+//      if (result != null) {
+//        return result;
+//      }
+//      currentAggregatorIndex++;
+//      currentAggregatorIndex = currentAggregatorIndex % nodeSeqToDistinctAggregators.size();
+//      if (currentAggregatorIndex == prevIndex) {
+//        finished = true;
+//        return null;
+//      }
+//    }
+//
+//    return null;
+//  }
+//
+//  private void prepareInputData() throws IOException {
+//    Tuple tuple;
+//
+//    while(!context.isStopped() && (tuple = child.next()) != null) {
+//
+//      KeyTuple groupingKey = nonDistinctGroupingKeyProjector.project(tuple);
+//      for (int i = 0; i < nodeSeqToDistinctAggregators.size(); i++) {
+//        nodeSeqToDistinctAggregators.get(i).compute(groupingKey, tuple);
+//      }
+//      if (nonDistinctHashAggregator != null) {
+//        nonDistinctHashAggregator.compute(groupingKey, tuple);
+//      }
+//    }
+//    for (int i = 0; i < nodeSeqToDistinctAggregators.size(); i++) {
+//      nodeSeqToDistinctAggregators.get(i).rescan();
+//    }
+//
+//    totalNumRows = nodeSeqToDistinctAggregators.get(0).distinctAggrDatas.size();
+//    preparedData = true;
+//  }
 
   @Override
   public void close() throws IOException {

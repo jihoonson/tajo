@@ -27,6 +27,7 @@ import org.apache.tajo.catalog.statistics.TableStats;
 import org.apache.tajo.engine.codegen.CompilationError;
 import org.apache.tajo.engine.planner.physical.PhysicalPlanExecutor.ExecEvent;
 import org.apache.tajo.engine.planner.physical.PhysicalPlanExecutor.ExecEventType;
+import org.apache.tajo.storage.Tuple;
 import org.apache.tajo.worker.TaskAttemptContext;
 
 import java.io.IOException;
@@ -109,5 +110,10 @@ public abstract class PhysicalExec implements SchemaObject {
 
   static boolean hasNextInput(ExecEvent event) {
     return event.type != ExecEventType.NO_MORE_RESULT && event.type != ExecEventType.INTERRUPT;
+  }
+
+  protected void returnResult(ExecEventType type, Tuple tuple) {
+    result.set(type, tuple);
+    context.getDispatcher().handle(result);
   }
 }

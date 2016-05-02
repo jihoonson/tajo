@@ -72,54 +72,54 @@ public class DistinctGroupbySortAggregationExec extends PhysicalExec {
 
   boolean first = true;
 
-  @Override
-  public Tuple next() throws IOException {
-    if (finished) {
-      return null;
-    }
-
-    boolean allNull = true;
-
-    for (int i = 0; i < groupbyNodeNum; i++) {
-      if (first && i > 0) {
-        // All SortAggregateExec uses same SeqScanExec object.
-        // After running sort, rescan() should be called.
-        if (currentTuples[i-1] != null) {
-          aggregateExecs[i].rescan();
-        }
-      }
-      currentTuples[i] = aggregateExecs[i].next();
-
-      if (currentTuples[i] != null) {
-        allNull = false;
-      }
-    }
-
-    // If DistinctGroupbySortAggregationExec received NullDatum and didn't has any grouping keys,
-    // it should return primitive values for NullDatum.
-    if (allNull && aggregateExecs[0].groupingKeyNum == 0 && first)   {
-      return getEmptyTuple();
-    }
-
-    first = false;
-
-    if (allNull) {
-      finished = true;
-      return null;
-    }
-
-    int mergeTupleIndex = 0;
-    for (Tuple currentTuple : currentTuples) {
-      int tupleSize = currentTuple.size();
-      for (int j = 0; j < tupleSize; j++) {
-        if (resultColumnIdIndexes[mergeTupleIndex] >= 0) {
-          outTuple.put(resultColumnIdIndexes[mergeTupleIndex], currentTuple.asDatum(j));
-        }
-        mergeTupleIndex++;
-      }
-    }
-    return outTuple;
-  }
+//  @Override
+//  public Tuple next() throws IOException {
+//    if (finished) {
+//      return null;
+//    }
+//
+//    boolean allNull = true;
+//
+//    for (int i = 0; i < groupbyNodeNum; i++) {
+//      if (first && i > 0) {
+//        // All SortAggregateExec uses same SeqScanExec object.
+//        // After running sort, rescan() should be called.
+//        if (currentTuples[i-1] != null) {
+//          aggregateExecs[i].rescan();
+//        }
+//      }
+//      currentTuples[i] = aggregateExecs[i].next();
+//
+//      if (currentTuples[i] != null) {
+//        allNull = false;
+//      }
+//    }
+//
+//    // If DistinctGroupbySortAggregationExec received NullDatum and didn't has any grouping keys,
+//    // it should return primitive values for NullDatum.
+//    if (allNull && aggregateExecs[0].groupingKeyNum == 0 && first)   {
+//      return getEmptyTuple();
+//    }
+//
+//    first = false;
+//
+//    if (allNull) {
+//      finished = true;
+//      return null;
+//    }
+//
+//    int mergeTupleIndex = 0;
+//    for (Tuple currentTuple : currentTuples) {
+//      int tupleSize = currentTuple.size();
+//      for (int j = 0; j < tupleSize; j++) {
+//        if (resultColumnIdIndexes[mergeTupleIndex] >= 0) {
+//          outTuple.put(resultColumnIdIndexes[mergeTupleIndex], currentTuple.asDatum(j));
+//        }
+//        mergeTupleIndex++;
+//      }
+//    }
+//    return outTuple;
+//  }
 
   private Tuple getEmptyTuple() {
     NullDatum nullDatum = DatumFactory.createNullDatum();

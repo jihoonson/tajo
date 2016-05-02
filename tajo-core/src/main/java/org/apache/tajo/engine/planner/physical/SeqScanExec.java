@@ -295,6 +295,7 @@ public class SeqScanExec extends ScanExec {
 
   @Override
   public void next() throws IOException {
+    super.next();
 
     if (scanIt.hasNext()) {
       Tuple t = scanIt.next();

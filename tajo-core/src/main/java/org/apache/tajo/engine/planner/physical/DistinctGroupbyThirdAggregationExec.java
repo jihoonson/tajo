@@ -133,73 +133,73 @@ public class DistinctGroupbyThirdAggregationExec extends UnaryPhysicalExec {
     }
   }
 
-  @Override
-  public Tuple next() throws IOException {
-    if (finished) {
-      return null;
-    }
-
-    while (!context.isStopped()) {
-      Tuple tuple = child.next();
-      // Last tuple
-      if (tuple == null) {
-        finished = true;
-
-        if (prevTuple == null) {
-          // Empty case
-          if (numGroupingColumns == 0) {
-            // No grouping column, return null tuple
-            return makeEmptyTuple();
-          } else {
-            return null;
-          }
-        }
-
-        for (int i = 0; i < numGroupingColumns; i++) {
-          outTuple.put(resultTupleIndexes[i], prevTuple.asDatum(i + 1));
-        }
-        for (DistinctFinalAggregator eachAggr: aggregators) {
-          eachAggr.terminate(outTuple);
-        }
-
-        return outTuple;
-      }
-
-      int distinctSeq = tuple.getInt2(0);
-      Tuple keyTuple = getGroupingKeyTuple(tuple);
-
-      // First tuple
-      if (prevKeyTuple == null) {
-        prevKeyTuple = new VTuple(keyTuple.getValues());
-        prevTuple = new VTuple(tuple.getValues());
-
-        aggregators[distinctSeq].merge(tuple);
-        continue;
-      }
-
-      if (!prevKeyTuple.equals(keyTuple)) {
-        // new grouping key
-        for (int i = 0; i < numGroupingColumns; i++) {
-          outTuple.put(resultTupleIndexes[i], prevTuple.asDatum(i + 1));
-        }
-        for (DistinctFinalAggregator eachAggr: aggregators) {
-          eachAggr.terminate(outTuple);
-        }
-
-        prevKeyTuple.put(keyTuple.getValues());
-        prevTuple.put(tuple.getValues());
-
-        aggregators[distinctSeq].merge(tuple);
-        return outTuple;
-      } else {
-        prevKeyTuple.put(keyTuple.getValues());
-        prevTuple.put(tuple.getValues());
-        aggregators[distinctSeq].merge(tuple);
-      }
-    }
-
-    return null;
-  }
+//  @Override
+//  public Tuple next() throws IOException {
+//    if (finished) {
+//      return null;
+//    }
+//
+//    while (!context.isStopped()) {
+//      Tuple tuple = child.next();
+//      // Last tuple
+//      if (tuple == null) {
+//        finished = true;
+//
+//        if (prevTuple == null) {
+//          // Empty case
+//          if (numGroupingColumns == 0) {
+//            // No grouping column, return null tuple
+//            return makeEmptyTuple();
+//          } else {
+//            return null;
+//          }
+//        }
+//
+//        for (int i = 0; i < numGroupingColumns; i++) {
+//          outTuple.put(resultTupleIndexes[i], prevTuple.asDatum(i + 1));
+//        }
+//        for (DistinctFinalAggregator eachAggr: aggregators) {
+//          eachAggr.terminate(outTuple);
+//        }
+//
+//        return outTuple;
+//      }
+//
+//      int distinctSeq = tuple.getInt2(0);
+//      Tuple keyTuple = getGroupingKeyTuple(tuple);
+//
+//      // First tuple
+//      if (prevKeyTuple == null) {
+//        prevKeyTuple = new VTuple(keyTuple.getValues());
+//        prevTuple = new VTuple(tuple.getValues());
+//
+//        aggregators[distinctSeq].merge(tuple);
+//        continue;
+//      }
+//
+//      if (!prevKeyTuple.equals(keyTuple)) {
+//        // new grouping key
+//        for (int i = 0; i < numGroupingColumns; i++) {
+//          outTuple.put(resultTupleIndexes[i], prevTuple.asDatum(i + 1));
+//        }
+//        for (DistinctFinalAggregator eachAggr: aggregators) {
+//          eachAggr.terminate(outTuple);
+//        }
+//
+//        prevKeyTuple.put(keyTuple.getValues());
+//        prevTuple.put(tuple.getValues());
+//
+//        aggregators[distinctSeq].merge(tuple);
+//        return outTuple;
+//      } else {
+//        prevKeyTuple.put(keyTuple.getValues());
+//        prevTuple.put(tuple.getValues());
+//        aggregators[distinctSeq].merge(tuple);
+//      }
+//    }
+//
+//    return null;
+//  }
 
   private Tuple makeEmptyTuple() {
     for (DistinctFinalAggregator eachAggr: aggregators) {

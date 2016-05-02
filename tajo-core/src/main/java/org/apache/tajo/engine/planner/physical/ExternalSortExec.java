@@ -245,60 +245,60 @@ public class ExternalSortExec extends SortExec {
     return new Chunk(inSchema, frag, intermediateMeta);
   }
 
-  /**
-   * It divides all tuples into a number of chunks, then sort for each chunk.
-   *
-   * @return All paths of chunks
-   * @throws java.io.IOException
-   */
-  private List<Chunk> sortAndStoreAllChunks() throws IOException {
-    Tuple tuple;
-    List<Chunk> chunkPaths = new ArrayList<>();
-
-    int chunkId = 0;
-    long runStartTime = System.currentTimeMillis();
-
-    while (!context.isStopped() && (tuple = child.next()) != null) { // partition sort start
-      inMemoryTable.addTuple(tuple);
-
-      if (inMemoryTable.usedMem() > sortBufferBytesNum) { // if input data exceeds main-memory at least once
-        long runEndTime = System.currentTimeMillis();
-        info(LOG, "Chunk #" + chunkId + " run loading time: " + (runEndTime - runStartTime) + " msec");
-        runStartTime = runEndTime;
-
-        info(LOG, "Memory consumption exceeds " + FileUtil.humanReadableByteCount(inMemoryTable.usedMem(), false));
-
-        chunkPaths.add(sortAndStoreChunk(chunkId, inMemoryTable));
-        inMemoryTable.clear();
-        chunkId++;
-
-        // When the volume of sorting data once exceed the size of sort buffer,
-        // the total progress of this external sort is divided into two parts.
-        // In contrast, if the data fits in memory, the progress is only one part.
-        //
-        // When the progress is divided into two parts, the first part sorts tuples on memory and stores them
-        // into a chunk. The second part merges stored chunks into fewer chunks, and it continues until the number
-        // of merged chunks is fewer than the default fanout.
-        //
-        // The fact that the code reach here means that the first chunk has been just stored.
-        // That is, the progress was divided into two parts.
-        // So, it multiply the progress of the children operator and 0.5f.
-        progress = child.getProgress() * 0.5f;
-      }
-    }
-
-    if(inMemoryTable.size() > 0) { //if there are at least one or more input tuples
-      //store the remain data into a memory chunk.
-      chunkPaths.add(new Chunk(inSchema, inMemoryTable, intermediateMeta));
-    }
-
-    // get total loaded (or stored) bytes and total row numbers
-    TableStats childTableStats = child.getInputStats();
-    if (childTableStats != null) {
-      inputBytes = childTableStats.getNumBytes();
-    }
-    return chunkPaths;
-  }
+//  /**
+//   * It divides all tuples into a number of chunks, then sort for each chunk.
+//   *
+//   * @return All paths of chunks
+//   * @throws java.io.IOException
+//   */
+//  private List<Chunk> sortAndStoreAllChunks() throws IOException {
+//    Tuple tuple;
+//    List<Chunk> chunkPaths = new ArrayList<>();
+//
+//    int chunkId = 0;
+//    long runStartTime = System.currentTimeMillis();
+//
+//    while (!context.isStopped() && (tuple = child.next()) != null) { // partition sort start
+//      inMemoryTable.addTuple(tuple);
+//
+//      if (inMemoryTable.usedMem() > sortBufferBytesNum) { // if input data exceeds main-memory at least once
+//        long runEndTime = System.currentTimeMillis();
+//        info(LOG, "Chunk #" + chunkId + " run loading time: " + (runEndTime - runStartTime) + " msec");
+//        runStartTime = runEndTime;
+//
+//        info(LOG, "Memory consumption exceeds " + FileUtil.humanReadableByteCount(inMemoryTable.usedMem(), false));
+//
+//        chunkPaths.add(sortAndStoreChunk(chunkId, inMemoryTable));
+//        inMemoryTable.clear();
+//        chunkId++;
+//
+//        // When the volume of sorting data once exceed the size of sort buffer,
+//        // the total progress of this external sort is divided into two parts.
+//        // In contrast, if the data fits in memory, the progress is only one part.
+//        //
+//        // When the progress is divided into two parts, the first part sorts tuples on memory and stores them
+//        // into a chunk. The second part merges stored chunks into fewer chunks, and it continues until the number
+//        // of merged chunks is fewer than the default fanout.
+//        //
+//        // The fact that the code reach here means that the first chunk has been just stored.
+//        // That is, the progress was divided into two parts.
+//        // So, it multiply the progress of the children operator and 0.5f.
+//        progress = child.getProgress() * 0.5f;
+//      }
+//    }
+//
+//    if(inMemoryTable.size() > 0) { //if there are at least one or more input tuples
+//      //store the remain data into a memory chunk.
+//      chunkPaths.add(new Chunk(inSchema, inMemoryTable, intermediateMeta));
+//    }
+//
+//    // get total loaded (or stored) bytes and total row numbers
+//    TableStats childTableStats = child.getInputStats();
+//    if (childTableStats != null) {
+//      inputBytes = childTableStats.getNumBytes();
+//    }
+//    return chunkPaths;
+//  }
 
   /**
    * Get a local path from all temporal paths in round-robin manner.
@@ -308,46 +308,46 @@ public class ExternalSortExec extends SortExec {
         sortTmpDir + "/" + level + "_" + chunkId, context.getConf()));
   }
 
-  @Override
-  public Tuple next() throws IOException {
-
-    if (!sorted) { // if not sorted, first sort all data
-
-      // if input files are given, it starts merging directly.
-      if (mergedInputFragments != null) {
-        try {
-          this.result = externalMergeAndSort(mergedInputFragments);
-          this.inputBytes = result.getInputStats().getNumBytes();
-        } catch (Exception e) {
-          throw new PhysicalPlanningException(e);
-        }
-      } else {
-        // Try to sort all data, and store them as multiple chunks if memory exceeds
-        long startTimeOfChunkSplit = System.currentTimeMillis();
-        List<Chunk> chunks = sortAndStoreAllChunks();
-        long endTimeOfChunkSplit = System.currentTimeMillis();
-        info(LOG, chunks.size() + " Chunks creation time: " + (endTimeOfChunkSplit - startTimeOfChunkSplit) + " msec");
-
-        if(chunks.size() == 0) {
-          this.result = new NullScanner(context.getConf(), inSchema, intermediateMeta, null);
-        } else {
-          try {
-            this.result = externalMergeAndSort(chunks);
-          } catch (Exception e) {
-            throw new PhysicalPlanningException(e);
-          }
-        }
-      }
-
-      sorted = true;
-      result.init();
-
-      // if loaded and sorted, we assume that it proceeds the half of one entire external sort operation.
-      progress = 0.5f;
-    }
-
-    return result.next();
-  }
+//  @Override
+//  public Tuple next() throws IOException {
+//
+//    if (!sorted) { // if not sorted, first sort all data
+//
+//      // if input files are given, it starts merging directly.
+//      if (mergedInputFragments != null) {
+//        try {
+//          this.result = externalMergeAndSort(mergedInputFragments);
+//          this.inputBytes = result.getInputStats().getNumBytes();
+//        } catch (Exception e) {
+//          throw new PhysicalPlanningException(e);
+//        }
+//      } else {
+//        // Try to sort all data, and store them as multiple chunks if memory exceeds
+//        long startTimeOfChunkSplit = System.currentTimeMillis();
+//        List<Chunk> chunks = sortAndStoreAllChunks();
+//        long endTimeOfChunkSplit = System.currentTimeMillis();
+//        info(LOG, chunks.size() + " Chunks creation time: " + (endTimeOfChunkSplit - startTimeOfChunkSplit) + " msec");
+//
+//        if(chunks.size() == 0) {
+//          this.result = new NullScanner(context.getConf(), inSchema, intermediateMeta, null);
+//        } else {
+//          try {
+//            this.result = externalMergeAndSort(chunks);
+//          } catch (Exception e) {
+//            throw new PhysicalPlanningException(e);
+//          }
+//        }
+//      }
+//
+//      sorted = true;
+//      result.init();
+//
+//      // if loaded and sorted, we assume that it proceeds the half of one entire external sort operation.
+//      progress = 0.5f;
+//    }
+//
+//    return result.next();
+//  }
 
   private int calculateFanout(int remainInputChunks, int inputNum, int outputNum, int startIdx) {
     int computedFanout = Math.min(remainInputChunks, defaultFanout);

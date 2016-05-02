@@ -39,42 +39,42 @@ public class HashLeftOuterJoinExec extends HashJoinExec {
     nullTupleList = nullTupleList(rightNumCols);
   }
 
-  @Override
-  public Tuple next() throws IOException {
-    if (first) {
-      loadRightToHashTable();
-    }
-
-    while (!context.isStopped() && !finished) {
-      if (iterator != null && iterator.hasNext()) {
-        frameTuple.setRight(iterator.next());
-        return projector.eval(frameTuple);
-      }
-      Tuple leftTuple = leftChild.next(); // it comes from a disk
-      if (leftTuple == null) { // if no more tuples in left tuples on disk, a join is completed.
-        finished = true;
-        return null;
-      }
-      frameTuple.setLeft(leftTuple);
-
-      if (leftFiltered(leftTuple)) {
-        iterator = nullTupleList.iterator();
-        continue;
-      }
-
-      // getting corresponding right
-      TupleList hashed = tupleSlots.get(leftKeyExtractor.project(leftTuple));
-      Iterator<Tuple> rightTuples = rightFiltered(hashed);
-      if (!rightTuples.hasNext()) {
-        //this left tuple doesn't have a match on the right.But full outer join => we should keep it anyway
-        //output a tuple with the nulls padded rightTuple
-        iterator = nullTupleList.iterator();
-        continue;
-      }
-      iterator = rightTuples;
-    }
-
-    return null;
-  }
+//  @Override
+//  public Tuple next() throws IOException {
+//    if (first) {
+//      loadRightToHashTable();
+//    }
+//
+//    while (!context.isStopped() && !finished) {
+//      if (iterator != null && iterator.hasNext()) {
+//        frameTuple.setRight(iterator.next());
+//        return projector.eval(frameTuple);
+//      }
+//      Tuple leftTuple = leftChild.next(); // it comes from a disk
+//      if (leftTuple == null) { // if no more tuples in left tuples on disk, a join is completed.
+//        finished = true;
+//        return null;
+//      }
+//      frameTuple.setLeft(leftTuple);
+//
+//      if (leftFiltered(leftTuple)) {
+//        iterator = nullTupleList.iterator();
+//        continue;
+//      }
+//
+//      // getting corresponding right
+//      TupleList hashed = tupleSlots.get(leftKeyExtractor.project(leftTuple));
+//      Iterator<Tuple> rightTuples = rightFiltered(hashed);
+//      if (!rightTuples.hasNext()) {
+//        //this left tuple doesn't have a match on the right.But full outer join => we should keep it anyway
+//        //output a tuple with the nulls padded rightTuple
+//        iterator = nullTupleList.iterator();
+//        continue;
+//      }
+//      iterator = rightTuples;
+//    }
+//
+//    return null;
+//  }
 }
 

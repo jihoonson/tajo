@@ -54,23 +54,21 @@ public class HashAggregateExec extends AggregationExec {
     KeyTuple keyTuple;
     ExecEvent event;
 //    while(!context.isStopped() && (tuple = child.next()) != null) {
-    while (hasNextInput(event = context.getDispatcher().get())) {
-      if (event.type == ExecEventType.VALID_RESULT_FOUND) {
-        keyTuple = hashKeyProjector.project(event.result);
+    while (hasNextInput(event = context.getDispatcher().getNextResultFrom(child))) {
+      keyTuple = hashKeyProjector.project(event.result);
 
-        FunctionContext[] contexts = hashTable.get(keyTuple);
-        if (contexts != null) {
-          for (int i = 0; i < aggFunctions.size(); i++) {
-            aggFunctions.get(i).merge(contexts[i], event.result);
-          }
-        } else { // if the key occurs firstly
-          contexts = new FunctionContext[aggFunctionsNum];
-          for (int i = 0; i < aggFunctionsNum; i++) {
-            contexts[i] = aggFunctions.get(i).newContext();
-            aggFunctions.get(i).merge(contexts[i], event.result);
-          }
-          hashTable.put(keyTuple, contexts);
+      FunctionContext[] contexts = hashTable.get(keyTuple);
+      if (contexts != null) {
+        for (int i = 0; i < aggFunctions.size(); i++) {
+          aggFunctions.get(i).merge(contexts[i], event.result);
         }
+      } else { // if the key occurs firstly
+        contexts = new FunctionContext[aggFunctionsNum];
+        for (int i = 0; i < aggFunctionsNum; i++) {
+          contexts[i] = aggFunctions.get(i).newContext();
+          aggFunctions.get(i).merge(contexts[i], event.result);
+        }
+        hashTable.put(keyTuple, contexts);
       }
     }
 
@@ -89,6 +87,8 @@ public class HashAggregateExec extends AggregationExec {
 
   @Override
   public void next() throws IOException {
+    super.next();
+
     if(!computed) {
       compute();
       iterator = hashTable.entrySet().iterator();

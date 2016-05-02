@@ -39,46 +39,46 @@ public class HashLeftSemiJoinExec extends HashJoinExec {
     super(context, plan, fromSideChild, inSideChild);
   }
 
-  /**
-   * The End of Tuple (EOT) condition is true only when no more tuple in the left relation (on disk).
-   * next() method finds the first unmatched tuple from both tables.
-   *
-   * For each left tuple on the disk, next() tries to find at least one matched tuple from the hash table.
-   *
-   * In more detail, until there is a hash bucket matched to the left tuple in the hash table, it continues to traverse
-   * the left tuples. If next() finds the matched bucket in the hash table, it finds any matched tuple in the bucket.
-   * If found, it returns the composite tuple immediately without finding more matched tuple in the bucket.
-   *
-   * @return The tuple which is firstly matched to a given join condition.
-   * @throws java.io.IOException
-   */
-  @Override
-  public Tuple next() throws IOException {
-    if (first) {
-      loadRightToHashTable();
-    }
-
-    while(!context.isStopped() && !finished) {
-      if (iterator != null && iterator.hasNext()) {
-        frameTuple.setRight(iterator.next());
-        return projector.eval(frameTuple);
-      }
-      // getting new outer
-      Tuple leftTuple = leftChild.next(); // it comes from a disk
-      if (leftTuple == null || leftFiltered(leftTuple)) { // if no more tuples in left tuples on disk, a join is completed.
-        finished = leftTuple == null;
-        continue;
-      }
-
-      frameTuple.setLeft(leftTuple);
-
-      // Try to find a hash bucket in in-memory hash table
-      TupleList hashed = tupleSlots.get(leftKeyExtractor.project(leftTuple));
-      if (hashed != null && rightFiltered(hashed).hasNext()) {
-        // if found, it gets a hash bucket from the hash table.
-        iterator = nullTupleList.iterator();
-      }
-    }
-    return null;
-  }
+//  /**
+//   * The End of Tuple (EOT) condition is true only when no more tuple in the left relation (on disk).
+//   * next() method finds the first unmatched tuple from both tables.
+//   *
+//   * For each left tuple on the disk, next() tries to find at least one matched tuple from the hash table.
+//   *
+//   * In more detail, until there is a hash bucket matched to the left tuple in the hash table, it continues to traverse
+//   * the left tuples. If next() finds the matched bucket in the hash table, it finds any matched tuple in the bucket.
+//   * If found, it returns the composite tuple immediately without finding more matched tuple in the bucket.
+//   *
+//   * @return The tuple which is firstly matched to a given join condition.
+//   * @throws java.io.IOException
+//   */
+//  @Override
+//  public Tuple next() throws IOException {
+//    if (first) {
+//      loadRightToHashTable();
+//    }
+//
+//    while(!context.isStopped() && !finished) {
+//      if (iterator != null && iterator.hasNext()) {
+//        frameTuple.setRight(iterator.next());
+//        return projector.eval(frameTuple);
+//      }
+//      // getting new outer
+//      Tuple leftTuple = leftChild.next(); // it comes from a disk
+//      if (leftTuple == null || leftFiltered(leftTuple)) { // if no more tuples in left tuples on disk, a join is completed.
+//        finished = leftTuple == null;
+//        continue;
+//      }
+//
+//      frameTuple.setLeft(leftTuple);
+//
+//      // Try to find a hash bucket in in-memory hash table
+//      TupleList hashed = tupleSlots.get(leftKeyExtractor.project(leftTuple));
+//      if (hashed != null && rightFiltered(hashed).hasNext()) {
+//        // if found, it gets a hash bucket from the hash table.
+//        iterator = nullTupleList.iterator();
+//      }
+//    }
+//    return null;
+//  }
 }

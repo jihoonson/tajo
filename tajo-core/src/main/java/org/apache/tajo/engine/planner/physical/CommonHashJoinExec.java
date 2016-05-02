@@ -22,6 +22,8 @@ import org.apache.tajo.SessionVars;
 import org.apache.tajo.catalog.Column;
 import org.apache.tajo.catalog.statistics.TableStats;
 import org.apache.tajo.engine.planner.KeyProjector;
+import org.apache.tajo.engine.planner.physical.PhysicalPlanExecutor.ExecEvent;
+import org.apache.tajo.engine.planner.physical.PhysicalPlanExecutor.ExecEventType;
 import org.apache.tajo.engine.utils.CacheHolder;
 import org.apache.tajo.engine.utils.TableCacheKey;
 import org.apache.tajo.exception.TajoInternalError;
@@ -146,12 +148,14 @@ public abstract class CommonHashJoinExec<T> extends CommonJoinExec {
   }
 
   protected TupleMap<TupleList> buildRightToHashTableForCrossJoin() throws IOException {
-    Tuple tuple;
+//    Tuple tuple;
     TupleMap<TupleList> map = new TupleMap<>(1);
     TupleList tuples = new TupleList();
 
-    while (!context.isStopped() && (tuple = rightChild.next()) != null) {
-      tuples.add(tuple);
+//    while (!context.isStopped() && (tuple = rightChild.next()) != null) {
+    ExecEvent event;
+    while (hasNextInput(event = context.getDispatcher().getNextResultFrom(rightChild))) {
+      tuples.add(event.result);
     }
     map.put(null, tuples);
     return map;
@@ -162,14 +166,16 @@ public abstract class CommonHashJoinExec<T> extends CommonJoinExec {
     TupleMap<TupleList> map = new TupleMap<>(context.getQueryContext().getInt(SessionVars.JOIN_HASH_TABLE_SIZE));
     KeyProjector keyProjector = new KeyProjector(rightSchema, rightKeyList);
 
-    while (!context.isStopped() && (tuple = rightChild.next()) != null) {
-      KeyTuple keyTuple = keyProjector.project(tuple);
+//    while (!context.isStopped() && (tuple = rightChild.next()) != null) {
+    ExecEvent event;
+    while (hasNextInput(event = context.getDispatcher().getNextResultFrom(rightChild))) {
+      KeyTuple keyTuple = keyProjector.project(event.result);
       TupleList newValue = map.get(keyTuple);
       if (newValue == null) {
         map.put(keyTuple, newValue = new TupleList());
       }
       // if source is scan or groupby, it needs not to be cloned
-      newValue.add(tuple);
+      newValue.add(event.result);
     }
     return map;
   }
