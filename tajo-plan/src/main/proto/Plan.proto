@@ -574,28 +574,32 @@ message EnforcerProto {
 
 message EnforceProperty {
   enum EnforceType {
-    SORTED_INPUT = 0;
-    OUTPUT_DISTINCT = 1;
-    GROUP_BY = 2;
-    JOIN    = 3;
+    SORTED_INPUT      = 0;
+    OUTPUT_DISTINCT   = 1;
+    GROUP_BY          = 2;
+    JOIN              = 3;
     SORT              = 4;
     BROADCAST         = 5;
     COLUMN_PARTITION  = 6;
     DISTINCT_GROUP_BY = 7;
+    STAT_GATHERING    = 8;
+    TERM_CONDITION    = 9;
   }
 
   // Identifies which field is filled in.
   required EnforceType type = 1;
 
   // One of the following will be filled in.
-  optional SortedInputEnforce sortedInput = 2;
-  optional OutputDistinctEnforce outputDistinct = 3;
+  optional SortedInputEnforce sorted_input = 2;
+  optional OutputDistinctEnforce output_distinct = 3;
   optional GroupbyEnforce groupby = 4;
   optional JoinEnforce join = 5;
   optional SortEnforce sort = 6;
   optional BroadcastEnforce broadcast = 7;
-  optional ColumnPartitionEnforcer columnPartition = 8;
+  optional ColumnPartitionEnforcer column_partition = 8;
   optional DistinctGroupbyEnforcer distinct = 9;
+  optional TableStatGatherSpec table_stat_gather_spec = 10;
+  optional TermCondSpec term_cond_spec = 11;
 }
 
 message SortedInputEnforce {
@@ -673,4 +677,33 @@ message DistinctGroupbyEnforcer {
   repeated SortSpecArray sortSpecArrays = 3;
   required bool isMultipleAggregation = 4 [default = false];
   optional MultipleAggregationStage multipleAggregationStage = 5;
+}
+
+message TableStatGatherSpec {
+  required NodeType node_type = 1;
+  required bool require_input_stat = 2;
+  required TableStatRequirement table_stat_require = 3;
+}
+
+message TableStatRequirement {
+  optional bool num_rows = 1;
+  optional bool num_bytes = 2;
+  optional bool num_blocks = 4;
+  optional bool num_shuffle_outputs = 5;
+  optional bool avg_rows = 6;
+  optional bool read_bytes = 7;
+  repeated ColumnStatRequirement col_stat_require = 8;
+}
+
+message ColumnStatRequirement {
+  required ColumnProto column = 1;
+  optional bool num_dist_val = 2;
+  optional bool num_nulls = 3;
+  optional bool min_value = 4;
+  optional bool max_value = 5;
+}
+
+message TermCondSpec {
+  required NodeType node_type = 1;
+  optional EvalNodeTree cond = 2;
 }

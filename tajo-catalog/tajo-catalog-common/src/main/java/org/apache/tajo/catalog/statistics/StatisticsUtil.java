@@ -31,21 +31,6 @@ import java.util.List;
 public class StatisticsUtil {
   private static final Log LOG = LogFactory.getLog(StatisticsUtil.class);
 
-  public static StatSet aggregateStatSet(List<StatSet> statSets) {
-    StatSet aggregated = new StatSet();
-
-    for (StatSet statSet : statSets) {
-      for (Stat stat : statSet.getAllStats()) {
-        if (aggregated.containStat(stat.getType())) {
-          aggregated.getStat(stat.getType()).incrementBy(stat.getValue());
-        } else {
-          aggregated.putStat(stat);
-        }
-      }
-    }
-    return aggregated;
-  }
-
   /**
    * Aggregate one table stats and accumulated stats, and then store it to the result stats.
    *

@@ -1279,6 +1279,8 @@ public class Stage implements EventHandler<StageEvent> {
 
         if (taskEvent.getState() == TaskState.SUCCEEDED) {
           stage.succeededObjectCount++;
+          // TODO: early stop for anti join
+//          task.getLastAttempt().getInputStats()
         } else if (task.getState() == TaskState.KILLED) {
           stage.killedObjectCount++;
         } else if (task.getState() == TaskState.FAILED) {
