@@ -27,6 +27,8 @@ import org.apache.tajo.datum.Datum;
 import org.apache.tajo.datum.NullDatum;
 import org.apache.tajo.engine.codegen.CompilationError;
 import org.apache.tajo.engine.planner.Projector;
+import org.apache.tajo.engine.planner.physical.PhysicalPlanExecutor.ExecEvent;
+import org.apache.tajo.engine.planner.physical.PhysicalPlanExecutor.ExecEventType;
 import org.apache.tajo.plan.Target;
 import org.apache.tajo.plan.expr.ConstEval;
 import org.apache.tajo.plan.expr.EvalNode;
@@ -292,18 +294,21 @@ public class SeqScanExec extends ScanExec {
   }
 
   @Override
-  public Tuple next() throws IOException {
+  public void next() throws IOException {
 
-    while(scanIt.hasNext()) {
+    if (scanIt.hasNext()) {
       Tuple t = scanIt.next();
-      if(!needProjection) return t;
-
-      Tuple outTuple = projector.eval(t);
-      outTuple.setOffset(t.getOffset());
-      return outTuple;
+      if(!needProjection) {
+        result.set(ExecEventType.VALID_RESULT_FOUND, t);
+      } else {
+        Tuple outTuple = projector.eval(t);
+        outTuple.setOffset(t.getOffset());
+        result.set(ExecEventType.VALID_RESULT_FOUND, outTuple);
+      }
+    } else {
+      result.set(ExecEventType.NO_MORE_RESULT, null);
     }
-
-    return null;
+    context.getDispatcher().handle(result);
   }
 
   @Override

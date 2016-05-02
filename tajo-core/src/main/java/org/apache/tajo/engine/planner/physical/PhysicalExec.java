@@ -25,17 +25,25 @@ import org.apache.tajo.catalog.Schema;
 import org.apache.tajo.catalog.SchemaObject;
 import org.apache.tajo.catalog.statistics.TableStats;
 import org.apache.tajo.engine.codegen.CompilationError;
-import org.apache.tajo.storage.Tuple;
+import org.apache.tajo.engine.planner.physical.PhysicalPlanExecutor.ExecEvent;
+import org.apache.tajo.engine.planner.physical.PhysicalPlanExecutor.ExecEventType;
 import org.apache.tajo.worker.TaskAttemptContext;
 
 import java.io.IOException;
 import java.util.UUID;
 
 public abstract class PhysicalExec implements SchemaObject {
+
   protected final TaskAttemptContext context;
   protected Schema inSchema;
   protected Schema outSchema;
   protected int outColumnNum;
+
+  protected TableStats inputStats = null;
+  protected TableStats outputStats = null;
+
+  protected final ExecEvent result = new ExecEvent();
+  private final ExecEvent interruptEvent = new ExecEvent(ExecEventType.INTERRUPT, null);
 
   public PhysicalExec(final TaskAttemptContext context, final Schema inSchema,
                       final Schema outSchema) {
@@ -58,7 +66,11 @@ public abstract class PhysicalExec implements SchemaObject {
   protected void compile() throws CompilationError {
   }
 
-  public abstract Tuple next() throws IOException;
+  protected void next() throws IOException {
+    if (context.isStopped()) {
+      context.getDispatcher().handle(interruptEvent);
+    }
+  }
 
   public abstract void rescan() throws IOException;
 
@@ -88,6 +100,14 @@ public abstract class PhysicalExec implements SchemaObject {
   }
 
   public TableStats getInputStats() {
-    return null;
+    return inputStats;
+  }
+
+  public TableStats getOutputStats() {
+    return outputStats;
+  }
+
+  static boolean hasNextInput(ExecEvent event) {
+    return event.type != ExecEventType.NO_MORE_RESULT && event.type != ExecEventType.INTERRUPT;
   }
 }

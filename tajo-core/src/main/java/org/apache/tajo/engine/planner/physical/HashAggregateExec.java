@@ -20,6 +20,8 @@ package org.apache.tajo.engine.planner.physical;
 
 import org.apache.tajo.SessionVars;
 import org.apache.tajo.engine.planner.KeyProjector;
+import org.apache.tajo.engine.planner.physical.PhysicalPlanExecutor.ExecEvent;
+import org.apache.tajo.engine.planner.physical.PhysicalPlanExecutor.ExecEventType;
 import org.apache.tajo.plan.function.FunctionContext;
 import org.apache.tajo.plan.logical.GroupbyNode;
 import org.apache.tajo.storage.Tuple;
@@ -34,7 +36,7 @@ import java.util.Map.Entry;
  * This is the hash-based GroupBy Operator.
  */
 public class HashAggregateExec extends AggregationExec {
-  private Tuple tuple = null;
+  private Tuple outTuple = null;
   private TupleMap<FunctionContext[]> hashTable;
   private KeyProjector hashKeyProjector;
   private boolean computed = false;
@@ -44,43 +46,49 @@ public class HashAggregateExec extends AggregationExec {
     super(ctx, plan, subOp);
     hashKeyProjector = new KeyProjector(inSchema, plan.getGroupingColumns());
     hashTable = new TupleMap<>(ctx.getQueryContext().getInt(SessionVars.AGG_HASH_TABLE_SIZE));
-    this.tuple = new VTuple(plan.getOutSchema().size());
+    this.outTuple = new VTuple(plan.getOutSchema().size());
   }
 
   private void compute() throws IOException {
-    Tuple tuple;
+//    Tuple tuple;
     KeyTuple keyTuple;
-    while(!context.isStopped() && (tuple = child.next()) != null) {
-      keyTuple = hashKeyProjector.project(tuple);
+    ExecEvent event;
+//    while(!context.isStopped() && (tuple = child.next()) != null) {
+    while (hasNextInput(event = context.getDispatcher().get())) {
+      if (event.type == ExecEventType.VALID_RESULT_FOUND) {
+        keyTuple = hashKeyProjector.project(event.result);
 
-      FunctionContext [] contexts = hashTable.get(keyTuple);
-      if(contexts != null) {
-        for(int i = 0; i < aggFunctions.size(); i++) {
-          aggFunctions.get(i).merge(contexts[i], tuple);
+        FunctionContext[] contexts = hashTable.get(keyTuple);
+        if (contexts != null) {
+          for (int i = 0; i < aggFunctions.size(); i++) {
+            aggFunctions.get(i).merge(contexts[i], event.result);
+          }
+        } else { // if the key occurs firstly
+          contexts = new FunctionContext[aggFunctionsNum];
+          for (int i = 0; i < aggFunctionsNum; i++) {
+            contexts[i] = aggFunctions.get(i).newContext();
+            aggFunctions.get(i).merge(contexts[i], event.result);
+          }
+          hashTable.put(keyTuple, contexts);
         }
-      } else { // if the key occurs firstly
-        contexts = new FunctionContext[aggFunctionsNum];
-        for(int i = 0; i < aggFunctionsNum; i++) {
-          contexts[i] = aggFunctions.get(i).newContext();
-          aggFunctions.get(i).merge(contexts[i], tuple);
-        }
-        hashTable.put(keyTuple, contexts);
       }
     }
 
-    // If HashAggregateExec received NullDatum and didn't has any grouping keys,
-    // it should return primitive values for NullLDatum.
-    if (groupingKeyNum == 0 && aggFunctionsNum > 0 && hashTable.entrySet().size() == 0) {
-      FunctionContext[] contexts = new FunctionContext[aggFunctionsNum];
-      for(int i = 0; i < aggFunctionsNum; i++) {
-        contexts[i] = aggFunctions.get(i).newContext();
+    if (event.type == ExecEventType.NO_MORE_RESULT) {
+      // If HashAggregateExec received NullDatum and didn't has any grouping keys,
+      // it should return primitive values for NullLDatum.
+      if (groupingKeyNum == 0 && aggFunctionsNum > 0 && hashTable.entrySet().size() == 0) {
+        FunctionContext[] contexts = new FunctionContext[aggFunctionsNum];
+        for(int i = 0; i < aggFunctionsNum; i++) {
+          contexts[i] = aggFunctions.get(i).newContext();
+        }
+        hashTable.put(null, contexts);
       }
-      hashTable.put(null, contexts);
     }
   }
 
   @Override
-  public Tuple next() throws IOException {
+  public void next() throws IOException {
     if(!computed) {
       compute();
       iterator = hashTable.entrySet().iterator();
@@ -96,16 +104,17 @@ public class HashAggregateExec extends AggregationExec {
 
       int tupleIdx = 0;
       for (; tupleIdx < groupingKeyNum; tupleIdx++) {
-        tuple.put(tupleIdx, keyTuple.asDatum(tupleIdx));
+        outTuple.put(tupleIdx, keyTuple.asDatum(tupleIdx));
       }
       for (int funcIdx = 0; funcIdx < aggFunctionsNum; funcIdx++, tupleIdx++) {
-        tuple.put(tupleIdx, aggFunctions.get(funcIdx).terminate(contexts[funcIdx]));
+        outTuple.put(tupleIdx, aggFunctions.get(funcIdx).terminate(contexts[funcIdx]));
       }
 
-      return tuple;
+      result.set(ExecEventType.VALID_RESULT_FOUND, outTuple);
     } else {
-      return null;
+      result.set(ExecEventType.NO_MORE_RESULT, null);
     }
+    context.getDispatcher().handle(result);
   }
 
   @Override

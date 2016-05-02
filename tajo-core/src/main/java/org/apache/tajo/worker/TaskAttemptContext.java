@@ -32,6 +32,7 @@ import org.apache.tajo.catalog.statistics.TableStats;
 import org.apache.tajo.conf.TajoConf;
 import org.apache.tajo.engine.planner.enforce.Enforcer;
 import org.apache.tajo.engine.planner.global.DataChannel;
+import org.apache.tajo.engine.planner.physical.PhysicalExecDispatcher;
 import org.apache.tajo.engine.query.QueryContext;
 import org.apache.tajo.plan.expr.EvalContext;
 import org.apache.tajo.plan.expr.EvalNode;
@@ -86,6 +87,8 @@ public class TaskAttemptContext {
   private EvalContext evalContext = new EvalContext();
 
   private List<PartitionDescProto> partitions;
+
+  private final PhysicalExecDispatcher dispatcher = new PhysicalExecDispatcher();
 
   public TaskAttemptContext(QueryContext queryContext, final ExecutionBlockContext executionBlockContext,
                             final TaskAttemptId taskId,
@@ -426,5 +429,9 @@ public class TaskAttemptContext {
     if (!partitions.contains(partition)) {
       partitions.add(partition);
     }
+  }
+
+  public PhysicalExecDispatcher getDispatcher() {
+    return dispatcher;
   }
 }

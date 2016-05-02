@@ -39,6 +39,7 @@ import org.apache.tajo.catalog.statistics.TableStats;
 import org.apache.tajo.conf.TajoConf;
 import org.apache.tajo.conf.TajoConf.ConfVars;
 import org.apache.tajo.engine.planner.physical.PhysicalExec;
+import org.apache.tajo.engine.planner.physical.PhysicalPlanExecutor;
 import org.apache.tajo.engine.query.QueryContext;
 import org.apache.tajo.engine.query.TaskRequest;
 import org.apache.tajo.exception.ErrorUtil;
@@ -86,7 +87,7 @@ public class TaskImpl implements Task {
   private final TaskAttemptContext context;
   private List<AbstractFetcher> fetcherRunners;
   private LogicalNode plan;
-  private PhysicalExec executor;
+  private PhysicalExec physicalPlan;
 
   private boolean interQuery;
   private Path inputTableBaseDir;
@@ -315,18 +316,18 @@ public class TaskImpl implements Task {
       return;
     }
 
-    if (executor != null && context.getProgress() < 1.0f) {
-      context.setExecutorProgress(executor.getProgress());
+    if (physicalPlan != null && context.getProgress() < 1.0f) {
+      context.setExecutorProgress(physicalPlan.getProgress());
     }
   }
 
   private CatalogProtos.TableStatsProto reloadInputStats() {
     synchronized(inputStats) {
-      if (this.executor == null) {
+      if (this.physicalPlan == null) {
         return inputStats.getProto();
       }
 
-      TableStats executorInputStats = this.executor.getInputStats();
+      TableStats executorInputStats = this.physicalPlan.getInputStats();
 
       if (executorInputStats != null) {
         inputStats.setValues(executorInputStats);
@@ -414,11 +415,15 @@ public class TaskImpl implements Task {
           updateProgress();
         }
 
-        this.executor = executionBlockContext.getTQueryEngine().createPlan(context, plan);
-        this.executor.init();
+        this.physicalPlan = executionBlockContext.getTQueryEngine().createPlan(context, plan);
+        PhysicalPlanExecutor executor = new PhysicalPlanExecutor(context, physicalPlan);
+        executor.init();
+        executor.run(); // blocking
 
-        while(!context.isStopped() && executor.next() != null) {
-        }
+//        this.physicalPlan.init();
+
+//        while(!context.isStopped() && physicalPlan.next() != null) {
+//        }
       }
     } catch (Throwable e) {
       error = e ;
@@ -426,14 +431,14 @@ public class TaskImpl implements Task {
       stopScriptExecutors();
       context.stop();
     } finally {
-      if (executor != null) {
+      if (physicalPlan != null) {
         try {
-          executor.close();
+          physicalPlan.close();
           reloadInputStats();
         } catch (IOException e) {
           LOG.error(e, e);
         }
-        this.executor = null;
+        this.physicalPlan = null;
       }
 
       executionBlockContext.completedTasksNum.incrementAndGet();
@@ -481,9 +486,9 @@ public class TaskImpl implements Task {
     fetcherRunners.clear();
     fetcherRunners = null;
     try {
-      if(executor != null) {
-        executor.close();
-        executor = null;
+      if(physicalPlan != null) {
+        physicalPlan.close();
+        physicalPlan = null;
       }
     } catch (IOException e) {
       LOG.fatal(e.getMessage(), e);
