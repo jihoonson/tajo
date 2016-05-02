@@ -468,20 +468,20 @@ public class ProjectionPushDownRule extends
     int evaluationCount = 0;
     List<Target> finalTargets = new ArrayList<>();
     for (String referenceName : referenceNames) {
-      Target target = context.targetListMgr.getTarget(referenceName);
+      Target target = newContext.targetListMgr.getTarget(referenceName);
 
       if (target.getEvalTree().getType() == EvalType.CONST) {
         finalTargets.add(target);
-      } else if (context.targetListMgr.isEvaluated(referenceName)) {
-        if (context.targetListMgr.isNativeAlias(referenceName)) {
-          String realRefName = context.targetListMgr.getRealReferenceName(referenceName);
+      } else if (!newContext.targetListMgr.isEvaluated(referenceName)) {
+        if (newContext.targetListMgr.isNativeAlias(referenceName)) {
+          String realRefName = newContext.targetListMgr.getRealReferenceName(referenceName);
           finalTargets.add(new Target(new FieldEval(realRefName, target.getDataType()), referenceName));
         } else {
           finalTargets.add(new Target(new FieldEval(target.getNamedColumn())));
         }
       } else if (LogicalPlanner.checkIfBeEvaluatedAtThis(target.getEvalTree(), node)) {
         finalTargets.add(target);
-        context.targetListMgr.markAsEvaluated(target);
+        newContext.targetListMgr.markAsEvaluated(target);
         evaluationCount++;
       }
     }
@@ -1154,12 +1154,12 @@ public class ProjectionPushDownRule extends
 
     Map<Target, Target> transformMap = transformEvalsWidthByPassNode(filteredTargets,
         node, node.getSubQuery());
+    targets = new ArrayList<>();
     for (Entry<Target, Target> e : transformMap.entrySet()) {
       // original alias, transformed expression
       Target newTarget = new Target(e.getValue().getEvalTree(), e.getKey().getAlias());
       childContext.addExpr(newTarget);
       targets.add(newTarget);
-      targets.remove(e.getKey());
 //      upperContext.addExpr(new FieldEval(e.getKey().getNamedColumn()));
     }
 
@@ -1167,6 +1167,7 @@ public class ProjectionPushDownRule extends
     node.setSubQuery(child);
 
     node.setTargets(targets);
+    node.setInSchema(PlannerUtil.targetToSchema(targets));
 
 //    for (Iterator<Target> it = getFilteredTarget(targets, upperContext.requiredSet); it.hasNext();) {
 //      Target target = it.next();
