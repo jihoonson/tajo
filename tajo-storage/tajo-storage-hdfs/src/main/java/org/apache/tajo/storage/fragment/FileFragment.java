@@ -19,7 +19,6 @@
 package org.apache.tajo.storage.fragment;
 
 import com.google.common.base.Objects;
-import com.google.gson.annotations.Expose;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.InvalidProtocolBufferException;
 import org.apache.hadoop.fs.BlockLocation;
@@ -29,22 +28,14 @@ import org.apache.tajo.storage.StorageFragmentProtos.FileFragmentProto;
 import org.apache.tajo.util.TUtil;
 
 import java.io.IOException;
-import java.net.URI;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
 import static org.apache.tajo.catalog.proto.CatalogProtos.FragmentProto;
 
-public class FileFragment implements Fragment, Comparable<FileFragment>, Cloneable {
-  @Expose private String tableName; // required
-  @Expose private Path uri; // required
-  @Expose private FileFragmentKey startKey; // required
-  @Expose private FileFragmentKey endKey; // required
-  @Expose private Long length; // required
-
-  private String[] hosts; // Datanode hostnames
-  @Expose private int[] diskIds;
+public class FileFragment extends Fragment<Long> {
+  private int[] diskIds;
 
   public FileFragment(ByteString raw) throws InvalidProtocolBufferException {
     FileFragmentProto.Builder builder = FileFragmentProto.newBuilder();
@@ -83,18 +74,18 @@ public class FileFragment implements Fragment, Comparable<FileFragment>, Cloneab
     List<String> var = proto.getHostsList();
     this.set(proto.getId(), new Path(proto.getPath()),
         proto.getStartOffset(), proto.getLength(),
-            var.toArray(new String[var.size()]),
+        var.toArray(new String[var.size()]),
         diskIds);
   }
 
   private void set(String tableName, Path path, long start,
       long length, String[] hosts, int[] diskIds) {
     this.tableName = tableName;
-    this.uri = path;
-    this.startKey = new FileFragmentKey(start);
-    this.endKey = new FileFragmentKey(start + length);
+    this.uri = path.toUri();
+    this.startKey = start;
+    this.endKey = start + length;
     this.length = length;
-    this.hosts = hosts;
+    this.hostNames = hosts;
     this.diskIds = diskIds;
   }
 
@@ -102,11 +93,11 @@ public class FileFragment implements Fragment, Comparable<FileFragment>, Cloneab
   /**
    * Get the list of hosts (hostname) hosting this block
    */
-  public String[] getHosts() {
-    if (hosts == null) {
-      this.hosts = new String[0];
+  public String[] getHostNames() {
+    if (hostNames == null) {
+      this.hostNames = new String[0];
     }
-    return hosts;
+    return hostNames;
   }
 
   /**
@@ -115,7 +106,7 @@ public class FileFragment implements Fragment, Comparable<FileFragment>, Cloneab
    */
   public int[] getDiskIds() {
     if (diskIds == null) {
-      this.diskIds = new int[getHosts().length];
+      this.diskIds = new int[getHostNames().length];
       Arrays.fill(this.diskIds, -1);
     }
     return diskIds;
@@ -125,64 +116,12 @@ public class FileFragment implements Fragment, Comparable<FileFragment>, Cloneab
     this.diskIds = diskIds;
   }
 
-  @Override
-  public URI getUri() {
-    return uri.toUri();
-  }
-
-  @Override
-  public String getTableName() {
-    return this.tableName;
-  }
-
   public Path getPath() {
-    return this.uri;
+    return new Path(uri);
   }
 
   public void setPath(Path path) {
-    this.uri = path;
-  }
-
-  @Override
-  public FileFragmentKey getStartKey() {
-    return this.startKey;
-  }
-
-  @Override
-  public FileFragmentKey getEndKey() {
-    return this.endKey;
-  }
-
-  @Override
-  public long getLength() {
-    return this.length;
-  }
-
-  @Override
-  public boolean isEmpty() {
-    return this.length <= 0;
-  }
-  /**
-   * 
-   * The offset range of tablets <b>MUST NOT</b> be overlapped.
-   * 
-   * @param t
-   * @return If the table paths are not same, return -1.
-   */
-  @Override
-  public int compareTo(FileFragment t) {
-    if (getPath().equals(t.getPath())) {
-      long diff = this.getStartKey().getKey() - t.getStartKey().getKey();
-      if (diff < 0) {
-        return -1;
-      } else if (diff > 0) {
-        return 1;
-      } else {
-        return 0;
-      }
-    } else {
-      return -1;
-    }
+    this.uri = path.toUri();
   }
 
   @Override
@@ -200,20 +139,13 @@ public class FileFragment implements Fragment, Comparable<FileFragment>, Cloneab
 
   @Override
   public int hashCode() {
-    return Objects.hashCode(tableName, uri, startKey, endKey, length, diskIds, hosts);
+    return Objects.hashCode(tableName, uri, startKey, endKey, length, diskIds, hostNames);
   }
 
   @Override
   public Object clone() throws CloneNotSupportedException {
     FileFragment frag = (FileFragment) super.clone();
-    frag.tableName = tableName;
-    frag.uri = uri;
     frag.diskIds = diskIds;
-    frag.hosts = hosts;
-    frag.startKey = new FileFragmentKey(this.startKey.getKey());
-    frag.endKey = new FileFragmentKey(this.endKey.getKey());
-    frag.length = length;
-
     return frag;
   }
 
@@ -227,9 +159,9 @@ public class FileFragment implements Fragment, Comparable<FileFragment>, Cloneab
   public FragmentProto getProto() {
     FileFragmentProto.Builder builder = FileFragmentProto.newBuilder();
     builder.setId(this.tableName);
-    builder.setStartOffset(this.startKey.getKey());
+    builder.setStartOffset(this.startKey);
     builder.setLength(this.length);
-    builder.setPath(this.uri.toString());
+    builder.setPath(getPath().toString());
     if(diskIds != null) {
       List<Integer> idList = new ArrayList<>();
       for(int eachId: diskIds) {
@@ -238,8 +170,8 @@ public class FileFragment implements Fragment, Comparable<FileFragment>, Cloneab
       builder.addAllDiskIds(idList);
     }
 
-    if(hosts != null) {
-      builder.addAllHosts(Arrays.asList(hosts));
+    if(hostNames != null) {
+      builder.addAllHosts(Arrays.asList(hostNames));
     }
 
     FragmentProto.Builder fragmentBuilder = FragmentProto.newBuilder();

@@ -24,21 +24,44 @@ import java.net.URI;
 
 import static org.apache.tajo.catalog.proto.CatalogProtos.FragmentProto;
 
-public interface Fragment extends ProtoObject<FragmentProto> {
+public abstract class Fragment<T extends Comparable>
+    implements Comparable<Fragment<T>>, ProtoObject<FragmentProto>, Cloneable {
+
+  protected URI uri;
+  protected String tableName;
+  protected T startKey;
+  protected T endKey;
+  protected long length;
+  protected String[] hostNames;
+
+  protected Fragment() {}
+
+  protected Fragment(URI uri, String tableName, T startKey, T endKey, long length, String[] hostNames) {
+    this.uri = uri;
+    this.tableName = tableName;
+    this.startKey = startKey;
+    this.endKey = endKey;
+    this.length = length;
+    this.hostNames = hostNames;
+  }
 
   /**
    * Returns an URI of the target table.
    *
    * @return URI of the target table
    */
-  URI getUri();
+  public URI getUri() {
+    return uri;
+  }
 
   /**
    * Returns the name of the target table.
    *
    * @return target table name
    */
-  String getTableName();
+  public String getTableName() {
+    return this.tableName;
+  }
 
   /**
    * Returns a serialized protocol buffer message object.
@@ -46,42 +69,85 @@ public interface Fragment extends ProtoObject<FragmentProto> {
    * @return serialized message
    */
   @Override
-  FragmentProto getProto();
+  public abstract FragmentProto getProto();
 
   /**
    * Returns a start key of the data range.
    *
-   * @param <T> a key class implementing {@link FragmentKey}
    * @return start key
    */
-  <T extends FragmentKey> T getStartKey();
+  public T getStartKey() {
+    return startKey;
+  }
 
   /**
    * Returns an end key of the data range.
    *
-   * @param <T> a key class implementing {@link FragmentKey}
    * @return end key
    */
-  <T extends FragmentKey> T getEndKey();
+  public T getEndKey() {
+    return endKey;
+  }
 
   /**
    * Returns the length of the data range.
    *
    * @return length of the range
    */
-  long getLength();
+  public long getLength() {
+    return length;
+  }
 
   /**
    * Returns host names which has the part of the table specified in this fragment.
    *
    * @return host names
    */
-  String[] getHosts();
+  public String[] getHostNames() {
+    return hostNames;
+  }
 
   /**
    * Indicates the fragment is empty or not.
    *
    * @return true if the length is 0. Otherwise, false.
    */
-  boolean isEmpty();
+  public boolean isEmpty() {
+    return length == 0;
+  }
+
+  /**
+   * First compares URIs of fragments, and then compares their start keys.
+   *
+   * @param t
+   * @return return 0 if two fragments are same. If not same, return -1 if this fragment is smaller than the other.
+   * Otherwise, return 1;
+   */
+  @Override
+  public final int compareTo(Fragment<T> t) {
+    int cmp = uri.compareTo(t.uri);
+    if (cmp == 0) {
+      if (startKey != null && t.startKey != null) {
+        return startKey.compareTo(t.startKey);
+      } else if (startKey == null) {  // nulls last
+        return 1;
+      } else {
+        return -1;
+      }
+    } else {
+      return cmp;
+    }
+  }
+
+  @Override
+  public Object clone() throws CloneNotSupportedException {
+    Fragment clone = (Fragment) super.clone();
+    clone.uri = this.uri;
+    clone.tableName = this.tableName;
+    clone.startKey = this.startKey;
+    clone.endKey = this.endKey;
+    clone.hostNames = this.hostNames;
+    clone.length = this.length;
+    return clone;
+  }
 }
