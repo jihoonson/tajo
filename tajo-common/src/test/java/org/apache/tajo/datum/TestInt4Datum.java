@@ -21,6 +21,8 @@ package org.apache.tajo.datum;
 import org.apache.tajo.common.TajoDataTypes;
 import org.junit.Test;
 
+import java.net.URI;
+
 import static org.junit.Assert.*;
 
 public class TestInt4Datum {
@@ -71,5 +73,12 @@ public class TestInt4Datum {
   public final void testAsTextBytes() {
     Datum d = DatumFactory.createInt4(5);
     assertArrayEquals(d.toString().getBytes(), d.asTextBytes());
+  }
+
+  @Test
+  public void testTest() {
+    URI uri = URI.create("https://doc.rust-lang.org/std/rc/index.html?search=");
+    System.out.println(uri.getPath());
+    System.out.println(uri.getRawPath());
   }
 }

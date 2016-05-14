@@ -18,34 +18,14 @@
 
 package org.apache.tajo.storage.http;
 
-import org.apache.tajo.storage.fragment.FragmentKey;
+import org.apache.tajo.storage.fragment.BuiltinFragmentKinds;
+import org.apache.tajo.storage.fragment.Fragment;
 
-public class HttpFragmentKey implements FragmentKey {
-  private long key;
+import java.net.URI;
 
-  public HttpFragmentKey(long key) {
-    this.key = key;
-  }
+public class HttpFileFragment extends Fragment<Long> {
 
-  public void setKey(long key) {
-    this.key = key;
-  }
-
-  public long getKey() {
-    return key;
-  }
-
-  @Override
-  public int hashCode() {
-    return Long.hashCode(key);
-  }
-
-  @Override
-  public boolean equals(Object o) {
-    if (o instanceof HttpFragmentKey) {
-      HttpFragmentKey other = (HttpFragmentKey) o;
-      return this.key == other.key;
-    }
-    return false;
+  public HttpFileFragment(URI uri, String tableName, long startKey, long endKey, String[] hosts) {
+    super(BuiltinFragmentKinds.HTTP, uri, tableName, startKey, endKey, endKey - startKey, hosts);
   }
 }

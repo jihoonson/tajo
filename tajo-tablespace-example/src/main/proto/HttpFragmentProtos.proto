@@ -24,7 +24,7 @@ option java_generate_equals_and_hash = true;
 
 import "CatalogProtos.proto";
 
-message HttpFragmentProto {
+message HttpFileFragmentProto {
   required string uri = 1;
   required string table_name = 2;
   required int64 start_key = 3;
