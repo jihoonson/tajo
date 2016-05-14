@@ -18,31 +18,38 @@
 
 package org.apache.tajo.storage.fragment;
 
-import org.apache.tajo.common.ProtoObject;
+import com.google.common.collect.ImmutableList;
 
 import java.net.URI;
 
-import static org.apache.tajo.catalog.proto.CatalogProtos.FragmentProto;
+public abstract class Fragment<T extends Comparable> implements Comparable<Fragment<T>>, Cloneable {
 
-public abstract class Fragment<T extends Comparable>
-    implements Comparable<Fragment<T>>, ProtoObject<FragmentProto>, Cloneable {
-
+  protected String kind;
   protected URI uri;
-  protected String tableName;
+  protected String inputSourceId;
   protected T startKey;
   protected T endKey;
   protected long length;
-  protected String[] hostNames;
+  protected ImmutableList<String> hostNames;
 
-  protected Fragment() {}
-
-  protected Fragment(URI uri, String tableName, T startKey, T endKey, long length, String[] hostNames) {
+  protected Fragment(String kind,
+                     URI uri,
+                     String inputSourceId,
+                     T startKey,
+                     T endKey,
+                     long length,
+                     String[] hostNames) {
+    this.kind = kind;
     this.uri = uri;
-    this.tableName = tableName;
+    this.inputSourceId = inputSourceId;
     this.startKey = startKey;
     this.endKey = endKey;
     this.length = length;
-    this.hostNames = hostNames;
+    this.hostNames = hostNames == null ? ImmutableList.of() : ImmutableList.copyOf(hostNames);
+  }
+
+  public final String getKind() {
+    return kind;
   }
 
   /**
@@ -50,7 +57,7 @@ public abstract class Fragment<T extends Comparable>
    *
    * @return URI of the target table
    */
-  public URI getUri() {
+  public final URI getUri() {
     return uri;
   }
 
@@ -59,24 +66,16 @@ public abstract class Fragment<T extends Comparable>
    *
    * @return target table name
    */
-  public String getTableName() {
-    return this.tableName;
+  public final String getInputSourceId() {
+    return this.inputSourceId;
   }
-
-  /**
-   * Returns a serialized protocol buffer message object.
-   *
-   * @return serialized message
-   */
-  @Override
-  public abstract FragmentProto getProto();
 
   /**
    * Returns a start key of the data range.
    *
    * @return start key
    */
-  public T getStartKey() {
+  public final T getStartKey() {
     return startKey;
   }
 
@@ -85,7 +84,7 @@ public abstract class Fragment<T extends Comparable>
    *
    * @return end key
    */
-  public T getEndKey() {
+  public final T getEndKey() {
     return endKey;
   }
 
@@ -94,7 +93,7 @@ public abstract class Fragment<T extends Comparable>
    *
    * @return length of the range
    */
-  public long getLength() {
+  public final long getLength() {
     return length;
   }
 
@@ -103,7 +102,7 @@ public abstract class Fragment<T extends Comparable>
    *
    * @return host names
    */
-  public String[] getHostNames() {
+  public final ImmutableList<String> getHostNames() {
     return hostNames;
   }
 
@@ -143,7 +142,7 @@ public abstract class Fragment<T extends Comparable>
   public Object clone() throws CloneNotSupportedException {
     Fragment clone = (Fragment) super.clone();
     clone.uri = this.uri;
-    clone.tableName = this.tableName;
+    clone.inputSourceId = this.inputSourceId;
     clone.startKey = this.startKey;
     clone.endKey = this.endKey;
     clone.hostNames = this.hostNames;

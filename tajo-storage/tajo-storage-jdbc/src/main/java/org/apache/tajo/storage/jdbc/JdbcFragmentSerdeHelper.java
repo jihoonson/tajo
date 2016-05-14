@@ -18,31 +18,30 @@
 
 package org.apache.tajo.storage.jdbc;
 
-import org.apache.tajo.TajoConstants;
-import org.apache.tajo.storage.fragment.BuiltinFragmentKinds;
-import org.apache.tajo.storage.fragment.Fragment;
+import com.google.protobuf.GeneratedMessage.Builder;
+import org.apache.tajo.storage.fragment.FragmentSerdeHelper;
+import org.apache.tajo.storage.jdbc.JdbcFragmentProtos.JdbcFragmentProto;
 
 import java.net.URI;
-import java.util.List;
 
-public class JdbcFragment extends Fragment<Long> {
+public class JdbcFragmentSerdeHelper implements FragmentSerdeHelper<JdbcFragment, JdbcFragmentProto> {
 
-  // TODO: set start and end keys properly
-  public JdbcFragment(String inputSourceId, URI uri) {
-    super(BuiltinFragmentKinds.JDBC, uri, inputSourceId, null, null, TajoConstants.UNKNOWN_LENGTH, extractHosts(uri));
-  }
-
-  public JdbcFragment(String inputSourceId, URI uri, List<String> hostNames) {
-    super(BuiltinFragmentKinds.JDBC, uri, inputSourceId, null, null, TajoConstants.UNKNOWN_LENGTH,
-        hostNames.toArray(new String[hostNames.size()]));
-  }
-
-  private static String[] extractHosts(URI uri) {
-    return new String[] {ConnectionInfo.fromURI(uri).host};
+  @Override
+  public Builder newBuilder() {
+    return JdbcFragmentProto.newBuilder();
   }
 
   @Override
-  public boolean isEmpty() {
-    return false;
+  public JdbcFragmentProto serialize(JdbcFragment fragment) {
+    return JdbcFragmentProto.newBuilder()
+        .setInputSourceId(fragment.getInputSourceId())
+        .setUri(fragment.getUri().toASCIIString())
+        .addAllHosts(fragment.getHostNames())
+        .build();
+  }
+
+  @Override
+  public JdbcFragment deserialize(JdbcFragmentProto proto) {
+    return new JdbcFragment(proto.getInputSourceId(), URI.create(proto.getUri()), proto.getHostsList());
   }
 }
