@@ -169,7 +169,7 @@ public class FileTablespace extends Tablespace {
   }
 
   @Override
-  public URI getTableUri(String databaseName, String tableName) {
+  public URI getTableUri(TableMeta meta, String databaseName, String tableName) {
     return StorageUtil.concatPath(spacePath, databaseName, tableName).toUri();
   }
 

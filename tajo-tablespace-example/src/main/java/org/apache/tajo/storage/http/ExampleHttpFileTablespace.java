@@ -45,6 +45,7 @@ import org.apache.tajo.storage.Tablespace;
 import org.apache.tajo.storage.TupleRange;
 import org.apache.tajo.storage.fragment.Fragment;
 import org.apache.tajo.util.Pair;
+import org.apache.tajo.util.UriUtil;
 
 import javax.annotation.Nullable;
 import java.io.IOException;
@@ -127,8 +128,13 @@ public class ExampleHttpFileTablespace extends Tablespace {
   }
 
   @Override
-  public URI getTableUri(String databaseName, String tableName) {
-    return tableUriMap.get(new Pair<>(databaseName, tableName));
+  public URI getTableUri(TableMeta meta, String databaseName, String tableName) {
+    String tablespaceUriString = uri.toASCIIString();
+    String tablePath = meta.getProperty("path");
+    if (!tablespaceUriString.endsWith("/") && !tablePath.startsWith("/")) {
+      tablePath = "/" + tablePath;
+    }
+    return URI.create(tablespaceUriString + tablePath);
   }
 
   @Override

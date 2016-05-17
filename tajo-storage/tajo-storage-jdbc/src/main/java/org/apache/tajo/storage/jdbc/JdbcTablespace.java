@@ -115,7 +115,7 @@ public abstract class JdbcTablespace extends Tablespace {
   }
 
   @Override
-  public URI getTableUri(String databaseName, String tableName) {
+  public URI getTableUri(TableMeta meta, String databaseName, String tableName) {
     return URI.create(UriUtil.addParam(getUri().toASCIIString(), URI_PARAM_KEY_TABLE, tableName));
   }
 

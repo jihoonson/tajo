@@ -115,11 +115,12 @@ public abstract class Tablespace {
   /**
    * Get Table URI
    *
+   * @param meta table meta
    * @param databaseName Database name
    * @param tableName Table name
    * @return Table URI
    */
-  public abstract URI getTableUri(String databaseName, String tableName);
+  public abstract URI getTableUri(TableMeta meta, String databaseName, String tableName);
 
   /**
    * Returns the splits that will serve as input for the scan tasks. The
