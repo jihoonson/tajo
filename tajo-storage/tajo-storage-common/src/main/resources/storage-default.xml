@@ -39,7 +39,7 @@
   <!--- Registered Scanner Handler -->
   <property>
     <name>tajo.storage.scanner-handler</name>
-    <value>text,json,raw,draw,rcfile,row,parquet,orc,sequencefile,avro,hbase</value>
+    <value>text,json,raw,draw,rcfile,row,parquet,orc,sequencefile,avro,hbase,http</value>
   </property>
 
   <!--- Fragment Class Configurations -->
@@ -57,7 +57,7 @@
   </property>
   <property>
     <name>tajo.storage.fragment.kind.http</name>
-    <value>org.apache.tajo.storage.http.HttpFileFragment</value>
+    <value>org.apache.tajo.storage.http.ExampleHttpFileFragment</value>
   </property>
   <property>
     <name>tajo.storage.fragment.serde-helper.file</name>
@@ -73,7 +73,7 @@
   </property>
   <property>
     <name>tajo.storage.fragment.serde-helper.http</name>
-    <value>org.apache.tajo.storage.http.HttpFileFragmentSerdeHelper</value>
+    <value>org.apache.tajo.storage.http.ExampleHttpFileFragmentSerdeHelper</value>
   </property>
 
   <!--- Scanner Handler -->
@@ -130,6 +130,11 @@
   <property>
     <name>tajo.storage.scanner-handler.hbase.class</name>
     <value>org.apache.tajo.storage.hbase.HBaseScanner</value>
+  </property>
+
+  <property>
+    <name>tajo.storage.scanner-handler.http.class</name>
+    <value>org.apache.tajo.storage.http.ExampleHttpFileScanner</value>
   </property>
   
   <!--- Appender Handler -->

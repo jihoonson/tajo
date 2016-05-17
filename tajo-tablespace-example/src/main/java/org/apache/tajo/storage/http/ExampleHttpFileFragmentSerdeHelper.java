@@ -20,36 +20,39 @@ package org.apache.tajo.storage.http;
 
 import com.google.protobuf.GeneratedMessage.Builder;
 import org.apache.tajo.storage.fragment.FragmentSerdeHelper;
-import org.apache.tajo.storage.http.HttpFragmentProtos.HttpFileFragmentProto;
+import org.apache.tajo.storage.http.ExampleHttpFragmentProtos.ExampleHttpFileFragmentProto;
 
 import java.net.URI;
 
-public class HttpFileFragmentSerdeHelper implements FragmentSerdeHelper<HttpFileFragment, HttpFileFragmentProto> {
+public class ExampleHttpFileFragmentSerdeHelper
+    implements FragmentSerdeHelper<ExampleHttpFileFragment, ExampleHttpFileFragmentProto> {
 
   @Override
   public Builder newBuilder() {
-    return HttpFileFragmentProto.newBuilder();
+    return ExampleHttpFileFragmentProto.newBuilder();
   }
 
   @Override
-  public HttpFileFragmentProto serialize(HttpFileFragment fragment) {
-    return HttpFileFragmentProto.newBuilder()
+  public ExampleHttpFileFragmentProto serialize(ExampleHttpFileFragment fragment) {
+    return ExampleHttpFileFragmentProto.newBuilder()
         .setUri(fragment.getUri().toASCIIString())
         .setTableName(fragment.getInputSourceId())
         .setStartKey(fragment.getStartKey())
         .setEndKey(fragment.getEndKey())
-        .addAllHosts(fragment.getHostNames())
+        .setTempDir(fragment.getTempDir())
+        .setClearOnExit(fragment.cleanOnExit())
         .build();
   }
 
   @Override
-  public HttpFileFragment deserialize(HttpFileFragmentProto proto) {
-    return new HttpFileFragment(
+  public ExampleHttpFileFragment deserialize(ExampleHttpFileFragmentProto proto) {
+    return new ExampleHttpFileFragment(
         URI.create(proto.getUri()),
         proto.getTableName(),
         proto.getStartKey(),
         proto.getEndKey(),
-        proto.getHostsList().toArray(new String[proto.getHostsCount()])
+        proto.getTempDir(),
+        proto.getClearOnExit()
     );
   }
 }

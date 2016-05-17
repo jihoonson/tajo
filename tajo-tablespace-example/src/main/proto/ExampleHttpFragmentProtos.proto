@@ -16,16 +16,19 @@
  * limitations under the License.
  */
 
-package org.apache.tajo.storage.http;
+option java_package = "org.apache.tajo.storage.http";
+option java_outer_classname = "ExampleHttpFragmentProtos";
+option optimize_for = SPEED;
+option java_generic_services = false;
+option java_generate_equals_and_hash = true;
 
-import org.apache.tajo.storage.fragment.BuiltinFragmentKinds;
-import org.apache.tajo.storage.fragment.Fragment;
+import "CatalogProtos.proto";
 
-import java.net.URI;
-
-public class HttpFileFragment extends Fragment<Long> {
-
-  public HttpFileFragment(URI uri, String tableName, long startKey, long endKey, String[] hosts) {
-    super(BuiltinFragmentKinds.HTTP, uri, tableName, startKey, endKey, endKey - startKey, hosts);
-  }
+message ExampleHttpFileFragmentProto {
+  required string uri = 1;
+  required string table_name = 2;
+  required int64 start_key = 3;
+  required int64 end_key = 4;
+  required string temp_dir = 5;
+  required bool clear_on_exit = 6;
 }

@@ -16,18 +16,28 @@
  * limitations under the License.
  */
 
-option java_package = "org.apache.tajo.storage.http";
-option java_outer_classname = "HttpFragmentProtos";
-option optimize_for = SPEED;
-option java_generic_services = false;
-option java_generate_equals_and_hash = true;
+package org.apache.tajo.storage.http;
 
-import "CatalogProtos.proto";
+import org.junit.Test;
 
-message HttpFileFragmentProto {
-  required string uri = 1;
-  required string table_name = 2;
-  required int64 start_key = 3;
-  required int64 end_key = 4;
-  repeated string hosts = 5;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.net.URL;
+import java.nio.channels.Channels;
+import java.nio.channels.FileChannel;
+import java.nio.channels.ReadableByteChannel;
+
+public class TestExampleHttpFileTablespace {
+  @Test
+  public void testTeeest() throws IOException {
+    String uri = "https://jihoonson.files.wordpress.com/2016/04/flamegraph-tim3.png?w=605";
+    URL url = new URL(uri);
+    ReadableByteChannel rbc = Channels.newChannel(url.openStream());
+    FileOutputStream fos = new FileOutputStream("/tmp/tajo-jihoon/test.png");
+    FileChannel fc = fos.getChannel();
+    fc.transferFrom(rbc, 0, Long.MAX_VALUE);
+    fc.close();
+    fos.close();
+    rbc.close();
+  }
 }

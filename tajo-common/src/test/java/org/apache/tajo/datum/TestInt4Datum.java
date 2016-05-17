@@ -18,10 +18,14 @@
 
 package org.apache.tajo.datum;
 
+import org.apache.tajo.TajoConstants;
 import org.apache.tajo.common.TajoDataTypes;
 import org.junit.Test;
 
+import java.io.IOException;
+import java.net.HttpURLConnection;
 import java.net.URI;
+import java.net.URL;
 
 import static org.junit.Assert.*;
 
@@ -76,9 +80,19 @@ public class TestInt4Datum {
   }
 
   @Test
-  public void testTest() {
+  public void testTest() throws IOException {
     URI uri = URI.create("https://doc.rust-lang.org/std/rc/index.html?search=");
     System.out.println(uri.getPath());
     System.out.println(uri.getRawPath());
+    System.out.println(uri.getHost());
+
+//    HttpURLConnection connection = (HttpURLConnection) new URL("http://data.githubarchive.org/2015-01-01-15.json.gz").openConnection();
+    HttpURLConnection connection = (HttpURLConnection) new URL("https://jihoonson.files.wordpress.com/2016/04/flamegraph-tim3.png?w=605").openConnection();
+//    System.out.println(connection.getHeaderFieldInt("content-length", TajoConstants.UNKNOWN_LENGTH));
+    connection.setRequestProperty("Range", "bytes=0-");
+    connection.setRequestMethod("HEAD");
+    connection.connect();
+    System.out.println(connection.getResponseCode());
+    connection.disconnect();
   }
 }

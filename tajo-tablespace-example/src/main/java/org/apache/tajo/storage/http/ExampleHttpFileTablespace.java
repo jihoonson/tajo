@@ -29,12 +29,16 @@ import org.apache.tajo.catalog.Schema;
 import org.apache.tajo.catalog.SortSpec;
 import org.apache.tajo.catalog.TableDesc;
 import org.apache.tajo.catalog.TableMeta;
+import org.apache.tajo.conf.TajoConf.ConfVars;
+import org.apache.tajo.error.Errors.ResultCode;
 import org.apache.tajo.exception.TajoException;
+import org.apache.tajo.exception.TajoInternalError;
 import org.apache.tajo.exception.TajoRuntimeException;
 import org.apache.tajo.exception.UnsupportedException;
 import org.apache.tajo.plan.LogicalPlan;
 import org.apache.tajo.plan.expr.EvalNode;
 import org.apache.tajo.plan.logical.LogicalNode;
+import org.apache.tajo.schema.IdentifierUtil;
 import org.apache.tajo.storage.FormatProperty;
 import org.apache.tajo.storage.StorageProperty;
 import org.apache.tajo.storage.Tablespace;
@@ -44,21 +48,39 @@ import org.apache.tajo.util.Pair;
 
 import javax.annotation.Nullable;
 import java.io.IOException;
+import java.net.HttpURLConnection;
 import java.net.URI;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.net.URL;
+import java.util.*;
 
-public class HttpFileTablespace extends Tablespace {
-  private static final Log LOG = LogFactory.getLog(HttpFileTablespace.class);
+/**
+ *
+ */
+public class ExampleHttpFileTablespace extends Tablespace {
+  private static final Log LOG = LogFactory.getLog(ExampleHttpFileTablespace.class);
 
+  //////////////////////////////////////////////////////////////////////////////////////////////////
+  // Tablespace properties
+  //////////////////////////////////////////////////////////////////////////////////////////////////
   private static final StorageProperty STORAGE_PROPERTY =
       new StorageProperty(BuiltinStorages.JSON, false, false, true, false);
   private static final FormatProperty FORMAT_PROPERTY = new FormatProperty(false, false, false);
 
-//  public static final String OAUTH_PROPERTIES = "oauth_properties";
-//  protected Properties oauthProperties = new Properties();
+  //////////////////////////////////////////////////////////////////////////////////////////////////
+  // Configurations
+  //////////////////////////////////////////////////////////////////////////////////////////////////
+  private static final String TEMP_DIR = "temp_dir";
+  private static final String DEFAULT_TEMP_DIR = "file:///tmp/tajo-${user}/http-example/";
+
+  private static final String CLEAR_TEMP_DIR_ON_EXIT = "clear_temp_dir_on_exit";
+  private static final String DEFAULT_CLEAR_TEMP_DIR_ON_EXIT = "true";
+
+  private String tmpDir;
+  private boolean cleanOnExit;
+
+  //////////////////////////////////////////////////////////////////////////////////////////////////
+  // Metadata
+  //////////////////////////////////////////////////////////////////////////////////////////////////
 
   //                    database, table,  uri
   private final Map<Pair<String, String>, URI> tableUriMap = new HashMap<>();
@@ -66,36 +88,42 @@ public class HttpFileTablespace extends Tablespace {
   //                    database, table,  file path
   private final Map<Pair<String, String>, URI> tempFileUriMap = new HashMap<>();
 
-  public HttpFileTablespace(String name, URI uri, JSONObject config) {
+  public ExampleHttpFileTablespace(String name, URI uri, JSONObject config) {
     super(name, uri, config);
-    LOG.info("HttpFileTablespace is initialized for " + uri);
+
+    LOG.info("ExampleHttpFileTablespace is initialized for " + uri);
 
     // ts uri: http://data.githubarchive.org
-    // database name:
-    // table name: ${prefix}_${path_without_file_extension}
+
+    // create table github (*) tablespace http_example using json
+    //    ('path'='/2015-01-01-15.json.gz','compression.codec'='org.apache.hadoop.io.compress.GzipCodec')
   }
 
   @Override
   protected void storageInit() throws IOException {
 //    initOauthProperties();
-    // TODO: load configs
+    initProperties();
   }
 
-//  private void initOauthProperties() {
-//    Object connPropertiesObjects = config.get(OAUTH_PROPERTIES);
-//    if (connPropertiesObjects != null) {
-//      Preconditions.checkState(connPropertiesObjects instanceof JSONObject, "Invalid oauth_properties field in configs");
-//      JSONObject connProperties = (JSONObject) connPropertiesObjects;
-//
-//      for (Map.Entry<String, Object> entry : connProperties.entrySet()) {
-//        this.oauthProperties.put(entry.getKey(), entry.getValue());
-//      }
-//    }
-//  }
+  private void initProperties() {
+    tmpDir = (String) config.getOrDefault(TEMP_DIR, DEFAULT_TEMP_DIR);
+    cleanOnExit = Boolean.parseBoolean(
+        (String) config.getOrDefault(CLEAR_TEMP_DIR_ON_EXIT, DEFAULT_CLEAR_TEMP_DIR_ON_EXIT));
+  }
 
   @Override
   public long getTableVolume(TableDesc table, Optional<EvalNode> filter) {
-    throw new TajoRuntimeException(new UnsupportedException());
+    HttpURLConnection connection = null;
+    try {
+      connection = (HttpURLConnection) new URL(table.getUri().toASCIIString()).openConnection();
+      return connection.getContentLengthLong();
+    } catch (IOException e) {
+      throw new TajoInternalError(e);
+    } finally {
+      if (connection != null) {
+        connection.disconnect();
+      }
+    }
   }
 
   @Override
@@ -106,11 +134,51 @@ public class HttpFileTablespace extends Tablespace {
   @Override
   public List<Fragment> getSplits(String inputSourceId, TableDesc tableDesc, @Nullable EvalNode filterCondition)
       throws IOException, TajoException {
-    // TODO: pick a random host
-    // generate a temp directory download a file in the scanner.
+    HttpURLConnection connection = null;
+    try {
+      connection = (HttpURLConnection) new URL(tableDesc.getUri().toASCIIString()).openConnection();
+      connection.setRequestProperty("Range", "bytes=0-");
+      connection.setRequestMethod("HEAD");
+      connection.connect();
+      int responseCode = connection.getResponseCode();
+
+      long tableVolume = getTableVolume(tableDesc, Optional.empty());
+      List<Fragment> fragments = new ArrayList<>();
+
+      switch (responseCode) {
+
+        case HttpURLConnection.HTTP_OK:
+          fragments.add(
+              new ExampleHttpFileFragment(tableDesc.getUri(), inputSourceId, 0, tableVolume, tmpDir, cleanOnExit));
+          break;
+
+        case HttpURLConnection.HTTP_PARTIAL:
+          final long defaultTaskSize = conf.getLongVar(ConfVars.TASK_DEFAULT_SIZE);
+          for (long firstBytePos = 0; firstBytePos < tableVolume; firstBytePos += defaultTaskSize) {
+            final long taskSize = Math.min(tableVolume - firstBytePos, defaultTaskSize);
+            final long lastBytePos = firstBytePos + taskSize;
+            fragments.add(
+                new ExampleHttpFileFragment(tableDesc.getUri(), inputSourceId, firstBytePos, lastBytePos, tmpDir,
+                    cleanOnExit));
+          }
+          break;
+
+        default:
+          throw new TajoInternalError("Unexpected HTTP response: " + responseCode);
+      }
+
+      return fragments;
+
+    } finally {
+      if (connection != null) {
+        connection.disconnect();
+      }
+    }
+
+    // TODO: pick random hosts
+    // generate a temp directory and download a file in the scanner.
     // temp directory name: hash(dbname, tablename)?
     // scanner should receive the path to the file not directory.
-    return null;
   }
 
   @Override
@@ -145,9 +213,24 @@ public class HttpFileTablespace extends Tablespace {
 
   @Override
   public void createTable(TableDesc tableDesc, boolean ifNotExists) throws TajoException, IOException {
-    // TODO: maybe keep table uris in map. Otherwise, a catalog instance must be passed to Tablespace.
-    // check ts uri
-    // register the table uri for dbname and tablename
+    if (isValidTableUri(uri, tableDesc.getUri())) {
+      String[] identifiers = IdentifierUtil.splitTableName(tableDesc.getName());
+      tableUriMap.put(new Pair<>(identifiers[0], identifiers[1]), tableDesc.getUri());
+    } else {
+      throw new TajoException(
+          ResultCode.INVALID_TABLESPACE_URI, uri.toASCIIString(), tableDesc.getUri().toASCIIString());
+    }
+  }
+
+  private static boolean isValidTableUri(URI tablespaceUri, URI tableUri) {
+    String tableUriString = tableUri.toASCIIString();
+    if (tablespaceUri.toASCIIString().contains(tableUriString)) {
+      // Table URI should be the full path to the file
+      if (tableUriString.charAt(tableUriString.length() - 1) != '/') {
+        return true;
+      }
+    }
+    return false;
   }
 
   @Override

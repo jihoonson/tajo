@@ -32,24 +32,9 @@
       "handler": "org.apache.tajo.storage.s3.S3TableSpace",
       "default-format": "text"
     },
-    "http-file": {
-      "handler": "org.apache.tajo.storage.http.HttpFileTablespace",
-      "default-format": "text"
-    }
-  },
-  "spaces": {
-    "http-example": {
-      "uri": "http://data.githubarchive.org",
-      "configs": {
-        "mapped_database": "http_ex",
-        "temp_dir": "/tmp/tajo-${user}/http-example/",
-        "clear_temp_dir_on_exit": "true",
-        "file_extension": "json.gz"
-//        "oauth_properties": {
-//          "client_id":     "tajo",
-//          "secret_key": "xxxx"
-//        }
-      }
+    "http": {
+      "handler": "org.apache.tajo.storage.http.ExampleHttpFileTablespace",
+      "default-format": "json"
     }
   }
 }
