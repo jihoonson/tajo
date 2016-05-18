@@ -45,7 +45,7 @@ import org.apache.tajo.storage.Tablespace;
 import org.apache.tajo.storage.TupleRange;
 import org.apache.tajo.storage.fragment.Fragment;
 import org.apache.tajo.util.Pair;
-import org.apache.tajo.util.UriUtil;
+import org.jboss.netty.handler.codec.http.HttpHeaders.Names;
 
 import javax.annotation.Nullable;
 import java.io.IOException;
@@ -128,7 +128,9 @@ public class ExampleHttpFileTablespace extends Tablespace {
     HttpURLConnection connection = null;
     try {
       connection = (HttpURLConnection) new URL(table.getUri().toASCIIString()).openConnection();
-      return connection.getContentLengthLong();
+      connection.setRequestMethod("HEAD");
+      connection.connect();
+      return connection.getHeaderFieldLong(Names.CONTENT_LENGTH, -1);
     } catch (IOException e) {
       throw new TajoInternalError(e);
     } finally {
@@ -162,7 +164,7 @@ public class ExampleHttpFileTablespace extends Tablespace {
     HttpURLConnection connection = null;
     try {
       connection = (HttpURLConnection) new URL(tableDesc.getUri().toASCIIString()).openConnection();
-      connection.setRequestProperty("Range", "bytes=0-");
+      connection.setRequestProperty(Names.RANGE, "bytes=0-");
       connection.setRequestMethod("HEAD");
       connection.connect();
       int responseCode = connection.getResponseCode();

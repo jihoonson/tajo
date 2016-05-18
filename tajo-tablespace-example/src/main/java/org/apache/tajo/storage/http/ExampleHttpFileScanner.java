@@ -36,6 +36,7 @@ import org.apache.tajo.storage.TablespaceManager;
 import org.apache.tajo.storage.Tuple;
 import org.apache.tajo.storage.fragment.FileFragment;
 import org.apache.tajo.storage.fragment.Fragment;
+import org.jboss.netty.handler.codec.http.HttpHeaders.Names;
 
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -126,7 +127,7 @@ public class ExampleHttpFileScanner implements Scanner {
     if (!fs.exists(fileFragment.getPath())) {
       URL url = new URL(httpFragment.getUri().toASCIIString());
       HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-      connection.setRequestProperty("Range", getHttpRangeString());
+      connection.setRequestProperty(Names.RANGE, getHttpRangeString());
 
       try (ReadableByteChannel rbc = Channels.newChannel(connection.getInputStream());
            FileOutputStream fos = new FileOutputStream(fileFragment.getPath().toString());

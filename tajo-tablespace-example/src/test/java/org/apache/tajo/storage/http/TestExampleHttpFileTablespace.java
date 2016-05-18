@@ -18,11 +18,57 @@
 
 package org.apache.tajo.storage.http;
 
+import org.junit.Test;
+
+import java.io.IOException;
+import java.net.HttpURLConnection;
+import java.net.InetSocketAddress;
+import java.net.URL;
+
 public class TestExampleHttpFileTablespace {
-//  @Test
-//  public void testTeeest() throws IOException {
-//    String uri = "https://jihoonson.files.wordpress.com/2016/04/flamegraph-tim3.png?w=605";
-//    URL url = new URL(uri);
+
+  @Test
+  public void testTest() throws InterruptedException, IOException {
+    ExampleHttpTablespaceTestServer server = new ExampleHttpTablespaceTestServer(true);
+    server.init();
+    System.out.println(server.getAddress());
+
+    InetSocketAddress address = server.getAddress();
+    String url = "http://localhost:" + address.getPort() + "/test";
+    System.out.println(url);
+
+    HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
+    connection.setRequestMethod("HEAD");
+//    connection.setRequestProperty("Content-Length", "0");
+    connection.connect();
+    System.out.println(connection.getHeaderFieldLong("Content-Length", -1));
+    connection.disconnect();
+
+    connection = (HttpURLConnection) new URL(url).openConnection();
+    connection.setRequestMethod("HEAD");
+    connection.setRequestProperty("Range", "bytes:0-");
+    connection.connect();
+    System.out.println(connection.getResponseCode());
+    connection.disconnect();
+
+    server.close();
+  }
+
+  @Test
+  public void testTeeest() throws IOException {
+    String uri = "https://jihoonson.files.wordpress.com/2016/04/flamegraph-tim3.png?w=605";
+    URL url = new URL(uri);
+    HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+    connection.setRequestMethod("HEAD");
+//    connection.setRequestProperty("Content-Length", "0");
+    connection.connect();
+    System.out.println(connection.getHeaderFieldLong("Content-Length", -1));
+    connection.disconnect();
+
+    connection = (HttpURLConnection) url.openConnection();
+    System.out.println(connection.getContentLengthLong());
+    connection.disconnect();
+
 //    ReadableByteChannel rbc = Channels.newChannel(url.openStream());
 //    FileOutputStream fos = new FileOutputStream("/tmp/tajo-jihoon/test.png");
 //    FileChannel fc = fos.getChannel();
@@ -30,5 +76,5 @@ public class TestExampleHttpFileTablespace {
 //    fc.close();
 //    fos.close();
 //    rbc.close();
-//  }
+  }
 }

@@ -18,7 +18,59 @@
 
 package org.apache.tajo.storage.http;
 
-public class ExampleHttpTablespaceTestServer {
+import io.netty.bootstrap.ServerBootstrap;
+import io.netty.channel.Channel;
+import io.netty.channel.EventLoopGroup;
+import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.channel.socket.nio.NioServerSocketChannel;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 
+import java.io.Closeable;
+import java.net.InetSocketAddress;
 
+public class ExampleHttpTablespaceTestServer implements Closeable {
+
+  private final static Log LOG = LogFactory.getLog(ExampleHttpTablespaceTestServer.class);
+
+  private ServerBootstrap bootstrap;
+  private Channel channel;
+  private final boolean rangeRequestEnabled;
+
+  public ExampleHttpTablespaceTestServer(boolean rangeRequestEnabled) {
+    this.rangeRequestEnabled = rangeRequestEnabled;
+  }
+
+  public void init() throws InterruptedException {
+    EventLoopGroup bossGroup = new NioEventLoopGroup(1);
+    EventLoopGroup workerGroup = new NioEventLoopGroup();
+
+    bootstrap = new ServerBootstrap();
+    bootstrap.group(bossGroup, workerGroup)
+        .channel(NioServerSocketChannel.class)
+        .childHandler(new ExampleHttpServerInitializer(rangeRequestEnabled));
+
+    channel = bootstrap.bind(0).sync().channel();
+
+    LOG.info(ExampleHttpTablespaceTestServer.class.getSimpleName() + " listening on port " + getAddress().getPort());
+  }
+
+  public InetSocketAddress getAddress() {
+    return (InetSocketAddress) channel.localAddress();
+  }
+
+  public void close() {
+    if (bootstrap != null) {
+      if (bootstrap.group() != null) {
+        bootstrap.group().shutdownGracefully();
+      }
+      if (bootstrap.childGroup() != null) {
+        bootstrap.childGroup().shutdownGracefully();
+      }
+    }
+
+    if (channel != null) {
+      channel.close();
+    }
+  }
 }
