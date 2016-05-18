@@ -64,8 +64,20 @@ public class ExampleHttpFileTablespace extends Tablespace {
   // Tablespace properties
   //////////////////////////////////////////////////////////////////////////////////////////////////
   private static final StorageProperty STORAGE_PROPERTY =
-      new StorageProperty(BuiltinStorages.JSON, false, false, true, false);
-  private static final FormatProperty FORMAT_PROPERTY = new FormatProperty(false, false, false);
+      new StorageProperty(
+          BuiltinStorages.JSON, // default format is json
+          false,                // is not movable
+          false,                // is not writable
+          true,                 // allow arbitrary path
+          false                 // doesn't provide metadata
+      );
+
+  private static final FormatProperty FORMAT_PROPERTY =
+      new FormatProperty(
+          false,  // doesn't support insert
+          false,  // doesn't support direct insert
+          false   // doesn't support result staging
+      );
 
   //////////////////////////////////////////////////////////////////////////////////////////////////
   // Configurations
@@ -102,7 +114,6 @@ public class ExampleHttpFileTablespace extends Tablespace {
 
   @Override
   protected void storageInit() throws IOException {
-//    initOauthProperties();
     initProperties();
   }
 
@@ -188,11 +199,6 @@ public class ExampleHttpFileTablespace extends Tablespace {
         connection.disconnect();
       }
     }
-
-    // TODO: pick random hosts
-    // generate a temp directory and download a file in the scanner.
-    // temp directory name: hash(dbname, tablename)?
-    // scanner should receive the path to the file not directory.
   }
 
   @Override
@@ -207,8 +213,7 @@ public class ExampleHttpFileTablespace extends Tablespace {
 
   @Override
   public void close() {
-    // check clear_temp_dir_on_exit
-    // delete temp files
+
   }
 
   @Override
@@ -237,14 +242,15 @@ public class ExampleHttpFileTablespace extends Tablespace {
   }
 
   private static boolean isValidTableUri(URI tablespaceUri, URI tableUri) {
-    String tableUriString = tableUri.toASCIIString();
-    if (tablespaceUri.toASCIIString().contains(tableUriString)) {
-      // Table URI should be a full path to a file
-      if (tableUriString.charAt(tableUriString.length() - 1) != '/') {
-        return true;
-      }
-    }
-    return false;
+//    String tableUriString = tableUri.toASCIIString();
+//    if (tablespaceUri.toASCIIString().contains(tableUriString)) {
+//      // Table URI should be a full path to a file
+//      if (tableUriString.charAt(tableUriString.length() - 1) != '/') {
+//        return true;
+//      }
+//    }
+//    return false;
+    return true;
   }
 
   @Override

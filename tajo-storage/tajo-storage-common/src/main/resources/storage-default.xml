@@ -69,6 +69,10 @@
     <name>tajo.storage.fragment.serde.jdbc</name>
     <value>org.apache.tajo.storage.jdbc.JdbcFragmentSerde</value>
   </property>
+  <property>
+    <name>tajo.storage.fragment.serde.http</name>
+    <value>org.apache.tajo.storage.http.ExampleHttpFileFragmentSerde</value>
+  </property>
 
   <!--- Scanner Handler -->
   <property>
