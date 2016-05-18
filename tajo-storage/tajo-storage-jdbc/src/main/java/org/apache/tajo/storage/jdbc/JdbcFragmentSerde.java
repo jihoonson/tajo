@@ -19,12 +19,12 @@
 package org.apache.tajo.storage.jdbc;
 
 import com.google.protobuf.GeneratedMessage.Builder;
-import org.apache.tajo.storage.fragment.FragmentSerdeHelper;
+import org.apache.tajo.storage.fragment.FragmentSerde;
 import org.apache.tajo.storage.jdbc.JdbcFragmentProtos.JdbcFragmentProto;
 
 import java.net.URI;
 
-public class JdbcFragmentSerdeHelper implements FragmentSerdeHelper<JdbcFragment, JdbcFragmentProto> {
+public class JdbcFragmentSerde implements FragmentSerde<JdbcFragment, JdbcFragmentProto> {
 
   @Override
   public Builder newBuilder() {

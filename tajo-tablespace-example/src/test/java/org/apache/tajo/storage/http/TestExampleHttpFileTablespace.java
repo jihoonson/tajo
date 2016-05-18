@@ -18,26 +18,17 @@
 
 package org.apache.tajo.storage.http;
 
-import org.junit.Test;
-
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.net.URL;
-import java.nio.channels.Channels;
-import java.nio.channels.FileChannel;
-import java.nio.channels.ReadableByteChannel;
-
 public class TestExampleHttpFileTablespace {
-  @Test
-  public void testTeeest() throws IOException {
-    String uri = "https://jihoonson.files.wordpress.com/2016/04/flamegraph-tim3.png?w=605";
-    URL url = new URL(uri);
-    ReadableByteChannel rbc = Channels.newChannel(url.openStream());
-    FileOutputStream fos = new FileOutputStream("/tmp/tajo-jihoon/test.png");
-    FileChannel fc = fos.getChannel();
-    fc.transferFrom(rbc, 0, Long.MAX_VALUE);
-    fc.close();
-    fos.close();
-    rbc.close();
-  }
+//  @Test
+//  public void testTeeest() throws IOException {
+//    String uri = "https://jihoonson.files.wordpress.com/2016/04/flamegraph-tim3.png?w=605";
+//    URL url = new URL(uri);
+//    ReadableByteChannel rbc = Channels.newChannel(url.openStream());
+//    FileOutputStream fos = new FileOutputStream("/tmp/tajo-jihoon/test.png");
+//    FileChannel fc = fos.getChannel();
+//    fc.transferFrom(rbc, 0, Long.MAX_VALUE);
+//    fc.close();
+//    fos.close();
+//    rbc.close();
+//  }
 }

@@ -22,12 +22,12 @@ import com.google.protobuf.Message;
 import com.google.protobuf.GeneratedMessage.Builder;
 
 /**
- * FragmentSerdeHelper abstracts how a fragment is serialized / deserialized to / from a Protocol Buffer message.
+ * FragmentSerde abstracts how a fragment is serialized / deserialized to / from a Protocol Buffer message.
  *
  * @param <F> Fragment class
  * @param <P> Protocol Buffer Message class corresponding to the Fragment class
  */
-public interface FragmentSerdeHelper<F extends Fragment, P extends Message> {
+public interface FragmentSerde<F extends Fragment, P extends Message> {
 
   /**
    * Creates a new builder of {@link P}.

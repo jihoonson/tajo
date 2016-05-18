@@ -16,45 +16,43 @@
  * limitations under the License.
  */
 
-package org.apache.tajo.storage.hbase;
+package org.apache.tajo.storage.http;
 
-import com.google.protobuf.ByteString;
 import com.google.protobuf.GeneratedMessage.Builder;
-import org.apache.tajo.storage.fragment.FragmentSerdeHelper;
-import org.apache.tajo.storage.hbase.StorageFragmentProtos.HBaseFragmentProto;
+import org.apache.tajo.storage.fragment.FragmentSerde;
+import org.apache.tajo.storage.http.ExampleHttpFragmentProtos.ExampleHttpFileFragmentProto;
 
 import java.net.URI;
 
-public class HBaseFragmentSerdeHelper implements FragmentSerdeHelper<HBaseFragment, HBaseFragmentProto> {
+public class ExampleHttpFileFragmentSerde
+    implements FragmentSerde<ExampleHttpFileFragment, ExampleHttpFileFragmentProto> {
 
   @Override
   public Builder newBuilder() {
-    return HBaseFragmentProto.newBuilder();
+    return ExampleHttpFileFragmentProto.newBuilder();
   }
 
   @Override
-  public HBaseFragmentProto serialize(HBaseFragment fragment) {
-    return HBaseFragmentProto.newBuilder()
+  public ExampleHttpFileFragmentProto serialize(ExampleHttpFileFragment fragment) {
+    return ExampleHttpFileFragmentProto.newBuilder()
         .setUri(fragment.getUri().toASCIIString())
         .setTableName(fragment.getInputSourceId())
-        .setHbaseTableName(fragment.getHbaseTableName())
-        .setStartRow(ByteString.copyFrom(fragment.getStartKey().getBytes()))
-        .setStopRow(ByteString.copyFrom(fragment.getEndKey().getBytes()))
-        .setLast(fragment.isLast())
-        .setLength(fragment.getLength())
-        .setRegionLocation(fragment.getHostNames().get(0))
+        .setStartKey(fragment.getStartKey())
+        .setEndKey(fragment.getEndKey())
+        .setTempDir(fragment.getTempDir())
+        .setClearOnExit(fragment.cleanOnExit())
         .build();
   }
 
   @Override
-  public HBaseFragment deserialize(HBaseFragmentProto proto) {
-    return new HBaseFragment(
+  public ExampleHttpFileFragment deserialize(ExampleHttpFileFragmentProto proto) {
+    return new ExampleHttpFileFragment(
         URI.create(proto.getUri()),
         proto.getTableName(),
-        proto.getHbaseTableName(),
-        proto.getStartRow().toByteArray(),
-        proto.getStopRow().toByteArray(),
-        proto.getRegionLocation(),
-        proto.getLast());
+        proto.getStartKey(),
+        proto.getEndKey(),
+        proto.getTempDir(),
+        proto.getClearOnExit()
+    );
   }
 }

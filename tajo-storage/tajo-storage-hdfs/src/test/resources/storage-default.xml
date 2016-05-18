@@ -51,16 +51,16 @@
     <value>org.apache.tajo.storage.jdbc.JdbcFragment</value>
   </property>
   <property>
-    <name>tajo.storage.fragment.serde-helper.file</name>
-    <value>org.apache.tajo.storage.fragment.FileFragmentSerdeHelper</value>
+    <name>tajo.storage.fragment.serde.file</name>
+    <value>org.apache.tajo.storage.fragment.FileFragmentSerde</value>
   </property>
   <property>
-    <name>tajo.storage.fragment.serde-helper.hbase</name>
-    <value>org.apache.tajo.storage.hbase.HBaseFragmentSerdeHelper</value>
+    <name>tajo.storage.fragment.serde.hbase</name>
+    <value>org.apache.tajo.storage.hbase.HBaseFragmentSerde</value>
   </property>
   <property>
-    <name>tajo.storage.fragment.serde-helper.jdbc</name>
-    <value>org.apache.tajo.storage.jdbc.JdbcFragmentSerdeHelper</value>
+    <name>tajo.storage.fragment.serde.jdbc</name>
+    <value>org.apache.tajo.storage.jdbc.JdbcFragmentSerde</value>
   </property>
 
   <!--- Scanner Handler -->

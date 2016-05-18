@@ -34,37 +34,37 @@ import static org.apache.tajo.catalog.proto.CatalogProtos.FragmentProto;
 @ThreadSafe
 public class FragmentConvertor {
 
-  private static final Map<String, FragmentSerdeHelper> SERDE_HELPER_MAP = Maps.newConcurrentMap();
+  private static final Map<String, FragmentSerde> SERDE_MAP = Maps.newConcurrentMap();
 
-  private static FragmentSerdeHelper getFragmentSerdeHelper(Configuration conf, String fragmentKind) {
+  private static FragmentSerde getFragmentSerde(Configuration conf, String fragmentKind) {
     fragmentKind = fragmentKind.toLowerCase();
-    FragmentSerdeHelper helper = SERDE_HELPER_MAP.get(fragmentKind);
-    if (helper == null) {
-      Class<? extends FragmentSerdeHelper> helperClass = conf.getClass(
-          String.format("tajo.storage.fragment.serde-helper.%s", fragmentKind), null, FragmentSerdeHelper.class);
+    FragmentSerde serde = SERDE_MAP.get(fragmentKind);
+    if (serde == null) {
+      Class<? extends FragmentSerde> serdeClass = conf.getClass(
+          String.format("tajo.storage.fragment.serde.%s", fragmentKind), null, FragmentSerde.class);
       try {
-        helper = helperClass.getConstructor(null).newInstance();
+        serde = serdeClass.getConstructor(null).newInstance();
       } catch (InstantiationException
           | IllegalAccessException
           | InvocationTargetException
           | NoSuchMethodException e) {
         throw new TajoInternalError(e);
       }
-      SERDE_HELPER_MAP.put(fragmentKind, helper);
+      SERDE_MAP.put(fragmentKind, serde);
     }
 
-    if (helper == null) {
-      throw new TajoInternalError("No such a serde helper for " + fragmentKind);
+    if (serde == null) {
+      throw new TajoInternalError("No such a serde for " + fragmentKind);
     }
 
-    return helper;
+    return serde;
   }
 
   public static <T extends Fragment> T convert(Configuration conf, String fragmentKind, FragmentProto fragment) {
-    FragmentSerdeHelper helper = getFragmentSerdeHelper(conf, fragmentKind);
+    FragmentSerde serde = getFragmentSerde(conf, fragmentKind);
     try {
-      return (T) helper.deserialize(
-          helper.newBuilder()
+      return (T) serde.deserialize(
+          serde.newBuilder()
               .mergeFrom(fragment.getContents())
               .build());
     } catch (InvalidProtocolBufferException e) {
@@ -91,7 +91,7 @@ public class FragmentConvertor {
     FragmentProto.Builder fragmentBuilder = FragmentProto.newBuilder();
     fragmentBuilder.setId(fragment.getInputSourceId());
     fragmentBuilder.setKind(fragment.getKind());
-    fragmentBuilder.setContents(getFragmentSerdeHelper(conf, fragment.getKind()).serialize(fragment).toByteString());
+    fragmentBuilder.setContents(getFragmentSerde(conf, fragment.getKind()).serialize(fragment).toByteString());
     return fragmentBuilder.build();
   }
 

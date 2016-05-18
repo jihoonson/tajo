@@ -25,7 +25,7 @@ import org.apache.tajo.storage.StorageFragmentProtos.FileFragmentProto;
 import java.util.ArrayList;
 import java.util.List;
 
-public class FileFragmentSerdeHelper implements FragmentSerdeHelper<FileFragment, FileFragmentProto> {
+public class FileFragmentSerde implements FragmentSerde<FileFragment, FileFragmentProto> {
 
   @Override
   public Builder newBuilder() {

@@ -36,5 +36,14 @@
       "handler": "org.apache.tajo.storage.http.ExampleHttpFileTablespace",
       "default-format": "json"
     }
+  },
+  "spaces": {
+    "http_example": {
+      "uri": "http://data.githubarchive.org",
+      "configs": {
+        "temp_dir": "file:///tmp/tajo-${user}/http-example/",
+        "clear_temp_dir_on_exit": "true"
+      }
+    }
   }
 }

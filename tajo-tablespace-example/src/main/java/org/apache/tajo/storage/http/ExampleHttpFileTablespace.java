@@ -128,6 +128,11 @@ public class ExampleHttpFileTablespace extends Tablespace {
   }
 
   @Override
+  public URI getRootUri() {
+    return uri;
+  }
+
+  @Override
   public URI getTableUri(TableMeta meta, String databaseName, String tableName) {
     String tablespaceUriString = uri.toASCIIString();
     String tablePath = meta.getProperty("path");
@@ -138,7 +143,10 @@ public class ExampleHttpFileTablespace extends Tablespace {
   }
 
   @Override
-  public List<Fragment> getSplits(String inputSourceId, TableDesc tableDesc, @Nullable EvalNode filterCondition)
+  public List<Fragment> getSplits(String inputSourceId,
+                                  TableDesc tableDesc,
+                                  boolean requireSort,
+                                  @Nullable EvalNode filterCondition)
       throws IOException, TajoException {
     HttpURLConnection connection = null;
     try {
@@ -231,7 +239,7 @@ public class ExampleHttpFileTablespace extends Tablespace {
   private static boolean isValidTableUri(URI tablespaceUri, URI tableUri) {
     String tableUriString = tableUri.toASCIIString();
     if (tablespaceUri.toASCIIString().contains(tableUriString)) {
-      // Table URI should be the full path to the file
+      // Table URI should be a full path to a file
       if (tableUriString.charAt(tableUriString.length() - 1) != '/') {
         return true;
       }
