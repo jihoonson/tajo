@@ -38,12 +38,11 @@ import java.net.URL;
 import static io.netty.handler.codec.http.HttpHeaders.Names.CONTENT_TYPE;
 import static io.netty.handler.codec.http.HttpResponseStatus.*;
 import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
+import static org.apache.tajo.storage.http.ExampleHttpFileTablespace.BYTE_RANGE_PREFIX;
 
 public class ExampleHttpServerHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
 
   private static final Log LOG = LogFactory.getLog(ExampleHttpServerHandler.class);
-
-  public static final String BYTE_RANGE_PREFIX = "bytes=";
 
   private final boolean rangeRequestEnabled;
 
@@ -97,12 +96,7 @@ public class ExampleHttpServerHandler extends SimpleChannelInboundHandler<FullHt
 
         }
 
-        if (file.getName().equals("nation.tbl")) {
-          HttpHeaders.setContentLength(response, 300 * 1024 * 1024);
-        } else {
-          HttpHeaders.setContentLength(response, file.length());
-
-        }
+        HttpHeaders.setContentLength(response, file.length());
 
 
       } catch (FileNotFoundException | URISyntaxException e) {

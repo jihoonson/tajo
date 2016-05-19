@@ -47,6 +47,8 @@ import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
 import java.nio.channels.ReadableByteChannel;
 
+import static org.apache.tajo.storage.http.ExampleHttpFileTablespace.BYTE_RANGE_PREFIX;
+
 public class ExampleHttpFileScanner implements Scanner {
 
   private enum Status {
@@ -140,7 +142,7 @@ public class ExampleHttpFileScanner implements Scanner {
   }
 
   private String getHttpRangeString() {
-    return "bytes=" + httpFragment.getStartKey() + "-" + (httpFragment.getEndKey() - 1); // end key is inclusive
+    return BYTE_RANGE_PREFIX + httpFragment.getStartKey() + "-" + (httpFragment.getEndKey() - 1); // end key is inclusive
   }
 
   @Override

@@ -20,7 +20,6 @@ package org.apache.tajo.storage.http;
 
 import io.netty.handler.codec.http.HttpHeaders.Names;
 import net.minidev.json.JSONObject;
-import org.apache.tajo.QueryTestCaseBase;
 import org.apache.tajo.TajoTestingCluster;
 import org.apache.tajo.TpchTestBase;
 import org.apache.tajo.catalog.TableDesc;
@@ -51,7 +50,7 @@ public class TestExampleHttpFileTablespace {
     server.init();
 
     JSONObject configElements = new JSONObject();
-    URI uri = URI.create("http://" + InetAddress.getLocalHost().getHostName());
+    URI uri = URI.create("http://" + InetAddress.getLocalHost().getHostName() + ":" + server.getAddress().getPort());
     TablespaceManager.addTableSpaceForTest(new ExampleHttpFileTablespace("http_example", uri, configElements));
 
     testingCluster.getMaster().refresh();
@@ -78,6 +77,8 @@ public class TestExampleHttpFileTablespace {
     for (Fragment f : fragments) {
       System.out.println(f.getUri() + " (" + f.getStartKey() + ", " + f.getEndKey() + ")");
     }
+
+    client.executeQuery("select * from nation");
   }
 
   @Test

@@ -44,6 +44,7 @@ import org.apache.tajo.storage.StorageProperty;
 import org.apache.tajo.storage.Tablespace;
 import org.apache.tajo.storage.TupleRange;
 import org.apache.tajo.storage.fragment.Fragment;
+import org.apache.tajo.unit.StorageUnit;
 import org.apache.tajo.util.Pair;
 import org.jboss.netty.handler.codec.http.HttpHeaders.Names;
 
@@ -59,6 +60,8 @@ import java.util.*;
  */
 public class ExampleHttpFileTablespace extends Tablespace {
   private static final Log LOG = LogFactory.getLog(ExampleHttpFileTablespace.class);
+
+  public static final String BYTE_RANGE_PREFIX = "bytes=";
 
   //////////////////////////////////////////////////////////////////////////////////////////////////
   // Tablespace properties
@@ -162,14 +165,15 @@ public class ExampleHttpFileTablespace extends Tablespace {
                                   @Nullable EvalNode filterCondition)
       throws IOException, TajoException {
     HttpURLConnection connection = null;
+    long tableVolume = getTableVolume(tableDesc, Optional.empty());
+
     try {
       connection = (HttpURLConnection) new URL(tableDesc.getUri().toASCIIString()).openConnection();
-      connection.setRequestProperty(Names.RANGE, "bytes=0-");
+      connection.setRequestProperty(Names.RANGE, BYTE_RANGE_PREFIX + "0-");
       connection.setRequestMethod("HEAD");
       connection.connect();
       int responseCode = connection.getResponseCode();
 
-      long tableVolume = getTableVolume(tableDesc, Optional.empty());
       List<Fragment> fragments = new ArrayList<>();
 
       switch (responseCode) {
@@ -180,7 +184,7 @@ public class ExampleHttpFileTablespace extends Tablespace {
           break;
 
         case HttpURLConnection.HTTP_PARTIAL:
-          final long defaultTaskSize = conf.getLongVar(ConfVars.TASK_DEFAULT_SIZE);
+          final long defaultTaskSize = conf.getLongVar(ConfVars.TASK_DEFAULT_SIZE) * StorageUnit.MB;
           for (long firstBytePos = 0; firstBytePos < tableVolume; firstBytePos += defaultTaskSize) {
             final long taskSize = Math.min(tableVolume - firstBytePos, defaultTaskSize);
             final long lastBytePos = firstBytePos + taskSize;

@@ -58,6 +58,8 @@
   <property>
     <name>tajo.storage.fragment.kind.http</name>
     <value>org.apache.tajo.storage.http.ExampleHttpFileFragment</value>
+  </property>
+  <property>
     <name>tajo.storage.fragment.serde.file</name>
     <value>org.apache.tajo.storage.fragment.FileFragmentSerde</value>
   </property>
