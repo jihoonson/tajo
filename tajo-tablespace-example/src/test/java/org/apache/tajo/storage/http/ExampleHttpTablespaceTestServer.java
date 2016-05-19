@@ -42,11 +42,10 @@ public class ExampleHttpTablespaceTestServer implements Closeable {
   }
 
   public void init() throws InterruptedException {
-    EventLoopGroup bossGroup = new NioEventLoopGroup(1);
-    EventLoopGroup workerGroup = new NioEventLoopGroup();
+    EventLoopGroup group = new NioEventLoopGroup(1);
 
     bootstrap = new ServerBootstrap();
-    bootstrap.group(bossGroup, workerGroup)
+    bootstrap.group(group)
         .channel(NioServerSocketChannel.class)
         .childHandler(new ExampleHttpServerInitializer(rangeRequestEnabled));
 
@@ -63,9 +62,6 @@ public class ExampleHttpTablespaceTestServer implements Closeable {
     if (bootstrap != null) {
       if (bootstrap.group() != null) {
         bootstrap.group().shutdownGracefully();
-      }
-      if (bootstrap.childGroup() != null) {
-        bootstrap.childGroup().shutdownGracefully();
       }
     }
 
