@@ -19,9 +19,12 @@
 package org.apache.tajo.storage.http;
 
 import org.apache.commons.io.FilenameUtils;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.tajo.BuiltinStorages;
 import org.apache.tajo.catalog.Column;
 import org.apache.tajo.catalog.Schema;
 import org.apache.tajo.catalog.SchemaBuilder;
@@ -38,6 +41,7 @@ import org.apache.tajo.storage.fragment.FileFragment;
 import org.apache.tajo.storage.fragment.Fragment;
 import org.jboss.netty.handler.codec.http.HttpHeaders.Names;
 
+import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.HttpURLConnection;
@@ -49,7 +53,9 @@ import java.nio.channels.ReadableByteChannel;
 
 import static org.apache.tajo.storage.http.ExampleHttpFileTablespace.BYTE_RANGE_PREFIX;
 
-public class ExampleHttpFileScanner implements Scanner {
+public class ExampleHttpJsonScanner implements Scanner {
+
+  private static final Log LOG = LogFactory.getLog(ExampleHttpJsonScanner.class);
 
   private enum Status {
     NEW,
@@ -59,7 +65,8 @@ public class ExampleHttpFileScanner implements Scanner {
 
   private final Configuration conf;
   private final Schema schema;
-  private final TableMeta tableMeta;
+  private final TableMeta httpTableMeta;
+  private final TableMeta fileTableMeta;
   private final ExampleHttpFileFragment httpFragment;
   private final FileFragment fileFragment;
   private final Scanner scanner;
@@ -67,11 +74,12 @@ public class ExampleHttpFileScanner implements Scanner {
 
   private Status status = Status.NEW;
 
-  public ExampleHttpFileScanner(Configuration conf, Schema schema, TableMeta tableMeta, Fragment fragment)
+  public ExampleHttpJsonScanner(Configuration conf, Schema schema, TableMeta tableMeta, Fragment fragment)
       throws IOException {
     this.conf = conf;
     this.schema = schema;
-    this.tableMeta = tableMeta;
+    this.httpTableMeta = tableMeta;
+    this.fileTableMeta = new TableMeta(BuiltinStorages.JSON, httpTableMeta.getPropertySet());
     this.httpFragment = (ExampleHttpFileFragment) fragment;
     this.fileFragment = getFileFragment();
     this.scanner = getScanner();
@@ -79,7 +87,7 @@ public class ExampleHttpFileScanner implements Scanner {
 
   private Scanner getScanner() throws IOException {
     Tablespace tablespace = TablespaceManager.get(httpFragment.getTempDir());
-    return tablespace.getScanner(tableMeta, schema, fileFragment, targets);
+    return tablespace.getScanner(fileTableMeta, schema, fileFragment, targets);
   }
 
   private FileFragment getFileFragment() {
@@ -126,17 +134,24 @@ public class ExampleHttpFileScanner implements Scanner {
   public void prepareDataFile() throws IOException {
     FileSystem fs = fileFragment.getPath().getFileSystem(conf);
 
+    Path parent = fileFragment.getPath().getParent();
+    if (!fs.exists(parent)) {
+      fs.mkdirs(parent);
+    }
+
     if (!fs.exists(fileFragment.getPath())) {
       URL url = new URL(httpFragment.getUri().toASCIIString());
       HttpURLConnection connection = (HttpURLConnection) url.openConnection();
       connection.setRequestProperty(Names.RANGE, getHttpRangeString());
 
       try (ReadableByteChannel rbc = Channels.newChannel(connection.getInputStream());
-           FileOutputStream fos = new FileOutputStream(fileFragment.getPath().toString());
+           FileOutputStream fos = new FileOutputStream(new File(fileFragment.getPath().toUri()));
            FileChannel fc = fos.getChannel()) {
         fc.transferFrom(rbc, 0, fileFragment.getLength());
       } finally {
         connection.disconnect();
+
+        LOG.info("Data is prepared at " + fileFragment.getPath());
       }
     }
   }

@@ -133,8 +133,8 @@
   </property>
 
   <property>
-    <name>tajo.storage.scanner-handler.http.class</name>
-    <value>org.apache.tajo.storage.http.ExampleHttpFileScanner</value>
+    <name>tajo.storage.scanner-handler.ex-http-json.class</name>
+    <value>org.apache.tajo.storage.http.ExampleHttpJsonScanner</value>
   </property>
 
   <!--- Appender Handler -->

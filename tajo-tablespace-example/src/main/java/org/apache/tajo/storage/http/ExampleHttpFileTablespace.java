@@ -61,8 +61,6 @@ import java.util.*;
 public class ExampleHttpFileTablespace extends Tablespace {
   private static final Log LOG = LogFactory.getLog(ExampleHttpFileTablespace.class);
 
-  public static final String BYTE_RANGE_PREFIX = "bytes=";
-
   //////////////////////////////////////////////////////////////////////////////////////////////////
   // Tablespace properties
   //////////////////////////////////////////////////////////////////////////////////////////////////
@@ -86,7 +84,7 @@ public class ExampleHttpFileTablespace extends Tablespace {
   // Configurations
   //////////////////////////////////////////////////////////////////////////////////////////////////
   private static final String TEMP_DIR = "temp_dir";
-  private static final String DEFAULT_TEMP_DIR = "file:///tmp/tajo-${user}/http-example/";
+  private static final String DEFAULT_TEMP_DIR = "file:///tmp/" + "tajo-" + System.getProperty("user.name") + "/http-example/";
 
   private static final String CLEAR_TEMP_DIR_ON_EXIT = "clear_temp_dir_on_exit";
   private static final String DEFAULT_CLEAR_TEMP_DIR_ON_EXIT = "true";
@@ -98,21 +96,22 @@ public class ExampleHttpFileTablespace extends Tablespace {
   // Metadata
   //////////////////////////////////////////////////////////////////////////////////////////////////
 
+  static final String BYTE_RANGE_PREFIX = "bytes=";
+  static final String PATH_SUFFIX = "path_suffix";
+  
+
   //                    database, table,  uri
   private final Map<Pair<String, String>, URI> tableUriMap = new HashMap<>();
-
-  //                    database, table,  file path
-  private final Map<Pair<String, String>, URI> tempFileUriMap = new HashMap<>();
 
   public ExampleHttpFileTablespace(String name, URI uri, JSONObject config) {
     super(name, uri, config);
 
     LOG.info("ExampleHttpFileTablespace is initialized for " + uri);
 
-    // ts uri: http://data.githubarchive.org
+    // ts uri: https://api.github.com
 
-    // create table github (*) tablespace http_example using json
-    //    ('path'='/2015-01-01-15.json.gz','compression.codec'='org.apache.hadoop.io.compress.GzipCodec')
+    // create table github (*) tablespace http_example using ex-http-json
+    //    with ('path_suffix'='/2015-01-01-15.json.gz','compression.codec'='org.apache.hadoop.io.compress.GzipCodec')
   }
 
   @Override
@@ -127,7 +126,7 @@ public class ExampleHttpFileTablespace extends Tablespace {
   }
 
   @Override
-  public long getTableVolume(TableDesc table, Optional<EvalNode> filter) {
+  public long getTableVolume(TableDesc table, Optional<EvalNode> notUsed) {
     HttpURLConnection connection = null;
     try {
       connection = (HttpURLConnection) new URL(table.getUri().toASCIIString()).openConnection();

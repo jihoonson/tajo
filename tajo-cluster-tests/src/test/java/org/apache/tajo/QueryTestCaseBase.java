@@ -843,7 +843,7 @@ public class QueryTestCaseBase {
     assertEquals(expectedValue, tableDesc.getMeta().getProperty(key));
   }
 
-  public String resultSetToString(ResultSet resultSet) throws SQLException {
+  public static String resultSetToString(ResultSet resultSet) throws SQLException {
     return resultSetToString(resultSet, false);
   }
 
@@ -854,7 +854,7 @@ public class QueryTestCaseBase {
    * @return String
    * @throws SQLException
    */
-  public String resultSetToString(ResultSet resultSet, boolean sort) throws SQLException {
+  public static String resultSetToString(ResultSet resultSet, boolean sort) throws SQLException {
     StringBuilder sb = new StringBuilder();
     ResultSetMetaData rsmd = resultSet.getMetaData();
     int numOfColumns = rsmd.getColumnCount();

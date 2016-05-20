@@ -20,6 +20,8 @@ package org.apache.tajo.storage.http;
 
 import io.netty.handler.codec.http.HttpHeaders.Names;
 import net.minidev.json.JSONObject;
+import org.apache.tajo.QueryTestCaseBase;
+import org.apache.tajo.TajoConstants;
 import org.apache.tajo.TajoTestingCluster;
 import org.apache.tajo.TpchTestBase;
 import org.apache.tajo.catalog.TableDesc;
@@ -35,6 +37,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.*;
+import java.sql.ResultSet;
 import java.util.List;
 
 public class TestExampleHttpFileTablespace {
@@ -66,10 +69,12 @@ public class TestExampleHttpFileTablespace {
   }
 
   @Test
-  public void testSpace() throws TajoException, IOException {
+  public void testSpace() throws Exception {
+    System.setProperty(TajoConstants.TEST_KEY, Boolean.TRUE.toString());
+    testingCluster.getConfiguration().set(TajoConstants.TEST_KEY, Boolean.TRUE.toString());
     client.executeQuery("create database test");
     client.selectDatabase("test");
-    client.executeQuery("create table nation (N_NATIONKEY bigint, N_NAME text, N_REGIONKEY bigint, N_COMMENT text) tablespace http_example with ('path'='lineitem.tbl')");
+    client.executeQuery("create table nation (N_NATIONKEY bigint, N_NAME text, N_REGIONKEY bigint, N_COMMENT text) tablespace http_example using http with ('path'='lineitem.tbl')");
     TableDesc desc = client.getTableDesc("nation");
     System.out.println(desc.toString());
     List<Fragment> fragments = TablespaceManager.get(desc.getUri()).getSplits("nation", desc, false, null);
@@ -78,7 +83,8 @@ public class TestExampleHttpFileTablespace {
       System.out.println(f.getUri() + " (" + f.getStartKey() + ", " + f.getEndKey() + ")");
     }
 
-    client.executeQuery("select * from nation");
+    ResultSet res = testBase.execute("select count(*) from nation");
+    System.out.println(QueryTestCaseBase.resultSetToString(res));
   }
 
   @Test
