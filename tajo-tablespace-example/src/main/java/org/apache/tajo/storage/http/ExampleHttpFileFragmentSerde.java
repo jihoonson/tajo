@@ -39,8 +39,6 @@ public class ExampleHttpFileFragmentSerde
         .setTableName(fragment.getInputSourceId())
         .setStartKey(fragment.getStartKey())
         .setEndKey(fragment.getEndKey())
-        .setTempDir(fragment.getTempDir())
-        .setClearOnExit(fragment.cleanOnExit())
         .build();
   }
 
@@ -50,9 +48,7 @@ public class ExampleHttpFileFragmentSerde
         URI.create(proto.getUri()),
         proto.getTableName(),
         proto.getStartKey(),
-        proto.getEndKey(),
-        proto.getTempDir(),
-        proto.getClearOnExit()
+        proto.getEndKey()
     );
   }
 }

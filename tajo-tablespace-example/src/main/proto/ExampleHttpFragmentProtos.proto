@@ -29,6 +29,4 @@ message ExampleHttpFileFragmentProto {
   required string table_name = 2;
   required int64 start_key = 3;
   required int64 end_key = 4;
-  required string temp_dir = 5;
-  required bool clear_on_exit = 6;
 }

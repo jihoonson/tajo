@@ -25,34 +25,17 @@ import java.net.URI;
 
 public class ExampleHttpFileFragment extends Fragment<Long> {
 
-  private final String tempDir;
-  private final boolean cleanOnExit;
-
   /**
    *
    * @param uri
    * @param inputSourceId
    * @param startKey first byte pos
    * @param endKey last byte pos
-   * @param tempDir
-   * @param cleanOnExit
    */
   public ExampleHttpFileFragment(URI uri,
                                  String inputSourceId,
                                  long startKey,
-                                 long endKey,
-                                 String tempDir,
-                                 boolean cleanOnExit) {
+                                 long endKey) {
     super(BuiltinFragmentKinds.HTTP, uri, inputSourceId, startKey, endKey, endKey - startKey, null);
-    this.tempDir = tempDir;
-    this.cleanOnExit = cleanOnExit;
-  }
-
-  public boolean cleanOnExit() {
-    return cleanOnExit;
-  }
-
-  public String getTempDir() {
-    return tempDir;
   }
 }

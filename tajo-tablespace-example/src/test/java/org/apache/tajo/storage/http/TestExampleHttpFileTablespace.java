@@ -70,11 +70,9 @@ public class TestExampleHttpFileTablespace {
 
   @Test
   public void testSpace() throws Exception {
-    System.setProperty(TajoConstants.TEST_KEY, Boolean.TRUE.toString());
-    testingCluster.getConfiguration().set(TajoConstants.TEST_KEY, Boolean.TRUE.toString());
     client.executeQuery("create database test");
     client.selectDatabase("test");
-    client.executeQuery("create table nation (N_NATIONKEY bigint, N_NAME text, N_REGIONKEY bigint, N_COMMENT text) tablespace http_example using http with ('path'='lineitem.tbl')");
+    client.executeQuery("create table test.nation (N_NATIONKEY bigint, N_NAME text, N_REGIONKEY bigint, N_COMMENT text) tablespace http_example using ex_http_json with ('path_suffix'='nation.tbl')");
     TableDesc desc = client.getTableDesc("nation");
     System.out.println(desc.toString());
     List<Fragment> fragments = TablespaceManager.get(desc.getUri()).getSplits("nation", desc, false, null);
@@ -83,7 +81,7 @@ public class TestExampleHttpFileTablespace {
       System.out.println(f.getUri() + " (" + f.getStartKey() + ", " + f.getEndKey() + ")");
     }
 
-    ResultSet res = testBase.execute("select count(*) from nation");
+    ResultSet res = testBase.execute("select count(*) from test.nation");
     System.out.println(QueryTestCaseBase.resultSetToString(res));
   }
 

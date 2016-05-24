@@ -39,7 +39,7 @@
   <!--- Registered Scanner Handler -->
   <property>
     <name>tajo.storage.scanner-handler</name>
-    <value>text,json,raw,draw,rcfile,row,parquet,orc,sequencefile,avro,hbase,http</value>
+    <value>text,json,raw,draw,rcfile,row,parquet,orc,sequencefile,avro,hbase,ex_http_json</value>
   </property>
 
   <!--- Fragment Class Configurations -->
@@ -56,7 +56,7 @@
     <value>org.apache.tajo.storage.jdbc.JdbcFragment</value>
   </property>
   <property>
-    <name>tajo.storage.fragment.kind.http</name>
+    <name>tajo.storage.fragment.kind.example-http</name>
     <value>org.apache.tajo.storage.http.ExampleHttpFileFragment</value>
   </property>
   <property>
@@ -72,7 +72,7 @@
     <value>org.apache.tajo.storage.jdbc.JdbcFragmentSerde</value>
   </property>
   <property>
-    <name>tajo.storage.fragment.serde.http</name>
+    <name>tajo.storage.fragment.serde.example-http</name>
     <value>org.apache.tajo.storage.http.ExampleHttpFileFragmentSerde</value>
   </property>
 
@@ -133,7 +133,7 @@
   </property>
 
   <property>
-    <name>tajo.storage.scanner-handler.ex-http-json.class</name>
+    <name>tajo.storage.scanner-handler.ex_http_json.class</name>
     <value>org.apache.tajo.storage.http.ExampleHttpJsonScanner</value>
   </property>
 

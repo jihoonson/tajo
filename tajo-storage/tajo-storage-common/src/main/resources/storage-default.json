@@ -32,7 +32,7 @@
       "handler": "org.apache.tajo.storage.s3.S3TableSpace",
       "default-format": "text"
     },
-    "http": {
+    "example-http": {
       "handler": "org.apache.tajo.storage.http.ExampleHttpFileTablespace",
       "default-format": "json"
     }

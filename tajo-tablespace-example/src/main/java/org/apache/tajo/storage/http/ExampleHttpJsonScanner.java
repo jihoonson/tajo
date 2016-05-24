@@ -18,12 +18,9 @@
 
 package org.apache.tajo.storage.http;
 
-import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.Path;
 import org.apache.tajo.BuiltinStorages;
 import org.apache.tajo.catalog.Column;
 import org.apache.tajo.catalog.Schema;
@@ -34,22 +31,13 @@ import org.apache.tajo.exception.TajoInternalError;
 import org.apache.tajo.plan.expr.EvalNode;
 import org.apache.tajo.plan.logical.LogicalNode;
 import org.apache.tajo.storage.Scanner;
-import org.apache.tajo.storage.Tablespace;
-import org.apache.tajo.storage.TablespaceManager;
 import org.apache.tajo.storage.Tuple;
-import org.apache.tajo.storage.fragment.FileFragment;
 import org.apache.tajo.storage.fragment.Fragment;
 import org.jboss.netty.handler.codec.http.HttpHeaders.Names;
 
-import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.HttpURLConnection;
-import java.net.URI;
 import java.net.URL;
-import java.nio.channels.Channels;
-import java.nio.channels.FileChannel;
-import java.nio.channels.ReadableByteChannel;
 
 import static org.apache.tajo.storage.http.ExampleHttpFileTablespace.BYTE_RANGE_PREFIX;
 
@@ -68,9 +56,9 @@ public class ExampleHttpJsonScanner implements Scanner {
   private final TableMeta httpTableMeta;
   private final TableMeta fileTableMeta;
   private final ExampleHttpFileFragment httpFragment;
-  private final FileFragment fileFragment;
-  private final Scanner scanner;
   private Schema targets = null;
+
+  private HttpURLConnection connection;
 
   private Status status = Status.NEW;
 
@@ -81,79 +69,40 @@ public class ExampleHttpJsonScanner implements Scanner {
     this.httpTableMeta = tableMeta;
     this.fileTableMeta = new TableMeta(BuiltinStorages.JSON, httpTableMeta.getPropertySet());
     this.httpFragment = (ExampleHttpFileFragment) fragment;
-    this.fileFragment = getFileFragment();
-    this.scanner = getScanner();
-  }
-
-  private Scanner getScanner() throws IOException {
-    Tablespace tablespace = TablespaceManager.get(httpFragment.getTempDir());
-    return tablespace.getScanner(fileTableMeta, schema, fileFragment, targets);
-  }
-
-  private FileFragment getFileFragment() {
-    Path filePath = new Path(httpFragment.getTempDir(), generateFileName(httpFragment));
-
-    return new FileFragment(
-        httpFragment.getInputSourceId(),
-        filePath,
-        httpFragment.getStartKey(),
-        httpFragment.getLength());
-  }
-
-  static String generateFileName(ExampleHttpFileFragment fragment) {
-    String fileName = extractFileName(fragment.getUri());
-    String ext;
-    String fullExtension = "";
-
-    do {
-      ext = FilenameUtils.getExtension(fileName);
-      fileName = FilenameUtils.removeExtension(fileName);
-      fullExtension = ext + "." + fullExtension;
-    } while (!ext.equals(""));
-
-    return fileName
-        + "_"
-        + fragment.getStartKey()
-        + "_"
-        + fragment.getEndKey()
-        + fullExtension.substring(0, fullExtension.length() - 1);
-  }
-
-  private static String extractFileName(URI uri) {
-    Path path = new Path(uri);
-    return path.getName();
   }
 
   @Override
   public void init() throws IOException {
-    prepareDataFile();
-    scanner.init();
     status = Status.INITED;
+
+    URL url = new URL(httpFragment.getUri().toASCIIString());
+    connection = (HttpURLConnection) url.openConnection();
+    connection.setRequestProperty(Names.RANGE, getHttpRangeString());
   }
 
   public void prepareDataFile() throws IOException {
-    FileSystem fs = fileFragment.getPath().getFileSystem(conf);
-
-    Path parent = fileFragment.getPath().getParent();
-    if (!fs.exists(parent)) {
-      fs.mkdirs(parent);
-    }
-
-    if (!fs.exists(fileFragment.getPath())) {
-      URL url = new URL(httpFragment.getUri().toASCIIString());
-      HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-      connection.setRequestProperty(Names.RANGE, getHttpRangeString());
-
-      try (ReadableByteChannel rbc = Channels.newChannel(connection.getInputStream());
-           FileOutputStream fos = new FileOutputStream(new File(fileFragment.getPath().toUri()));
-           FileChannel fc = fos.getChannel()) {
-        fc.transferFrom(rbc, 0, fileFragment.getLength());
-      } finally {
-        connection.disconnect();
-
-        LOG.info("Data is prepared at " + fileFragment.getPath());
-      }
-    }
+//    FileSystem fs = fileFragment.getPath().getFileSystem(conf);
+//
+//    Path parent = fileFragment.getPath().getParent();
+//    if (!fs.exists(parent)) {
+//      fs.mkdirs(parent);
+//    }
+//
+//    if (!fs.exists(fileFragment.getPath())) {
+//      URL url = new URL(httpFragment.getUri().toASCIIString());
+//      HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+//      connection.setRequestProperty(Names.RANGE, getHttpRangeString());
+//
+//      try (ReadableByteChannel rbc = Channels.newChannel(connection.getInputStream());
+//           FileOutputStream fos = new FileOutputStream(new File(fileFragment.getPath().toUri()));
+//           FileChannel fc = fos.getChannel()) {
+//        fc.transferFrom(rbc, 0, fileFragment.getLength());
+//      } finally {
+//        connection.disconnect();
+//
+//        LOG.info("Data is prepared at " + fileFragment.getPath());
+//      }
+//    }
   }
 
   private String getHttpRangeString() {
@@ -165,36 +114,31 @@ public class ExampleHttpJsonScanner implements Scanner {
     if (status != Status.INITED) {
       throw new TajoInternalError("Invalid status:" + status.name());
     }
-    return scanner.next();
+//    return scanner.next();
+    return null;
   }
 
   @Override
   public void reset() throws IOException {
-    scanner.reset();
+//    scanner.reset();
     status = Status.INITED;
   }
 
   @Override
   public void close() throws IOException {
-    scanner.close();
-
-    if (httpFragment.cleanOnExit()) {
-      Path path = new Path(httpFragment.getTempDir());
-      FileSystem fs = path.getFileSystem(conf);
-      fs.delete(path, true);
-    }
-
+//    scanner.close();
     status = Status.CLOSED;
   }
 
   @Override
   public void pushOperators(LogicalNode planPart) {
-    scanner.pushOperators(planPart);
+//    scanner.pushOperators(planPart);
   }
 
   @Override
   public boolean isProjectable() {
-    return scanner.isProjectable();
+//    return scanner.isProjectable();
+    return true;
   }
 
   @Override
@@ -204,36 +148,41 @@ public class ExampleHttpJsonScanner implements Scanner {
 
   @Override
   public boolean isSelectable() {
-    return scanner.isSelectable();
+//    return scanner.isSelectable();
+    return false;
   }
 
   @Override
   public void setFilter(EvalNode filter) {
-    scanner.setFilter(filter);
+//    scanner.setFilter(filter);
   }
 
   @Override
   public void setLimit(long num) {
-    scanner.setLimit(num);
+//    scanner.setLimit(num);
   }
 
   @Override
   public boolean isSplittable() {
-    return scanner.isSplittable();
+//    return scanner.isSplittable();
+    return true;
   }
 
   @Override
   public float getProgress() {
-    return scanner.getProgress();
+//    return scanner.getProgress();
+    return 0;
   }
 
   @Override
   public TableStats getInputStats() {
-    return scanner.getInputStats();
+//    return scanner.getInputStats();
+    return null;
   }
 
   @Override
   public Schema getSchema() {
-    return scanner.getSchema();
+//    return scanner.getSchema();
+    return null;
   }
 }

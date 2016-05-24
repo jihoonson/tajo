@@ -61,6 +61,9 @@ import java.util.*;
 public class ExampleHttpFileTablespace extends Tablespace {
   private static final Log LOG = LogFactory.getLog(ExampleHttpFileTablespace.class);
 
+  static final String BYTE_RANGE_PREFIX = "bytes=";
+  static final String PATH_SUFFIX = "path_suffix";
+
   //////////////////////////////////////////////////////////////////////////////////////////////////
   // Tablespace properties
   //////////////////////////////////////////////////////////////////////////////////////////////////
@@ -83,22 +86,25 @@ public class ExampleHttpFileTablespace extends Tablespace {
   //////////////////////////////////////////////////////////////////////////////////////////////////
   // Configurations
   //////////////////////////////////////////////////////////////////////////////////////////////////
-  private static final String TEMP_DIR = "temp_dir";
-  private static final String DEFAULT_TEMP_DIR = "file:///tmp/" + "tajo-" + System.getProperty("user.name") + "/http-example/";
 
-  private static final String CLEAR_TEMP_DIR_ON_EXIT = "clear_temp_dir_on_exit";
-  private static final String DEFAULT_CLEAR_TEMP_DIR_ON_EXIT = "true";
+//  private static final String TEMP_DIR = "temp_dir";
+//  private static final String DEFAULT_TEMP_DIR = "file:///tmp/" + "tajo-" + System.getProperty("user.name") + "/http-example/";
+//
+//  private static final String CLEAR_TEMP_DIR_ON_EXIT = "clear_temp_dir_on_exit";
+//  private static final String DEFAULT_CLEAR_TEMP_DIR_ON_EXIT = "true";
+//
+//  private String tmpDir;
+//  private boolean cleanOnExit;
 
-  private String tmpDir;
-  private boolean cleanOnExit;
+  private static final String ALLOW_SPLIT_KEY = "allow_split";
+  private static final String DEFAULT_ALLOW_SPLIT_VALUE = "false";
+
+  private boolean isSplittable;
+
 
   //////////////////////////////////////////////////////////////////////////////////////////////////
   // Metadata
   //////////////////////////////////////////////////////////////////////////////////////////////////
-
-  static final String BYTE_RANGE_PREFIX = "bytes=";
-  static final String PATH_SUFFIX = "path_suffix";
-  
 
   //                    database, table,  uri
   private final Map<Pair<String, String>, URI> tableUriMap = new HashMap<>();
@@ -119,22 +125,58 @@ public class ExampleHttpFileTablespace extends Tablespace {
     initProperties();
   }
 
-  private void initProperties() {
-    tmpDir = (String) config.getOrDefault(TEMP_DIR, DEFAULT_TEMP_DIR);
-    cleanOnExit = Boolean.parseBoolean(
-        (String) config.getOrDefault(CLEAR_TEMP_DIR_ON_EXIT, DEFAULT_CLEAR_TEMP_DIR_ON_EXIT));
+  private void initProperties() throws IOException {
+//    tmpDir = (String) config.getOrDefault(TEMP_DIR, DEFAULT_TEMP_DIR);
+//    cleanOnExit = Boolean.parseBoolean(
+//        (String) config.getOrDefault(CLEAR_TEMP_DIR_ON_EXIT, DEFAULT_CLEAR_TEMP_DIR_ON_EXIT));
+
+    boolean allowSplit = Boolean.parseBoolean((String) config.getOrDefault(ALLOW_SPLIT_KEY, DEFAULT_ALLOW_SPLIT_VALUE));
+
+    if (allowSplit) {
+      HttpURLConnection connection = null;
+
+      try {
+        connection = (HttpURLConnection) new URL(uri.toASCIIString()).openConnection();
+        connection.setRequestProperty(Names.RANGE, BYTE_RANGE_PREFIX + "0-");
+        connection.setRequestMethod("HEAD");
+        connection.connect();
+        int responseCode = connection.getResponseCode();
+
+        switch (responseCode) {
+
+          case HttpURLConnection.HTTP_OK:
+            isSplittable = false;
+            break;
+
+          case HttpURLConnection.HTTP_PARTIAL:
+            isSplittable = true;
+            break;
+
+          default:
+            throw new TajoInternalError("Unexpected HTTP response: " + responseCode);
+        }
+
+      } finally {
+        if (connection != null) {
+          connection.disconnect();
+        }
+      }
+    }
   }
 
   @Override
   public long getTableVolume(TableDesc table, Optional<EvalNode> notUsed) {
     HttpURLConnection connection = null;
+
     try {
       connection = (HttpURLConnection) new URL(table.getUri().toASCIIString()).openConnection();
       connection.setRequestMethod("HEAD");
       connection.connect();
       return connection.getHeaderFieldLong(Names.CONTENT_LENGTH, -1);
+
     } catch (IOException e) {
       throw new TajoInternalError(e);
+
     } finally {
       if (connection != null) {
         connection.disconnect();
@@ -150,10 +192,12 @@ public class ExampleHttpFileTablespace extends Tablespace {
   @Override
   public URI getTableUri(TableMeta meta, String databaseName, String tableName) {
     String tablespaceUriString = uri.toASCIIString();
-    String tablePath = meta.getProperty("path");
+    String tablePath = meta.getProperty(PATH_SUFFIX);
+
     if (!tablespaceUriString.endsWith("/") && !tablePath.startsWith("/")) {
       tablePath = "/" + tablePath;
     }
+
     return URI.create(tablespaceUriString + tablePath);
   }
 
@@ -163,47 +207,26 @@ public class ExampleHttpFileTablespace extends Tablespace {
                                   boolean requireSort,
                                   @Nullable EvalNode filterCondition)
       throws IOException, TajoException {
-    HttpURLConnection connection = null;
+
     long tableVolume = getTableVolume(tableDesc, Optional.empty());
 
-    try {
-      connection = (HttpURLConnection) new URL(tableDesc.getUri().toASCIIString()).openConnection();
-      connection.setRequestProperty(Names.RANGE, BYTE_RANGE_PREFIX + "0-");
-      connection.setRequestMethod("HEAD");
-      connection.connect();
-      int responseCode = connection.getResponseCode();
+    List<Fragment> fragments = new ArrayList<>();
 
-      List<Fragment> fragments = new ArrayList<>();
+    if (isSplittable) {
+      final long defaultTaskSize = conf.getLongVar(ConfVars.TASK_DEFAULT_SIZE) * StorageUnit.MB;
 
-      switch (responseCode) {
-
-        case HttpURLConnection.HTTP_OK:
-          fragments.add(
-              new ExampleHttpFileFragment(tableDesc.getUri(), inputSourceId, 0, tableVolume, tmpDir, cleanOnExit));
-          break;
-
-        case HttpURLConnection.HTTP_PARTIAL:
-          final long defaultTaskSize = conf.getLongVar(ConfVars.TASK_DEFAULT_SIZE) * StorageUnit.MB;
-          for (long firstBytePos = 0; firstBytePos < tableVolume; firstBytePos += defaultTaskSize) {
-            final long taskSize = Math.min(tableVolume - firstBytePos, defaultTaskSize);
-            final long lastBytePos = firstBytePos + taskSize;
-            fragments.add(
-                new ExampleHttpFileFragment(tableDesc.getUri(), inputSourceId, firstBytePos, lastBytePos, tmpDir,
-                    cleanOnExit));
-          }
-          break;
-
-        default:
-          throw new TajoInternalError("Unexpected HTTP response: " + responseCode);
+      for (long firstBytePos = 0; firstBytePos < tableVolume; firstBytePos += defaultTaskSize) {
+        final long taskSize = Math.min(tableVolume - firstBytePos, defaultTaskSize);
+        final long lastBytePos = firstBytePos + taskSize;
+        fragments.add(
+            new ExampleHttpFileFragment(tableDesc.getUri(), inputSourceId, firstBytePos, lastBytePos));
       }
-
-      return fragments;
-
-    } finally {
-      if (connection != null) {
-        connection.disconnect();
-      }
+    } else {
+      fragments.add(
+          new ExampleHttpFileFragment(tableDesc.getUri(), inputSourceId, 0, tableVolume));
     }
+
+    return fragments;
   }
 
   @Override
