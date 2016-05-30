@@ -44,6 +44,7 @@
         <configuration>
           <excludes>
             <exclude>derby.log</exclude>
+            <exclude>src/test/resources/dataset/**</exclude>
           </excludes>
         </configuration>
         <executions>

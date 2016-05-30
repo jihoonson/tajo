@@ -21,7 +21,6 @@ package org.apache.tajo.storage.http;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.tajo.BuiltinStorages;
 import org.apache.tajo.catalog.Column;
 import org.apache.tajo.catalog.Schema;
 import org.apache.tajo.catalog.SchemaBuilder;
@@ -32,13 +31,17 @@ import org.apache.tajo.plan.expr.EvalNode;
 import org.apache.tajo.plan.logical.LogicalNode;
 import org.apache.tajo.storage.Scanner;
 import org.apache.tajo.storage.Tuple;
+import org.apache.tajo.storage.VTuple;
 import org.apache.tajo.storage.fragment.Fragment;
+import org.apache.tajo.storage.json.JsonLineDeserializer;
 import org.jboss.netty.handler.codec.http.HttpHeaders.Names;
 
 import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.URL;
 
+import static org.apache.tajo.storage.StorageConstants.DEFAULT_TEXT_ERROR_TOLERANCE_MAXNUM;
+import static org.apache.tajo.storage.StorageConstants.TEXT_ERROR_TOLERANCE_MAXNUM;
 import static org.apache.tajo.storage.http.ExampleHttpFileTablespace.BYTE_RANGE_PREFIX;
 
 public class ExampleHttpJsonScanner implements Scanner {
@@ -53,12 +56,28 @@ public class ExampleHttpJsonScanner implements Scanner {
 
   private final Configuration conf;
   private final Schema schema;
-  private final TableMeta httpTableMeta;
-  private final TableMeta fileTableMeta;
-  private final ExampleHttpFileFragment httpFragment;
+  private final TableMeta tableMeta;
+  private final ExampleHttpFileFragment fragment;
   private Schema targets = null;
 
   private HttpURLConnection connection;
+
+  private VTuple outTuple;
+  private TableStats inputStats;
+
+  private long limit;
+
+  private final long startOffset;
+
+  private final long endOffset;
+
+  private JsonLineDeserializer deserializer;
+
+  private int errorPrintOutMaxNum = 5;
+  /** Maximum number of permissible errors */
+  private final int errorTorrenceMaxNum;
+  /** How many errors have occurred? */
+  private int errorNum;
 
   private Status status = Status.NEW;
 
@@ -66,18 +85,21 @@ public class ExampleHttpJsonScanner implements Scanner {
       throws IOException {
     this.conf = conf;
     this.schema = schema;
-    this.httpTableMeta = tableMeta;
-    this.fileTableMeta = new TableMeta(BuiltinStorages.JSON, httpTableMeta.getPropertySet());
-    this.httpFragment = (ExampleHttpFileFragment) fragment;
+    this.tableMeta = tableMeta;
+    this.fragment = (ExampleHttpFileFragment) fragment;
+    this.startOffset = this.fragment.getStartKey();
+    this.endOffset = this.fragment.getEndKey();
+    this.errorTorrenceMaxNum =
+        Integer.parseInt(tableMeta.getProperty(TEXT_ERROR_TOLERANCE_MAXNUM, DEFAULT_TEXT_ERROR_TOLERANCE_MAXNUM));
   }
 
   @Override
   public void init() throws IOException {
     status = Status.INITED;
 
-    URL url = new URL(httpFragment.getUri().toASCIIString());
+    URL url = new URL(fragment.getUri().toASCIIString());
     connection = (HttpURLConnection) url.openConnection();
-    connection.setRequestProperty(Names.RANGE, getHttpRangeString());
+    connection.setRequestProperty(Names.RANGE, getHttpRangeString(fragment));
   }
 
   public void prepareDataFile() throws IOException {
@@ -89,7 +111,7 @@ public class ExampleHttpJsonScanner implements Scanner {
 //    }
 //
 //    if (!fs.exists(fileFragment.getPath())) {
-//      URL url = new URL(httpFragment.getUri().toASCIIString());
+//      URL url = new URL(fragment.getUri().toASCIIString());
 //      HttpURLConnection connection = (HttpURLConnection) url.openConnection();
 //      connection.setRequestProperty(Names.RANGE, getHttpRangeString());
 //
@@ -105,8 +127,8 @@ public class ExampleHttpJsonScanner implements Scanner {
 //    }
   }
 
-  private String getHttpRangeString() {
-    return BYTE_RANGE_PREFIX + httpFragment.getStartKey() + "-" + (httpFragment.getEndKey() - 1); // end key is inclusive
+  private static String getHttpRangeString(ExampleHttpFileFragment fragment) {
+    return BYTE_RANGE_PREFIX + fragment.getStartKey() + "-" + (fragment.getEndKey() - 1); // end key is inclusive
   }
 
   @Override
@@ -120,24 +142,22 @@ public class ExampleHttpJsonScanner implements Scanner {
 
   @Override
   public void reset() throws IOException {
-//    scanner.reset();
     status = Status.INITED;
   }
 
   @Override
   public void close() throws IOException {
-//    scanner.close();
+    outTuple = null;
     status = Status.CLOSED;
   }
 
   @Override
   public void pushOperators(LogicalNode planPart) {
-//    scanner.pushOperators(planPart);
+    // do nothing
   }
 
   @Override
   public boolean isProjectable() {
-//    return scanner.isProjectable();
     return true;
   }
 
@@ -148,41 +168,36 @@ public class ExampleHttpJsonScanner implements Scanner {
 
   @Override
   public boolean isSelectable() {
-//    return scanner.isSelectable();
     return false;
   }
 
   @Override
   public void setFilter(EvalNode filter) {
-//    scanner.setFilter(filter);
+    // do nothing
   }
 
   @Override
   public void setLimit(long num) {
-//    scanner.setLimit(num);
+    this.limit = num;
   }
 
   @Override
   public boolean isSplittable() {
-//    return scanner.isSplittable();
     return true;
   }
 
   @Override
   public float getProgress() {
-//    return scanner.getProgress();
-    return 0;
+    return 0.f;
   }
 
   @Override
   public TableStats getInputStats() {
-//    return scanner.getInputStats();
-    return null;
+    return inputStats;
   }
 
   @Override
   public Schema getSchema() {
-//    return scanner.getSchema();
-    return null;
+    return schema;
   }
 }
