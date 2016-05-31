@@ -45,24 +45,24 @@ import org.apache.tajo.storage.fragment.Fragment;
 import org.jboss.netty.handler.codec.http.HttpHeaders.Names;
 
 import javax.annotation.Nullable;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.HttpURLConnection;
-import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URL;
 import java.util.List;
 import java.util.Optional;
 
 /**
- * Example read-only tablespace for Github REST API.
+ * Example read-only tablespace for HTTP protocol.
  *
  * An example table can be created by using the following SQL query.
  *
- * CREATE TABLE github_test (*) TABLESPACE http_example USING ex_http_json WITH ('path_suffix'='2015-01-01-15.json.gz',
+ * CREATE TABLE http_test (*) TABLESPACE http_example USING ex_http_json WITH ('path'='2015-01-01-15.json.gz',
  * 'compression.codec'='org.apache.hadoop.io.compress.GzipCodec’);
  */
-public class ExampleGithubRestTablespace extends Tablespace {
-  private static final Log LOG = LogFactory.getLog(ExampleGithubRestTablespace.class);
+public class ExampleHttpFileTablespace extends Tablespace {
+  private static final Log LOG = LogFactory.getLog(ExampleHttpFileTablespace.class);
 
   static final String PATH = "path";
 
@@ -85,32 +85,15 @@ public class ExampleGithubRestTablespace extends Tablespace {
           false   // doesn't support result staging
       );
 
-  //////////////////////////////////////////////////////////////////////////////////////////////////
-  // Configuration variables
-  //////////////////////////////////////////////////////////////////////////////////////////////////
-
-  private static final String OAUTH_ID = "id";
-  private static final String OAUTH_SECRET = "secret";
-
-  private String clientId;
-  private String clientSecret;
-
-  public ExampleGithubRestTablespace(String name, URI uri, JSONObject config) {
+  public ExampleHttpFileTablespace(String name, URI uri, JSONObject config) {
     super(name, uri, config);
 
-    LOG.info("ExampleGithubRestTablespace is initialized for " + uri);
+    LOG.info("ExampleHttpFileTablespace is initialized for " + uri);
   }
 
   @Override
   protected void storageInit() throws IOException {
-    initOauthProperty();
-  }
-
-  private void initOauthProperty() {
-    if (config.containsKey(OAUTH_ID)) {
-      clientId = config.getAsString(OAUTH_ID);
-      clientSecret = config.getAsString(OAUTH_SECRET);
-    }
+    // Add initialization code for your tablespace
   }
 
   @Override
@@ -195,8 +178,26 @@ public class ExampleGithubRestTablespace extends Tablespace {
   }
 
   @Override
-  public void createTable(TableDesc tableDesc, boolean ifNotExists) throws TajoException, IOException {
-    // do nothing
+  public void createTable(TableDesc table, boolean ifNotExists) throws TajoException, IOException {
+    HttpURLConnection connection = null;
+
+    try {
+      connection = (HttpURLConnection) new URL(table.getUri().toASCIIString()).openConnection();
+      connection.setRequestMethod("HEAD");
+      connection.connect();
+
+      if (connection.getResponseCode() == 404) {
+        throw new FileNotFoundException();
+      }
+
+    } catch (IOException e) {
+      throw new TajoInternalError(e);
+
+    } finally {
+      if (connection != null) {
+        connection.disconnect();
+      }
+    }
   }
 
   @Override
@@ -226,11 +227,5 @@ public class ExampleGithubRestTablespace extends Tablespace {
   @Override
   public URI getStagingUri(OverridableConf context, String queryId, TableMeta meta) throws IOException {
     throw new TajoRuntimeException(new UnsupportedException());
-  }
-
-  private URL getUrlWithAuth(String baseUrl) throws MalformedURLException {
-    return new URL(baseUrl
-        + "&client_id=" + clientId
-        + "&client_secret=" + clientSecret);
   }
 }
