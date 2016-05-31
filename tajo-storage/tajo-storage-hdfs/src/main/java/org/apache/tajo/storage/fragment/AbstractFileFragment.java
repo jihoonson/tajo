@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -16,29 +16,31 @@
  * limitations under the License.
  */
 
-package org.apache.tajo.storage.http;
+package org.apache.tajo.storage.fragment;
 
-import org.apache.tajo.storage.fragment.AbstractFileFragment;
-import org.apache.tajo.storage.fragment.BuiltinFragmentKinds;
+import org.apache.hadoop.fs.Path;
 
-import java.net.HttpURLConnection;
+import java.io.InputStream;
 import java.net.URI;
 
-public class ExampleHttpFileFragment extends AbstractFileFragment {
+/**
+ * Abstract fragment implementation for file systems.
+ */
+public abstract class AbstractFileFragment extends Fragment<Long> {
 
-  private HttpURLConnection connection;
+  protected InputStream in;
 
-  /**
-   *
-   * @param uri
-   * @param inputSourceId
-   * @param startKey first byte pos
-   * @param endKey last byte pos
-   */
-  public ExampleHttpFileFragment(URI uri,
+  protected AbstractFileFragment(String kind,
+                                 URI uri,
                                  String inputSourceId,
                                  long startKey,
-                                 long endKey) {
-    super(BuiltinFragmentKinds.HTTP, uri, inputSourceId, startKey, endKey, endKey - startKey, null);
+                                 long endKey,
+                                 long length,
+                                 String[] hostNames) {
+    super(kind, uri, inputSourceId, startKey, endKey, length, hostNames);
+  }
+
+  public Path getPath() {
+    return new Path(uri);
   }
 }

@@ -19,6 +19,7 @@
 package org.apache.tajo.storage.http;
 
 import io.netty.handler.codec.http.HttpHeaders.Names;
+import io.netty.handler.codec.http.HttpMethod;
 import net.minidev.json.JSONObject;
 import org.apache.tajo.QueryTestCaseBase;
 import org.apache.tajo.TajoTestingCluster;
@@ -31,7 +32,7 @@ import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.io.ByteArrayOutputStream;
+import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.*;
@@ -40,140 +41,89 @@ import java.util.List;
 
 public class TestExampleHttpFileTablespace {
 
-  private static ExampleHttpTablespaceTestServer server;
-  private static final TpchTestBase testBase = TpchTestBase.getInstance();
-  private static final TajoTestingCluster testingCluster = testBase.getTestingCluster();
-  private static TajoClient client;
+//  private final static String DATABASE_NAME = TestExampleHttpFileTablespace.class.getSimpleName().toLowerCase();
+//
+//  private static ExampleHttpTablespaceTestServer server;
+//  private static final TpchTestBase testBase = TpchTestBase.getInstance();
+//  private static final TajoTestingCluster testingCluster = testBase.getTestingCluster();
+//  private static TajoClient client;
 
   @BeforeClass
   public static void setup() throws Exception {
-    server = new ExampleHttpTablespaceTestServer(true);
-    server.init();
-
-    JSONObject configElements = new JSONObject();
-    URI uri = URI.create("http://" + InetAddress.getLocalHost().getHostName() + ":" + server.getAddress().getPort());
-    TablespaceManager.addTableSpaceForTest(new ExampleHttpFileTablespace("http_example", uri, configElements));
-
-    testingCluster.getMaster().refresh();
-
-    client = testingCluster.newTajoClient();
+//    server = new ExampleHttpTablespaceTestServer();
+//    server.init();
+//
+//    JSONObject configElements = new JSONObject();
+//    URI uri = URI.create("http://" + InetAddress.getLocalHost().getHostName() + ":" + server.getAddress().getPort());
+//    TablespaceManager.addTableSpaceForTest(new ExampleGithubRestTablespace("http_example", uri, configElements));
+//
+//    testingCluster.getMaster().refresh();
+//
+//    client = testingCluster.newTajoClient();
+//
+//    client.executeQuery("create database " + DATABASE_NAME);
+//    client.selectDatabase(DATABASE_NAME);
+//    client.executeQuery("create table got (*) tablespace http_example using ex_http_json with ('path'='got.json')");
   }
 
   @AfterClass
-  public static void teardown() throws IOException {
-    client.close();
-    testingCluster.shutdownMiniCluster();
-    server.close();
+  public static void teardown() throws Exception {
+//    client.dropTable("got");
+//    client.selectDatabase("default");
+//    client.dropDatabase(DATABASE_NAME);
+//    client.close();
+//    testingCluster.shutdownMiniCluster();
+//    server.close();
   }
 
   @Test
   public void testSpace() throws Exception {
-    client.executeQuery("create database test");
-    client.selectDatabase("test");
-    client.executeQuery("create table test.nation (N_NATIONKEY bigint, N_NAME text, N_REGIONKEY bigint, N_COMMENT text) tablespace http_example using ex_http_json with ('path_suffix'='nation.tbl')");
-    TableDesc desc = client.getTableDesc("nation");
-    System.out.println(desc.toString());
-    List<Fragment> fragments = TablespaceManager.get(desc.getUri()).getSplits("nation", desc, false, null);
-    System.out.println(fragments.size());
-    for (Fragment f : fragments) {
-      System.out.println(f.getUri() + " (" + f.getStartKey() + ", " + f.getEndKey() + ")");
-    }
-
-    ResultSet res = testBase.execute("select count(*) from test.nation");
-    System.out.println(QueryTestCaseBase.resultSetToString(res));
+//    TableDesc desc = client.getTableDesc(DATABASE_NAME + ".got");
+//    System.out.println(desc.toString());
+//    List<Fragment> fragments = TablespaceManager.get(desc.getUri()).getSplits(desc.getName(), desc, false, null);
+//    System.out.println(fragments.size());
+//    for (Fragment f : fragments) {
+//      System.out.println(f.getUri() + " (" + f.getStartKey() + ", " + f.getEndKey() + ")");
+//    }
+//
+//    ResultSet res = testBase.execute("select count(title) from " + DATABASE_NAME + ".got");
+//    System.out.println(QueryTestCaseBase.resultSetToString(res));
   }
 
   @Test
-  public void testTest() throws InterruptedException, IOException {
-    ExampleHttpTablespaceTestServer server = new ExampleHttpTablespaceTestServer(true);
-    server.init();
-    System.out.println(server.getAddress());
-
-    InetSocketAddress address = server.getAddress();
-    String url = "http://" + InetAddress.getLocalHost().getHostName() + ":" + address.getPort() + "/lineitem.tbl";
-    System.out.println(url);
-
-    HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
-    connection.setRequestMethod("HEAD");
-    connection.connect();
-    long contentLength = connection.getHeaderFieldLong("Content-Length", -1);
-    System.out.println(contentLength);
-    connection.disconnect();
-
-    connection = (HttpURLConnection) new URL(url).openConnection();
-    connection.setRequestMethod("HEAD");
-    connection.setRequestProperty("Range", "bytes=0-");
-    connection.connect();
-    System.out.println(connection.getResponseCode());
-    connection.disconnect();
-
-    connection = (HttpURLConnection) new URL(url).openConnection();
-    connection.setRequestMethod("GET");
-    connection.setRequestProperty("Range", "bytes=0-");
-    connection.connect();
-    ByteArrayOutputStream baos = new ByteArrayOutputStream();
-    InputStream in = connection.getInputStream();
-    while (in.available() > 0) {
-      baos.write(in.read());
-    }
-    in.close();
-
-    System.out.println(baos.size());
-    System.out.println(baos.toString());
-    baos.close();
-    connection.disconnect();
-
-    connection = (HttpURLConnection) new URL(url).openConnection();
-    connection.setRequestMethod("GET");
-    connection.setRequestProperty("Range", "bytes=100-");
-    connection.connect();
-    baos = new ByteArrayOutputStream();
-    in = connection.getInputStream();
-    while (in.available() > 0) {
-      baos.write(in.read());
-    }
-    in.close();
-
-    System.out.println(baos.size());
-    System.out.println(baos.toString());
-    baos.close();
-    connection.disconnect();
-
-    server.close();
-  }
-
-  @Test
-  public void testTeeest() throws IOException {
-//    String uri = "https://jihoonson.files.wordpress.com/2016/04/flamegraph-tim3.png?w=605";
-    String uri = "http://localhost/flamegraph-radix.svg";
-    URL url = new URL(uri);
+  public void testTablespaceHandler() throws IOException {
+    String str = "https://api.github.com/users/jihoonson/events" +
+        "?page=1&per_page=1&" +
+        "client_id=" +
+        "6b93054d1f2b57b93e09" +
+        "&" +
+        "client_secret=" +
+        "d6bce3d380702f2d9adb917fc97bcf3e04cc1a03";
+    System.out.println(str);
+    URL url = new URL(str);
     HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-    connection.setRequestMethod("HEAD");
-    connection.setRequestProperty(Names.RANGE, "bytes=10-99");
+
+    connection.setRequestMethod(HttpMethod.HEAD.name());
+    connection.setRequestProperty(Names.CONTENT_LENGTH, null);
+
     connection.connect();
-    System.out.println(connection.getHeaderFieldLong("Content-Length", -1));
+
     System.out.println(connection.getResponseCode());
+    System.out.println(connection.getHeaderFieldLong(Names.CONTENT_LENGTH, -1));
+    System.out.println(connection.getHeaderField("Link"));
+
+//    DataInputStream dis = new DataInputStream(connection.getInputStream());
+//    while (dis.available() > 0) {
+//      String line = dis.readLine();
+//      System.out.println(line);
+//      System.out.println(line.length());
+//    }
+
     connection.disconnect();
+  }
 
-//    connection = (HttpURLConnection) url.openConnection();
-//    connection.setRequestMethod("GET");
-//    connection.setRequestProperty(Names.RANGE, "bytes=10-99");
-//    connection.connect();
-//    ReadableByteChannel rbc = Channels.newChannel(connection.getInputStream());
-//    FileOutputStream fos = new FileOutputStream("/tmp/tajo-jihoon/test.png");
-//    FileChannel fc = fos.getChannel();
-//    fc.transferFrom(rbc, 0, Long.MAX_VALUE);
-//    fc.close();
-//    fos.close();
-//    rbc.close();
-//    connection.disconnect();
+  @Test
+  public void testGetTableVolume() {
 
-//    ReadableByteChannel rbc = Channels.newChannel(url.openStream());
-//    FileOutputStream fos = new FileOutputStream("/tmp/tajo-jihoon/test.png");
-//    FileChannel fc = fos.getChannel();
-//    fc.transferFrom(rbc, 0, Long.MAX_VALUE);
-//    fc.close();
-//    fos.close();
-//    rbc.close();
   }
 }

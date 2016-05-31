@@ -18,88 +18,85 @@
 
 package org.apache.tajo.storage.http;
 
+import io.netty.buffer.ByteBuf;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.io.IOUtils;
 import org.apache.tajo.catalog.Column;
 import org.apache.tajo.catalog.Schema;
-import org.apache.tajo.catalog.SchemaBuilder;
 import org.apache.tajo.catalog.TableMeta;
 import org.apache.tajo.catalog.statistics.TableStats;
-import org.apache.tajo.exception.TajoInternalError;
+import org.apache.tajo.exception.TajoRuntimeException;
+import org.apache.tajo.exception.UnsupportedException;
 import org.apache.tajo.plan.expr.EvalNode;
-import org.apache.tajo.plan.logical.LogicalNode;
-import org.apache.tajo.storage.Scanner;
+import org.apache.tajo.storage.EmptyTuple;
+import org.apache.tajo.storage.FileScanner;
 import org.apache.tajo.storage.Tuple;
 import org.apache.tajo.storage.VTuple;
 import org.apache.tajo.storage.fragment.Fragment;
 import org.apache.tajo.storage.json.JsonLineDeserializer;
-import org.jboss.netty.handler.codec.http.HttpHeaders.Names;
+import org.apache.tajo.storage.text.TextLineParsingError;
+import org.apache.tajo.unit.StorageUnit;
 
 import java.io.IOException;
-import java.net.HttpURLConnection;
-import java.net.URL;
 
 import static org.apache.tajo.storage.StorageConstants.DEFAULT_TEXT_ERROR_TOLERANCE_MAXNUM;
 import static org.apache.tajo.storage.StorageConstants.TEXT_ERROR_TOLERANCE_MAXNUM;
-import static org.apache.tajo.storage.http.ExampleHttpFileTablespace.BYTE_RANGE_PREFIX;
+import static org.apache.tajo.storage.text.DelimitedTextFile.READ_BUFFER_SIZE;
 
-public class ExampleHttpJsonScanner implements Scanner {
+public class ExampleHttpJsonScanner extends FileScanner {
 
   private static final Log LOG = LogFactory.getLog(ExampleHttpJsonScanner.class);
 
-  private enum Status {
-    NEW,
-    INITED,
-    CLOSED,
-  }
-
-  private final Configuration conf;
-  private final Schema schema;
-  private final TableMeta tableMeta;
-  private final ExampleHttpFileFragment fragment;
-  private Schema targets = null;
-
-  private HttpURLConnection connection;
-
   private VTuple outTuple;
-  private TableStats inputStats;
 
   private long limit;
 
   private final long startOffset;
-
   private final long endOffset;
 
+  private ExampleHttpJsonLineReader reader;
   private JsonLineDeserializer deserializer;
 
   private int errorPrintOutMaxNum = 5;
   /** Maximum number of permissible errors */
-  private final int errorTorrenceMaxNum;
+  private final int maxAllowedErrorCount;
   /** How many errors have occurred? */
   private int errorNum;
 
-  private Status status = Status.NEW;
+  private boolean splittable = false;
+
+  private long recordCount = 0;
 
   public ExampleHttpJsonScanner(Configuration conf, Schema schema, TableMeta tableMeta, Fragment fragment)
       throws IOException {
-    this.conf = conf;
-    this.schema = schema;
-    this.tableMeta = tableMeta;
-    this.fragment = (ExampleHttpFileFragment) fragment;
-    this.startOffset = this.fragment.getStartKey();
-    this.endOffset = this.fragment.getEndKey();
-    this.errorTorrenceMaxNum =
+    super(conf, schema, tableMeta, fragment);
+
+    reader = new ExampleHttpJsonLineReader(conf, this.fragment, conf.getInt(READ_BUFFER_SIZE, 128 * StorageUnit.KB));
+    if (!this.reader.isCompressed()) {
+      splittable = true;
+    }
+
+    startOffset = this.fragment.getStartKey();
+    endOffset = this.fragment.getEndKey();
+
+    maxAllowedErrorCount =
         Integer.parseInt(tableMeta.getProperty(TEXT_ERROR_TOLERANCE_MAXNUM, DEFAULT_TEXT_ERROR_TOLERANCE_MAXNUM));
   }
 
   @Override
   public void init() throws IOException {
-    status = Status.INITED;
 
-    URL url = new URL(fragment.getUri().toASCIIString());
-    connection = (HttpURLConnection) url.openConnection();
-    connection.setRequestProperty(Names.RANGE, getHttpRangeString(fragment));
+    reader.init();
+
+    if (targets == null) {
+      targets = schema.toArray();
+    }
+
+    reset();
+
+    super.init();
   }
 
   public void prepareDataFile() throws IOException {
@@ -127,33 +124,97 @@ public class ExampleHttpJsonScanner implements Scanner {
 //    }
   }
 
-  private static String getHttpRangeString(ExampleHttpFileFragment fragment) {
-    return BYTE_RANGE_PREFIX + fragment.getStartKey() + "-" + (fragment.getEndKey() - 1); // end key is inclusive
-  }
-
   @Override
   public Tuple next() throws IOException {
-    if (status != Status.INITED) {
-      throw new TajoInternalError("Invalid status:" + status.name());
+
+    if (reader.isEof()) {
+      return null; // Indicate to the parent operator that there is no more data.
     }
-//    return scanner.next();
-    return null;
+
+    // Read lines until it reads a valid tuple or EOS (end of stream).
+    while (!reader.isEof()) {
+
+      ByteBuf buf = reader.readLine();
+
+      if (buf == null) { // The null buf means that there is no more lines.
+        return null;
+      }
+
+      // When the number of projection columns is 0, the read line doesn't have to be parsed.
+      if (targets.length == 0) {
+        recordCount++;
+        return EmptyTuple.get();
+      }
+
+      try {
+        deserializer.deserialize(buf, outTuple);
+
+        // Once a line is normally parsed, exits the while loop.
+        break;
+
+      } catch (TextLineParsingError tlpe) {
+
+        errorNum++;
+
+        // The below line may print too many logs.
+        LOG.warn("Ignore Text Parse Error (" + errorNum + "): ", tlpe);
+
+        // If the number of found errors exceeds the configured tolerable error count,
+        // throw the error.
+        if (maxAllowedErrorCount >= 0 && errorNum > maxAllowedErrorCount) {
+          throw new IOException(tlpe);
+        }
+      }
+    }
+
+    recordCount++;
+
+    return outTuple;
   }
 
   @Override
   public void reset() throws IOException {
-    status = Status.INITED;
+    recordCount = 0;
+
+    if (reader.getReadBytes() > 0) {
+      reader.close();
+
+      reader = new ExampleHttpJsonLineReader(conf, fragment, conf.getInt(READ_BUFFER_SIZE, 128 * StorageUnit.KB));
+      reader.init();
+    }
+
+    if(deserializer != null) {
+      deserializer.release();
+    }
+
+    deserializer = new JsonLineDeserializer(schema, meta, targets);
+    deserializer.init();
+
+    outTuple = new VTuple(targets.length);
+
+    // skip first line if it reads from middle of file
+    if (startOffset > 0) {
+      reader.readLine();
+    }
   }
 
   @Override
   public void close() throws IOException {
-    outTuple = null;
-    status = Status.CLOSED;
-  }
+    try {
 
-  @Override
-  public void pushOperators(LogicalNode planPart) {
-    // do nothing
+      if (deserializer != null) {
+        deserializer.release();
+      }
+
+      if (reader != null) {
+        inputStats.setReadBytes(reader.getReadBytes());
+        inputStats.setNumRows(recordCount);
+      }
+
+    } finally {
+      IOUtils.cleanup(LOG, reader);
+      outTuple = null;
+    }
   }
 
   @Override
@@ -163,7 +224,7 @@ public class ExampleHttpJsonScanner implements Scanner {
 
   @Override
   public void setTarget(Column[] targets) {
-    this.targets = SchemaBuilder.builder().addAll(targets).build();
+    this.targets = targets;
   }
 
   @Override
@@ -173,7 +234,7 @@ public class ExampleHttpJsonScanner implements Scanner {
 
   @Override
   public void setFilter(EvalNode filter) {
-    // do nothing
+    throw new TajoRuntimeException(new UnsupportedException());
   }
 
   @Override
@@ -183,21 +244,31 @@ public class ExampleHttpJsonScanner implements Scanner {
 
   @Override
   public boolean isSplittable() {
-    return true;
+    return splittable;
   }
 
   @Override
   public float getProgress() {
-    return 0.f;
+    if(!inited) return super.getProgress();
+
+    if (reader.isEof()) { // if the reader reaches EOS
+      return 1.0f;
+    }
+
+    long currentPos = reader.getPos();
+    long readBytes = currentPos - startOffset;
+    long remainingBytes = Math.max(endOffset - currentPos, 0);
+    return Math.min(1.0f, (float) (readBytes) / (float) (readBytes + remainingBytes));
   }
 
   @Override
   public TableStats getInputStats() {
-    return inputStats;
-  }
+    if (inputStats != null && reader != null) {
+      inputStats.setReadBytes(reader.getReadBytes());  //Actual Processed Bytes. (decompressed bytes + overhead)
+      inputStats.setNumRows(recordCount);
+      inputStats.setNumBytes(fragment.getLength());
+    }
 
-  @Override
-  public Schema getSchema() {
-    return schema;
+    return inputStats;
   }
 }

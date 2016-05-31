@@ -35,11 +35,6 @@ public class ExampleHttpTablespaceTestServer implements Closeable {
 
   private ServerBootstrap bootstrap;
   private Channel channel;
-  private final boolean rangeRequestEnabled;
-
-  public ExampleHttpTablespaceTestServer(boolean rangeRequestEnabled) {
-    this.rangeRequestEnabled = rangeRequestEnabled;
-  }
 
   public void init() throws InterruptedException {
     EventLoopGroup group = new NioEventLoopGroup(1);
@@ -47,7 +42,7 @@ public class ExampleHttpTablespaceTestServer implements Closeable {
     bootstrap = new ServerBootstrap();
     bootstrap.group(group)
         .channel(NioServerSocketChannel.class)
-        .childHandler(new ExampleHttpServerInitializer(rangeRequestEnabled));
+        .childHandler(new ExampleHttpServerInitializer());
 
     channel = bootstrap.bind(0).sync().channel();
 

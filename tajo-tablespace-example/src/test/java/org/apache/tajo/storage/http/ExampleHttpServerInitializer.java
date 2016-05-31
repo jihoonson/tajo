@@ -27,12 +27,6 @@ import io.netty.handler.stream.ChunkedWriteHandler;
 
 public class ExampleHttpServerInitializer extends ChannelInitializer<SocketChannel> {
 
-  private final boolean rangeRequestEnabled;
-
-  public ExampleHttpServerInitializer(boolean rangeRequestEnabled) {
-    this.rangeRequestEnabled = rangeRequestEnabled;
-  }
-
   @Override
   protected void initChannel(SocketChannel socketChannel) throws Exception {
     ChannelPipeline pipeline = socketChannel.pipeline();
@@ -40,6 +34,6 @@ public class ExampleHttpServerInitializer extends ChannelInitializer<SocketChann
     pipeline.addLast(new HttpServerCodec());
     pipeline.addLast(new HttpObjectAggregator(65536));
     pipeline.addLast(new ChunkedWriteHandler());
-    pipeline.addLast(new ExampleHttpServerHandler(rangeRequestEnabled));
+    pipeline.addLast(new ExampleHttpServerHandler());
   }
 }

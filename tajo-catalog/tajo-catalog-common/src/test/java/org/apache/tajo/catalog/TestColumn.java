@@ -18,15 +18,12 @@
 
 package org.apache.tajo.catalog;
 
-import org.apache.hadoop.fs.Path;
 import org.apache.tajo.catalog.json.CatalogGsonHelper;
 import org.apache.tajo.catalog.proto.CatalogProtos;
 import org.apache.tajo.common.TajoDataTypes.DataType;
 import org.apache.tajo.common.TajoDataTypes.Type;
 import org.junit.Before;
 import org.junit.Test;
-
-import java.net.URI;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -110,10 +107,4 @@ public class TestColumn {
     Column fromProto = new Column(proto);
     assertEquals(column, fromProto);
   }
-
-	@Test
-	public final void testTest() {
-		URI uri = URI.create("https://github.com/test.json");
-		Path path = new Path(uri);
-	}
 }

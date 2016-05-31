@@ -18,13 +18,13 @@
 
 package org.apache.tajo.storage.http;
 
-import com.google.common.base.Preconditions;
+import io.netty.buffer.Unpooled;
 import io.netty.channel.*;
 import io.netty.handler.codec.http.*;
 import io.netty.handler.codec.http.HttpHeaders.Names;
+import io.netty.util.CharsetUtil;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.tajo.util.Pair;
 
 import javax.activation.MimetypesFileTypeMap;
 import java.io.File;
@@ -36,19 +36,13 @@ import java.net.URISyntaxException;
 import java.net.URL;
 
 import static io.netty.handler.codec.http.HttpHeaders.Names.CONTENT_TYPE;
-import static io.netty.handler.codec.http.HttpResponseStatus.*;
+import static io.netty.handler.codec.http.HttpResponseStatus.BAD_REQUEST;
+import static io.netty.handler.codec.http.HttpResponseStatus.OK;
 import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
-import static org.apache.tajo.storage.http.ExampleHttpFileTablespace.BYTE_RANGE_PREFIX;
 
 public class ExampleHttpServerHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
 
   private static final Log LOG = LogFactory.getLog(ExampleHttpServerHandler.class);
-
-  private final boolean rangeRequestEnabled;
-
-  public ExampleHttpServerHandler(boolean rangeRequestEnabled) throws IOException {
-    this.rangeRequestEnabled = rangeRequestEnabled;
-  }
 
   @Override
   protected void channelRead0(ChannelHandlerContext context, FullHttpRequest request) throws Exception {
@@ -63,8 +57,9 @@ public class ExampleHttpServerHandler extends SimpleChannelInboundHandler<FullHt
 
     } else {
       // error
-      LOG.error("Not supported method: " + request.getMethod());
-      context.writeAndFlush(getBadRequest());
+      String msg = "Not supported method: " + request.getMethod();
+      LOG.error(msg);
+      context.writeAndFlush(getBadRequest(msg));
     }
   }
 
@@ -72,37 +67,24 @@ public class ExampleHttpServerHandler extends SimpleChannelInboundHandler<FullHt
     HttpHeaders headers = request.headers();
     FullHttpResponse response = null;
 
-    if (headers.contains(Names.RANGE)) {
-
-      response = new DefaultFullHttpResponse(
-          HTTP_1_1,
-          request.getDecoderResult().isSuccess() ?
-              rangeRequestEnabled ? PARTIAL_CONTENT : OK : BAD_REQUEST
-      );
-
-    }
-
     if (headers.contains(Names.CONTENT_LENGTH)) {
 
       try {
         File file = getRequestedFile(request.getUri());
 
-        if (response == null) {
-
-          response = new DefaultFullHttpResponse(
-              HTTP_1_1,
-              request.getDecoderResult().isSuccess() ? OK : BAD_REQUEST
-          );
-
-        }
+        response = new DefaultFullHttpResponse(
+            HTTP_1_1,
+            request.getDecoderResult().isSuccess() ? OK : BAD_REQUEST
+        );
 
         HttpHeaders.setContentLength(response, file.length());
 
 
       } catch (FileNotFoundException | URISyntaxException e) {
-        response = getBadRequest();
+        response = getBadRequest(e.getMessage());
       }
     }
+
     context.writeAndFlush(response);
   }
 
@@ -110,59 +92,39 @@ public class ExampleHttpServerHandler extends SimpleChannelInboundHandler<FullHt
     try {
       File file = getRequestedFile(request.getUri());
 
-      String rangeParam = HttpHeaders.getHeader(request, Names.RANGE);
-
       RandomAccessFile raf = new RandomAccessFile(file, "r");
       long fileLength = raf.length();
 
-      Pair<Long, Long> offsets = getOffsets(rangeParam, fileLength);
-      raf.seek(offsets.getFirst());
-      long contentLength = offsets.getSecond() - offsets.getFirst() + 1;
-
       HttpResponse response = new DefaultHttpResponse(HTTP_1_1, OK);
-      HttpHeaders.setContentLength(response, contentLength);
+      HttpHeaders.setContentLength(response, fileLength);
       setContentTypeHeader(response, file);
 
       context.write(response);
 
-      context.write(new DefaultFileRegion(raf.getChannel(), offsets.getFirst(), offsets.getFirst() + contentLength));
+      context.write(new DefaultFileRegion(raf.getChannel(), 0, fileLength));
 
       // Write the end marker.
       ChannelFuture future = context.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT);
       future.addListener(ChannelFutureListener.CLOSE);
 
     } catch (IOException | URISyntaxException e) {
-      context.writeAndFlush(getBadRequest());
-    }
-  }
-
-  private static Pair<Long, Long> getOffsets(String rangeParam, long fileLength) {
-    String prefix = rangeParam.substring(0, 6);
-    Preconditions.checkArgument(prefix.equals(BYTE_RANGE_PREFIX));
-
-    String[] rangeStrings = rangeParam.substring(6).split("-");
-    // Multiple range params are not allowed in this test.
-    Preconditions.checkArgument(rangeStrings.length > 0 && rangeStrings.length < 3);
-
-    if (rangeStrings.length == 1) {
-      return new Pair<>(Long.parseLong(rangeStrings[0]), fileLength - 1);
-    } else {
-      return new Pair<>(Long.parseLong(rangeStrings[0]), Long.parseLong(rangeStrings[1]));
+      context.writeAndFlush(getBadRequest(e.getMessage()));
     }
   }
 
   private static File getRequestedFile(String uri) throws FileNotFoundException, URISyntaxException {
     String path = URI.create(uri).getPath();
-    URL url = ClassLoader.getSystemResource("tpch/" + path);
+    URL url = ClassLoader.getSystemResource("dataset/" + path);
+
     if (url == null) {
       throw new FileNotFoundException(uri);
     }
     return new File(url.toURI());
   }
 
-  private static FullHttpResponse getBadRequest() {
-    // TODO: set cause
-    return new DefaultFullHttpResponse(HTTP_1_1, BAD_REQUEST);
+  private static FullHttpResponse getBadRequest(String message) {
+    return new DefaultFullHttpResponse(HTTP_1_1, BAD_REQUEST,
+        Unpooled.copiedBuffer(message, CharsetUtil.UTF_8));
   }
 
   @Override
@@ -175,11 +137,8 @@ public class ExampleHttpServerHandler extends SimpleChannelInboundHandler<FullHt
 
   /**
    * Sets the content type header for the HTTP Response
-   *
-   * @param response
-   *            HTTP response
-   * @param file
-   *            file to extract content type
+   * @param response HTTP response
+   * @param file file to extract content type
    */
   private static void setContentTypeHeader(HttpResponse response, File file) {
     MimetypesFileTypeMap mimeTypesMap = new MimetypesFileTypeMap();

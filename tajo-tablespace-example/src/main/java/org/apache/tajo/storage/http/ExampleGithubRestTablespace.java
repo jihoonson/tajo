@@ -18,6 +18,7 @@
 
 package org.apache.tajo.storage.http;
 
+import com.google.common.collect.Lists;
 import net.minidev.json.JSONObject;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -29,8 +30,6 @@ import org.apache.tajo.catalog.Schema;
 import org.apache.tajo.catalog.SortSpec;
 import org.apache.tajo.catalog.TableDesc;
 import org.apache.tajo.catalog.TableMeta;
-import org.apache.tajo.conf.TajoConf.ConfVars;
-import org.apache.tajo.error.Errors.ResultCode;
 import org.apache.tajo.exception.TajoException;
 import org.apache.tajo.exception.TajoInternalError;
 import org.apache.tajo.exception.TajoRuntimeException;
@@ -38,31 +37,34 @@ import org.apache.tajo.exception.UnsupportedException;
 import org.apache.tajo.plan.LogicalPlan;
 import org.apache.tajo.plan.expr.EvalNode;
 import org.apache.tajo.plan.logical.LogicalNode;
-import org.apache.tajo.schema.IdentifierUtil;
 import org.apache.tajo.storage.FormatProperty;
 import org.apache.tajo.storage.StorageProperty;
 import org.apache.tajo.storage.Tablespace;
 import org.apache.tajo.storage.TupleRange;
 import org.apache.tajo.storage.fragment.Fragment;
-import org.apache.tajo.unit.StorageUnit;
-import org.apache.tajo.util.Pair;
 import org.jboss.netty.handler.codec.http.HttpHeaders.Names;
 
 import javax.annotation.Nullable;
 import java.io.IOException;
 import java.net.HttpURLConnection;
+import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URL;
-import java.util.*;
+import java.util.List;
+import java.util.Optional;
 
 /**
+ * Example read-only tablespace for Github REST API.
  *
+ * An example table can be created by using the following SQL query.
+ *
+ * CREATE TABLE github_test (*) TABLESPACE http_example USING ex_http_json WITH ('path_suffix'='2015-01-01-15.json.gz',
+ * 'compression.codec'='org.apache.hadoop.io.compress.GzipCodec’);
  */
-public class ExampleHttpFileTablespace extends Tablespace {
-  private static final Log LOG = LogFactory.getLog(ExampleHttpFileTablespace.class);
+public class ExampleGithubRestTablespace extends Tablespace {
+  private static final Log LOG = LogFactory.getLog(ExampleGithubRestTablespace.class);
 
-  static final String BYTE_RANGE_PREFIX = "bytes=";
-  static final String PATH_SUFFIX = "path_suffix";
+  static final String PATH = "path";
 
   //////////////////////////////////////////////////////////////////////////////////////////////////
   // Tablespace properties
@@ -84,83 +86,30 @@ public class ExampleHttpFileTablespace extends Tablespace {
       );
 
   //////////////////////////////////////////////////////////////////////////////////////////////////
-  // Configurations
+  // Configuration variables
   //////////////////////////////////////////////////////////////////////////////////////////////////
 
-//  private static final String TEMP_DIR = "temp_dir";
-//  private static final String DEFAULT_TEMP_DIR = "file:///tmp/" + "tajo-" + System.getProperty("user.name") + "/http-example/";
-//
-//  private static final String CLEAR_TEMP_DIR_ON_EXIT = "clear_temp_dir_on_exit";
-//  private static final String DEFAULT_CLEAR_TEMP_DIR_ON_EXIT = "true";
-//
-//  private String tmpDir;
-//  private boolean cleanOnExit;
+  private static final String OAUTH_ID = "id";
+  private static final String OAUTH_SECRET = "secret";
 
-  private static final String ALLOW_SPLIT_KEY = "allow_split";
-  private static final String DEFAULT_ALLOW_SPLIT_VALUE = "false";
+  private String clientId;
+  private String clientSecret;
 
-  private boolean isSplittable;
-
-
-  //////////////////////////////////////////////////////////////////////////////////////////////////
-  // Metadata
-  //////////////////////////////////////////////////////////////////////////////////////////////////
-
-  //                    database, table,  uri
-  private final Map<Pair<String, String>, URI> tableUriMap = new HashMap<>();
-
-  public ExampleHttpFileTablespace(String name, URI uri, JSONObject config) {
+  public ExampleGithubRestTablespace(String name, URI uri, JSONObject config) {
     super(name, uri, config);
 
-    LOG.info("ExampleHttpFileTablespace is initialized for " + uri);
-
-    // ts uri: https://api.github.com
-
-    // create table github (*) tablespace http_example using ex-http-json
-    //    with ('path_suffix'='/2015-01-01-15.json.gz','compression.codec'='org.apache.hadoop.io.compress.GzipCodec')
+    LOG.info("ExampleGithubRestTablespace is initialized for " + uri);
   }
 
   @Override
   protected void storageInit() throws IOException {
-    initProperties();
+    initOauthProperty();
   }
 
-  private void initProperties() throws IOException {
-//    tmpDir = (String) config.getOrDefault(TEMP_DIR, DEFAULT_TEMP_DIR);
-//    cleanOnExit = Boolean.parseBoolean(
-//        (String) config.getOrDefault(CLEAR_TEMP_DIR_ON_EXIT, DEFAULT_CLEAR_TEMP_DIR_ON_EXIT));
-
-    boolean allowSplit = Boolean.parseBoolean((String) config.getOrDefault(ALLOW_SPLIT_KEY, DEFAULT_ALLOW_SPLIT_VALUE));
-
-    if (allowSplit) {
-      HttpURLConnection connection = null;
-
-      try {
-        connection = (HttpURLConnection) new URL(uri.toASCIIString()).openConnection();
-        connection.setRequestProperty(Names.RANGE, BYTE_RANGE_PREFIX + "0-");
-        connection.setRequestMethod("HEAD");
-        connection.connect();
-        int responseCode = connection.getResponseCode();
-
-        switch (responseCode) {
-
-          case HttpURLConnection.HTTP_OK:
-            isSplittable = false;
-            break;
-
-          case HttpURLConnection.HTTP_PARTIAL:
-            isSplittable = true;
-            break;
-
-          default:
-            throw new TajoInternalError("Unexpected HTTP response: " + responseCode);
-        }
-
-      } finally {
-        if (connection != null) {
-          connection.disconnect();
-        }
-      }
+  private void initOauthProperty() {
+    if (config.containsKey(OAUTH_ID)) {
+      clientId = config.getAsString(OAUTH_ID);
+      clientSecret = config.getAsString(OAUTH_SECRET);
     }
   }
 
@@ -192,7 +141,7 @@ public class ExampleHttpFileTablespace extends Tablespace {
   @Override
   public URI getTableUri(TableMeta meta, String databaseName, String tableName) {
     String tablespaceUriString = uri.toASCIIString();
-    String tablePath = meta.getProperty(PATH_SUFFIX);
+    String tablePath = meta.getProperty(PATH);
 
     if (!tablespaceUriString.endsWith("/") && !tablePath.startsWith("/")) {
       tablePath = "/" + tablePath;
@@ -208,25 +157,12 @@ public class ExampleHttpFileTablespace extends Tablespace {
                                   @Nullable EvalNode filterCondition)
       throws IOException, TajoException {
 
+    // getSplits() should return multiple fragments for distributed processing of a large data.
+    // This example tablespace returns only one fragment for the whole data for simplicity,
+    // but this may significantly increase the query processing time.
+
     long tableVolume = getTableVolume(tableDesc, Optional.empty());
-
-    List<Fragment> fragments = new ArrayList<>();
-
-    if (isSplittable) {
-      final long defaultTaskSize = conf.getLongVar(ConfVars.TASK_DEFAULT_SIZE) * StorageUnit.MB;
-
-      for (long firstBytePos = 0; firstBytePos < tableVolume; firstBytePos += defaultTaskSize) {
-        final long taskSize = Math.min(tableVolume - firstBytePos, defaultTaskSize);
-        final long lastBytePos = firstBytePos + taskSize;
-        fragments.add(
-            new ExampleHttpFileFragment(tableDesc.getUri(), inputSourceId, firstBytePos, lastBytePos));
-      }
-    } else {
-      fragments.add(
-          new ExampleHttpFileFragment(tableDesc.getUri(), inputSourceId, 0, tableVolume));
-    }
-
-    return fragments;
+    return Lists.newArrayList(new ExampleHttpFileFragment(tableDesc.getUri(), inputSourceId, 0, tableVolume));
   }
 
   @Override
@@ -241,7 +177,7 @@ public class ExampleHttpFileTablespace extends Tablespace {
 
   @Override
   public void close() {
-
+    // do nothing
   }
 
   @Override
@@ -260,25 +196,7 @@ public class ExampleHttpFileTablespace extends Tablespace {
 
   @Override
   public void createTable(TableDesc tableDesc, boolean ifNotExists) throws TajoException, IOException {
-    if (isValidTableUri(uri, tableDesc.getUri())) {
-      String[] identifiers = IdentifierUtil.splitTableName(tableDesc.getName());
-      tableUriMap.put(new Pair<>(identifiers[0], identifiers[1]), tableDesc.getUri());
-    } else {
-      throw new TajoException(
-          ResultCode.INVALID_TABLESPACE_URI, uri.toASCIIString(), tableDesc.getUri().toASCIIString());
-    }
-  }
-
-  private static boolean isValidTableUri(URI tablespaceUri, URI tableUri) {
-//    String tableUriString = tableUri.toASCIIString();
-//    if (tablespaceUri.toASCIIString().contains(tableUriString)) {
-//      // Table URI should be a full path to a file
-//      if (tableUriString.charAt(tableUriString.length() - 1) != '/') {
-//        return true;
-//      }
-//    }
-//    return false;
-    return true;
+    // do nothing
   }
 
   @Override
@@ -308,5 +226,11 @@ public class ExampleHttpFileTablespace extends Tablespace {
   @Override
   public URI getStagingUri(OverridableConf context, String queryId, TableMeta meta) throws IOException {
     throw new TajoRuntimeException(new UnsupportedException());
+  }
+
+  private URL getUrlWithAuth(String baseUrl) throws MalformedURLException {
+    return new URL(baseUrl
+        + "&client_id=" + clientId
+        + "&client_secret=" + clientSecret);
   }
 }
